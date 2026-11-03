@@ -43,6 +43,10 @@
 
 ## Server (`packages/server`)
 
+- **core.js**: every API call, scenes, schedules, the PIN lock and live updates, with no Node.js modules. The Node
+  server (app.js) and the online demo (apps/web/demo.js) both run it; only the transport and `io` differ.
+- **node-io.js**: the real network and sound card (DDP, WLED API, discovery, capture). The demo passes pretend devices.
+
 - **app.js**: HTTP routes, static files, WebSocket, PIN lock, OSC and scheduler wiring, first-run discovery.
 - **runtime.js**: chooses the source (song > live audio > metronome > idle), runs the director at the frame rate,
   maps each shape's LEDs into its controller's buffer and streams them; device health checks every 10 seconds, and a

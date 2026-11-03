@@ -10,9 +10,13 @@ export const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;"
 const store = { get(k) { try { return localStorage.getItem("tl." + k); } catch { return null; } }, set(k, v) { try { v == null ? localStorage.removeItem("tl." + k) : localStorage.setItem("tl." + k, v); } catch {} } };
 
 export const app = { state: null, status: null, layout: null, frame: null, token: store.get("token"), log: [], page: null, audio: null };
+// demo mode: the online demo (and ?demo) runs the core in this page with pretend WLED controllers
+export const DEMO = !!document.querySelector('meta[name="tempolight-demo"]') || new URLSearchParams(location.search).has("demo");
+let demo = null;
 
 // ---------------------------------------------------------------- server access
 export async function api(method, path, body) {
+  if (demo) return demo.api(method, path, body, app.token);
   const r = await fetch(path, { method, headers: { "content-type": "application/json", ...(app.token ? { "x-tempolight-token": app.token } : {}) }, body: body === undefined ? undefined : JSON.stringify(body) });
   let j = null; try { j = await r.json(); } catch {}
   if (!r.ok) { const e = new Error(j?.error || `${r.status} ${r.statusText}`); e.status = r.status; throw e; }
@@ -26,7 +30,8 @@ const ws = { sock: null, id: null, open: false, queue: [],
   sendBinary(b) { if (this.open && this.sock.bufferedAmount < 1 << 20) this.sock.send(b); } };
 export { ws };
 function connect() {
-  const s = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws${app.token ? "?token=" + app.token : ""}`);
+  const WS = demo ? demo.FakeSocket : WebSocket;
+  const s = new WS(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws${app.token ? "?token=" + app.token : ""}`);
   s.binaryType = "arraybuffer"; ws.sock = s;
   s.onopen = () => { ws.open = true; setConn("Connected", "ok"); if (app.page?.preview) ws.send({ type: "preview", on: true }); if (app.audio?.state.mode) resendAudio(); };
   s.onclose = () => { ws.open = false; setConn("Reconnecting…", "err"); setTimeout(connect, 1500); };
@@ -61,7 +66,8 @@ function onStatus(m) {
 function chrome() {
   const st = app.state; $("#ver").textContent = "v" + st.version; $("#c-effects").textContent = st.effects.length;
   $("#c-lock").textContent = st.locked ? (app.token ? "unlocked" : "locked") : "";
-  $("#host-name").textContent = location.hostname === "localhost" || location.hostname === "127.0.0.1" ? "This computer" : location.hostname; $("#host-addr").textContent = location.host;
+  $("#host-name").textContent = DEMO ? "Online demo" : location.hostname === "localhost" || location.hostname === "127.0.0.1" ? "This computer" : location.hostname;
+  $("#host-addr").textContent = DEMO ? "runs in your browser" : location.host;
 }
 
 // ---------------------------------------------------------------- preview canvas: what the LEDs are showing right now
@@ -193,11 +199,13 @@ function musicPage(el) {
       <label class="check"><input type="checkbox" id="m-pred" ${s.predict ? "checked" : ""}> Predict beats when listening live (lights land on the beat instead of just after it)</label>
       <div class="field"><label>Metronome when nothing plays</label><div class="row"><label class="check"><input type="checkbox" id="m-met" ${s.metronome.enabled ? "checked" : ""}> On</label><input type="number" id="m-bpmset" min="40" max="220" value="${s.metronome.bpm}" style="width:90px"> <span class="faint">BPM</span></div></div>
     </div>`, "span-6")}
-    ${panel("Listen on the server", "For a Raspberry Pi or PC next to the speakers, with no browser open", `<button class="btn" id="m-cap" type="button"></button>`, `<div class="pb stack">
+    ${DEMO ? "" : panel("Listen on the server", "For a Raspberry Pi or PC next to the speakers, with no browser open", `<button class="btn" id="m-cap" type="button"></button>`, `<div class="pb stack">
       <div class="field"><label for="m-capsrc">Sound input</label><select id="m-capsrc">${opt("auto", "Automatic", s.capture.source === "auto")}${st.captureSources.map(c => opt(c.id, c.label, c.id === s.capture.source)).join("")}</select>
       ${st.captureSources.length ? "" : '<span class="help">No capture tool found on the server. Install ffmpeg (or PulseAudio/ALSA tools on Linux), or enter a command below.</span>'}</div>
       <div class="field"><label for="m-capcmd">Custom command (optional)</label><input id="m-capcmd" class="mono" placeholder='ffmpeg -f pulse -i default -ac 1 -ar 22050 -f s16le -' value="${esc(s.capture.command)}"><span class="help">Any command that writes 16-bit mono 22,050 Hz audio to its output.</span></div>
       <div id="m-capst" class="faint"></div></div>`, "span-12")}`;
+  const canShare = !!navigator.mediaDevices?.getDisplayMedia;
+  if (!canShare) $("#m-system").hidden = true; // phones can't share system sound: use songs or the microphone
 
   const lockedOut = !unlocked();
   $("#m-files").onchange = e => { A.addFiles([...e.target.files]); e.target.value = ""; };
@@ -208,10 +216,12 @@ function musicPage(el) {
   $("#m-off").oninput = e => $("#m-off-o").textContent = e.target.value + " ms"; $("#m-off").onchange = e => setS({ syncOffsetMs: Number(e.target.value) });
   $("#m-pred").onchange = e => setS({ predict: e.target.checked });
   $("#m-met").onchange = e => setS({ metronome: { enabled: e.target.checked } }); $("#m-bpmset").onchange = e => setS({ metronome: { bpm: Number(e.target.value) } });
-  $("#m-capsrc").onchange = e => setS({ capture: { source: e.target.value } }); $("#m-capcmd").onchange = e => setS({ capture: { command: e.target.value.trim() } });
-  $("#m-cap").onclick = () => setS({ capture: { enabled: !app.state.settings.capture.enabled } });
-  for (const id of ["m-off", "m-pred", "m-met", "m-bpmset", "m-capsrc", "m-capcmd", "m-cap"]) if (lockedOut) $("#" + id).disabled = true;
-  if (lockedOut) $("#m-capst").textContent = "Timing and server settings are locked. Unlock in Settings to change them.";
+  if (!DEMO) {
+    $("#m-capsrc").onchange = e => setS({ capture: { source: e.target.value } }); $("#m-capcmd").onchange = e => setS({ capture: { command: e.target.value.trim() } });
+    $("#m-cap").onclick = () => setS({ capture: { enabled: !app.state.settings.capture.enabled } });
+  }
+  for (const id of ["m-off", "m-pred", "m-met", "m-bpmset", "m-capsrc", "m-capcmd", "m-cap"]) if (lockedOut && $("#" + id)) $("#" + id).disabled = true;
+  if (lockedOut && $("#m-capst")) $("#m-capst").textContent = "Timing and server settings are locked. Unlock in Settings to change them.";
 
   function renderQueue() {
     const a = A.state;
@@ -241,6 +251,7 @@ function musicPage(el) {
       $("#m-src").textContent = m.sourceLabel; $("#m-bpm").textContent = m.bpm ? m.bpm.toFixed(0) : "–"; $("#m-part").textContent = partName[m.part] || m.part; $("#m-style").textContent = m.source === "idle" ? "–" : m.styleName;
       const bars = $$("#m-spec i"); bars.forEach((b, i) => b.style.height = (m.bands ? Math.max(2, m.bands[i] * 100) : 2) + "%");
       if (A.state.song && $("#m-fill")) { const p = A.pos(); $("#m-fill").style.width = (p / A.duration * 100) + "%"; $("#m-pos").textContent = fmtTime(p); }
+      if (DEMO) return;
       const c = app.state.settings.capture; $("#m-cap").textContent = c.enabled ? "Stop listening on the server" : "Start listening on the server";
       if (!lockedOut) $("#m-capst").innerHTML = m.capture ? (m.capture.error ? `<span class="badge err">${esc(m.capture.error)}</span>` : m.capture.running ? `<span class="badge live"><i></i>Listening: ${esc(m.capture.label)}</span>` : "Starting…") : "Not listening on the server.";
     },
@@ -379,6 +390,7 @@ function devicesPage(el) {
   const st = app.state;
   el.innerHTML = `${panel("Devices", "WLED controllers that receive the light", `<button class="btn" id="d-scan" type="button">Scan network</button><button class="btn" id="d-virtual" type="button">Add virtual device</button>`, `<div class="tablewrap"><table><thead><tr><th>On</th><th>Name</th><th>Address</th><th class="num">LEDs</th><th class="num">Used</th><th class="num">DDP port</th><th>Status</th><th>Firmware</th><th class="num">Frames sent</th><th></th></tr></thead><tbody id="d-rows"></tbody></table></div>`, "span-12")}
     ${panel("Add a controller", "", "", `<div class="pb"><div class="row"><input id="d-ip" placeholder="IP address, e.g. 192.168.1.42 (or host:port)" style="max-width:340px"><input id="d-name" placeholder="Name (optional)" style="max-width:220px"><button class="btn primary" id="d-add" type="button">Add</button></div>
+      ${DEMO ? `<p class="callout" style="margin-top:8px">This demo has pretend controllers at ${Object.keys(demo.FAKE_WLED).join(", ")}. Press “Scan network” to find them.</p>` : ""}
       <p class="faint" style="margin-top:8px;font-size:12.5px">Find the address in the WLED app or your router. Tempolight sends light with DDP on UDP port 4048; in WLED, keep “Receive UDP realtime” on (Sync settings).</p></div>`, "span-6")}
     ${panel("Found on the network", `<span id="d-scanmsg">Press “Scan network” to look</span>`, "", `<div class="tablewrap"><table><tbody id="d-found"></tbody></table></div>`, "span-6")}`;
   function rows(m) {
@@ -486,6 +498,8 @@ async function boot() {
   $("#power").onclick = () => act(() => api("POST", "/api/power", { on: $("#power").getAttribute("aria-checked") !== "true" })).catch(() => {});
   $("#bri").oninput = e => $("#bri-out").textContent = e.target.value + "%";
   $("#bri").onchange = e => act(() => api("POST", "/api/brightness", { value: e.target.value / 100 })).catch(() => {});
+  if (DEMO) { demo = await import("/demo.js"); await demo.ready; $("#demo-bar").hidden = false; document.body.classList.add("demo"); }
+  if ("serviceWorker" in navigator && isSecureContext) navigator.serviceWorker.register("/sw.js").catch(() => {});
   try { await refreshState(); } catch (e) { if (e.status === 403) { app.token = null; store.set("token", null); await refreshState(); } else throw e; }
   if (app.token && app.state.locked) { try { await api("PATCH", "/api/settings", {}); } catch { app.token = null; store.set("token", null); chrome(); } }
   await loadLayout();

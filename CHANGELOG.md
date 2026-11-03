@@ -3,6 +3,15 @@
 All notable changes to Tempolight. The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/);
 versions follow [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+- Online demo: the real core runs in the browser with pretend WLED controllers; built by `scripts/build-site.js` and deployed to Cloudflare on every push (`wrangler.jsonc`).
+- Installable app (PWA): home-screen icon on iPhone and Android, full screen, notch-safe layout, offline start.
+
+### Changed
+- The server is split into an environment-free core (`core.js`) and a Node layer (`app.js`, `node-io.js`).
+
 ## [0.2.0] - 2026-11-04
 
 ### Added

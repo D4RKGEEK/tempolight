@@ -46,7 +46,7 @@ await step("add a second controller on the Devices page", async () => {
   await until(() => app.store.data.devices.length === 2, 5000, "second device not added");
   for (const [d, f] of [[app.store.data.devices[0], A], [app.store.data.devices[1], B]]) await fetch(`${base}/api/devices/${d.id}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ ddpPort: f.ddpPort }) });
   await until(() => A.frames > 20 && B.frames > 20, 5000, "no DDP frames arriving");
-  ok(A.badPackets + B.badPackets === 0, "bad DDP packets"); await go("devices"); await until(() => page.isVisible("text=Online"), 12000, "devices not shown online"); await shot("02-devices");
+  ok(A.badPackets + B.badPackets === 0, "bad DDP packets"); await go("devices"); await until(async () => (await page.$$("#d-rows .badge.live")).length === 2, 12000, "devices not shown online"); await shot("02-devices");
 });
 await step("idle: ambient light is on with nothing playing", async () => { await sleep(300); ok(lum(A) > 3, `room is dark when idle (${lum(A).toFixed(1)})`); });
 await step("room: four-walls preset, send segments to WLED", async () => {

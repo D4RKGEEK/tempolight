@@ -2,10 +2,16 @@
 // Sources, best first: a song playing in the browser (analysed ahead of time), live audio (from a browser or this
 // computer's sound card), the metronome, and finally the idle/ambient effect when nothing is playing.
 import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, toRGB8, LiveAnalyser } from "../../engine/src/index.js";
-import { DDPSender, AudioSyncSender, getInfo, setState, setSegments, ipOf, discoverWled } from "../../outputs/src/index.js";
-import { startCapture, listSources, splitCommand, RATE } from "./capture.js";
+// Everything that touches the network or the sound card comes in through `io` (see node-io.js), so the same runtime
+// runs on a PC or Pi and, with pretend devices, inside the browser for the online demo.
 
-export function createRuntime(store, { logger = console } = {}) {
+/**
+ * @param {{data:object, save:()=>void}} store
+ * @param {{io:object, logger?:Console|null}} opts io: DDPSender, AudioSyncSender, getInfo, setState, setSegments, ipOf,
+ *   discoverWled, startCapture, listSources, splitCommand, RATE
+ */
+export function createRuntime(store, { io, logger = console } = {}) {
+  const { DDPSender, AudioSyncSender, getInfo, setState, setSegments, ipOf, discoverWled, startCapture, listSources, splitCommand, RATE } = io;
   const data = () => store.data;
   const log = [], listeners = new Set();
   function note(msg, level = "info") { const e = { t: Date.now(), level, msg }; log.push(e); if (log.length > 200) log.shift(); for (const f of listeners) f(e); if (logger) logger.log(`[tempolight] ${msg}`); }
@@ -145,7 +151,7 @@ export function createRuntime(store, { logger = console } = {}) {
     if (s.audioSync && liveFresh() && now - lastSync > 20) { lastSync = now; sendAudioSync(); }
     // preview for the web UI, 30 fps
     if (++previewTick % Math.max(1, Math.round((s.fps || 60) / 30)) === 0 && previewClients.size) {
-      const msg = Buffer.allocUnsafe(1 + col8.length); msg[0] = 1; Buffer.from(col8.buffer, col8.byteOffset, col8.length).copy(msg, 1);
+      const msg = new Uint8Array(1 + col8.length); msg[0] = 1; msg.set(col8, 1);
       for (const c of previewClients) if (c.open && !c.busy) c.send(msg);
     }
     rt.frames++; fpsN++; if (now - fpsT > 1000) { rt.fps = fpsN * 1000 / (now - fpsT); fpsN = 0; fpsT = now; }

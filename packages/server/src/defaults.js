@@ -1,0 +1,28 @@
+// Default settings and a deep merge, shared by the Node server and the in-browser demo.
+export const DEFAULTS = () => ({
+  version: 2,
+  settings: {
+    brightness: 0.8, fps: 60, safe: false, syncOffsetMs: 0, predict: true,
+    ambient: "northern", idleBrightness: 0.5, idleAfterSec: 8, dropFlash: true,
+    audioSync: false, osc: { enabled: false, port: 9000 }, autoDiscover: true,
+    capture: { enabled: false, source: "auto", command: "" }, metronome: { enabled: false, bpm: 120 },
+    guest: { effects: true, scenes: true, pads: true, brightness: true },
+  },
+  show: { power: true, mode: "auto", effect: "shock", style: "auto", palette: "auto", everyBeats: 8, speed: 1 },
+  devices: [],
+  room: { name: "My room", shapes: [] },
+  scenes: [
+    { id: "party", name: "Party", show: { mode: "auto", style: "party", palette: "auto" }, brightness: 1 },
+    { id: "chill", name: "Chill evening", show: { mode: "auto", style: "chill", palette: "sunset" }, brightness: 0.55 },
+    { id: "movie", name: "Movie night", show: { mode: "manual", effect: "candle", palette: "mono" }, brightness: 0.25 },
+    { id: "focus", name: "Focus", show: { mode: "manual", effect: "aurora", palette: "ocean" }, brightness: 0.4 },
+  ],
+  schedules: [],
+  lock: null,
+});
+
+export function merge(base, over) {
+  if (Array.isArray(base) || Array.isArray(over) || typeof base !== "object" || base === null || typeof over !== "object" || over === null) return over === undefined ? base : over;
+  const out = { ...base }; for (const k of Object.keys(over)) out[k] = merge(base[k], over[k]); return out;
+}
+

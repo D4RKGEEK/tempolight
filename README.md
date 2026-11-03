@@ -16,7 +16,7 @@ and matrices.
 [![Zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)
 [![Platforms](https://img.shields.io/badge/runs%20on-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Raspberry%20Pi-555.svg)](#install)
 
-[Install](#install) · [Features](#features) · [Screenshots](#screenshots) · [How it works](#how-it-works) · [API](docs/api.md) · [FAQ](#faq) · [Contributing](CONTRIBUTING.md)
+[**Try the online demo**](docs/deploy-cloudflare.md) · [Install](#install) · [Features](#features) · [Screenshots](#screenshots) · [How it works](#how-it-works) · [API](docs/api.md) · [FAQ](#faq) · [Contributing](CONTRIBUTING.md)
 
 <img src="docs/images/preview.gif" width="760" alt="Tempolight's live preview: a room of LED strips, rings and frames lighting up in time with a song">
 
@@ -53,7 +53,8 @@ designer: it knows where the beat is, which part of the song you're in, and what
 | 🔒 **PIN lock** | Guests at a party can pick effects and use the pads, but can't touch your setup |
 | 👁️ **Photosensitive-safe mode** | No more than three big flashes per second (WCAG 2.3.1) |
 | 🔌 **Integrations** | HTTP + WebSocket API, OSC (TouchOSC, Companion, lighting desks), WLED audio sync, Home Assistant via REST |
-| 📱 **Works on your phone** | Open the address it prints on any device on your Wi-Fi |
+| 📱 **An app on your phone** | Add it to your iPhone or Android home screen; it opens full screen with its own icon. Works offline in the online demo |
+| 🌐 **Online demo** | The whole app in the browser with pretend lights, deployed to Cloudflare on every push |
 
 ## Screenshots
 
@@ -128,6 +129,17 @@ git clone https://github.com/D4RKGEEK/tempolight.git
 cd tempolight
 npm start                     # Node.js 20+; opens http://localhost:8080. No npm install needed
 ```
+
+### On your phone, as an app
+
+Open Tempolight in Safari on an iPhone (or Chrome on Android), tap **Share** → **Add to Home Screen**, and it opens
+full screen with its own icon, like any app. Works for the online demo and for your home install
+(`http://<your computer's IP>:8080`).
+
+### Online demo
+
+The whole app also runs in a browser with pretend WLED lights, no install needed: the same code, deployed to
+Cloudflare on every push. See [docs/deploy-cloudflare.md](docs/deploy-cloudflare.md) to host your own.
 
 ## Getting started
 
@@ -248,6 +260,7 @@ npm test                  # 27 tests: analysis, live listening, effects, DDP, di
 npm run serve             # run without opening a browser
 npm run fake-wled         # a pretend WLED controller (127.0.0.1:18080) to develop without hardware
 npm run test:browser      # clicks through every page in a real browser (needs Playwright)
+npm run site && npm run test:demo   # build the online demo and test it in a browser
 npm run docs              # regenerate docs/effects.md
 ```
 

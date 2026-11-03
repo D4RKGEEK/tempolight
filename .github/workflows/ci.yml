@@ -36,3 +36,5 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y ffmpeg
       - run: npm i -g playwright@1 && npx playwright install --with-deps chromium
       - run: NODE_PATH=$(npm root -g) node scripts/e2e-browser.js
+      - name: Online demo (as Cloudflare serves it)
+        run: node scripts/build-site.js && NODE_PATH=$(npm root -g) node scripts/e2e-demo.js

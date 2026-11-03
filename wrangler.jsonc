@@ -1,0 +1,11 @@
+// Cloudflare Worker that serves the online demo (static files only, no server code runs on Cloudflare).
+// Build command: node scripts/build-site.js    Deploy command: npx wrangler deploy
+// Set up once: see docs/deploy-cloudflare.md
+{
+  "name": "tempolight",
+  "compatibility_date": "2025-06-01",
+  "assets": {
+    "directory": "./dist/site",
+    "not_found_handling": "single-page-application"
+  }
+}

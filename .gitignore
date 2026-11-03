@@ -5,3 +5,4 @@ tempolight.config.json
 *.f32
 *.wav
 data/
+dist/
