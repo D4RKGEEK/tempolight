@@ -3,7 +3,6 @@
 ## Done in v0.2
 
 - Online demo on Cloudflare Pages (tempolight.pages.dev), installable as an app on iPhone and Android
-
 - Web app: Home, Music, Effects, Live pads, Scenes & schedules, Room, Devices, Settings
 - Live listening from the browser (system sound, microphone) and on the server (PulseAudio, ALSA, ffmpeg)
 - Songs analysed in the browser before playing, with transport controls and drop markers
