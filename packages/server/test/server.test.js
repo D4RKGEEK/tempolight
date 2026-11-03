@@ -86,7 +86,7 @@ test("schedules fire once at their minute and apply scenes", async () => {
   } finally { await s.done(); }
 });
 
-test("WebSocket: a browser can stream audio, get status and preview frames", async () => {
+test("WebSocket: a browser can stream audio, get status and preview frames", { skip: typeof WebSocket === "undefined" && "this Node.js has no WebSocket client (Node 22+)" }, async () => {
   const s = await setup();
   try {
     await s.call("POST", "/api/devices", { virtual: true });
