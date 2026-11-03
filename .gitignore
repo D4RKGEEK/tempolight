@@ -1,0 +1,6 @@
+node_modules/
+tempolight.config.json
+*.log
+.DS_Store
+*.f32
+*.wav

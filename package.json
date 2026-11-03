@@ -1,0 +1,15 @@
+{
+  "name": "tempolight",
+  "version": "0.1.0",
+  "description": "Music-reactive lighting for WLED that understands the song: beats, build-ups, drops and mood.",
+  "license": "MIT",
+  "type": "module",
+  "private": true,
+  "engines": { "node": ">=20" },
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "start": "node packages/server/src/index.js",
+    "demo": "node scripts/demo.js",
+    "test": "node --test packages/*/test/*.test.js"
+  }
+}

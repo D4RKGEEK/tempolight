@@ -1,0 +1,1398 @@
+<title>LED Room Playground</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Familjen+Grotesk:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a dark stage (the room) on the left, a control rack on the right; readouts in a meter strip under the stage. Single dark look on purpose: LEDs read best on black. */
+:root {
+  --bg: #090a10;          /* room at night */
+  --panel: #12131c;       /* control rack */
+  --panel-2: #1a1c28;
+  --line: #2a2d3d;
+  --fg: #ecebf2;
+  --muted: #9a98ad;
+  --amber: #ffb648;       /* accent: warm LED */
+  --amber-ink: #1a1206;
+  --calm: #39d0c4;        /* section colours (information, not decoration) */
+  --build: #a57bff;
+  --drop: #ff4fa8;
+  --font-ui: "Familjen Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
+  color-scheme: dark;
+}
+html, body { background: var(--bg); color: var(--fg); }
+body { font-family: var(--font-ui); font-size: 15px; line-height: 1.45; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 14px 28px; }
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+.fs { position: absolute; right: 10px; top: 10px; background: rgba(9, 10, 16, 0.72); border: 1px solid var(--line); border-radius: 999px; padding: 5px 11px; font-size: 12.5px; font-weight: 600; }
+.grid h4 { grid-column: 1 / -1; margin: 6px 0 0; font-size: 10.5px; letter-spacing: .09em; text-transform: uppercase; font-weight: 600; }
+.grid h4.calm { color: var(--calm); } .grid h4.build { color: var(--build); } .grid h4.drop { color: var(--drop); } .grid h4.any { color: var(--muted); }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.two input[type=number] { width: 100%; background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.wgroup { display: flex; flex-direction: column; gap: 6px; }
+.wgroup > header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: 12px; color: var(--muted); padding-top: 4px; }
+.wgroup > header b { color: var(--fg); font-size: 13px; }
+.wi.warn { border-color: #ff7a7a; }
+.wi .bad { grid-column: 1; font-size: 11.5px; color: #ff9a9a; }
+.export { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px; font-family: var(--font-mono); font-size: 11px; line-height: 1.5; max-height: 190px; overflow: auto; white-space: pre; margin: 0; color: #cfd2e6; }
+button, input, select { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 14px; margin-bottom: 12px; }
+.brand { font-weight: 700; font-size: 19px; letter-spacing: -0.01em; display: flex; align-items: center; gap: 10px; margin-right: auto; }
+.brand i { width: 10px; height: 10px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 12px var(--amber); display: inline-block; }
+.btn { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 7px 12px; font-weight: 500; }
+.btn:hover { border-color: var(--muted); }
+.btn.primary { background: var(--amber); color: var(--amber-ink); border-color: var(--amber); font-weight: 700; }
+.btn.on { border-color: var(--amber); color: var(--amber); }
+.file { position: relative; overflow: hidden; }
+.file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; }
+.track { font-family: var(--font-mono); font-size: 12px; color: var(--muted); max-width: 260px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.main { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .main { grid-template-columns: minmax(0, 1fr); } }
+.stagewrap { min-width: 0; }
+.stage { position: relative; width: 100%; aspect-ratio: 16 / 9; max-width: 100%; border-radius: 10px; overflow: hidden; background: #000; border: 1px solid var(--line); touch-action: none; }
+.stage canvas { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+.hint { position: absolute; left: 12px; bottom: 10px; font-size: 12px; color: var(--muted); background: rgba(9, 10, 16, 0.7); padding: 4px 8px; border-radius: 6px; pointer-events: none; }
+.fxname { position: absolute; left: 12px; top: 10px; font-weight: 700; font-size: 15px; background: rgba(9, 10, 16, 0.72); padding: 5px 10px; border-radius: 999px; border: 1px solid var(--line); pointer-events: none; }
+.fxname small { color: var(--muted); font-weight: 500; margin-left: 6px; }
+
+.meters { display: grid; grid-template-columns: auto auto auto 1fr auto; gap: 14px; align-items: center; margin-top: 10px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; }
+@media (max-width: 700px) { .meters { grid-template-columns: 1fr 1fr; } }
+.m { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.m label { font-size: 10.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); }
+.big { font-family: var(--font-mono); font-size: 22px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.dots { display: flex; gap: 6px; }
+.dots span { width: 13px; height: 13px; border-radius: 50%; background: var(--panel-2); border: 1px solid var(--line); }
+.dots span.on { background: var(--amber); border-color: var(--amber); box-shadow: 0 0 10px var(--amber); }
+.lamps { display: flex; gap: 6px; }
+.lamp { font-family: var(--font-mono); font-size: 11px; padding: 3px 7px; border-radius: 5px; background: var(--panel-2); color: var(--muted); border: 1px solid var(--line); }
+.lamp.hit { background: var(--fg); color: var(--bg); }
+.chip { font-weight: 700; font-size: 13px; letter-spacing: 0.08em; padding: 4px 10px; border-radius: 6px; text-transform: uppercase; display: inline-block; }
+.chip.calm { background: color-mix(in oklab, var(--calm) 22%, transparent); color: var(--calm); }
+.chip.build { background: color-mix(in oklab, var(--build) 24%, transparent); color: var(--build); }
+.chip.drop { background: color-mix(in oklab, var(--drop) 24%, transparent); color: var(--drop); }
+.chip.silent { background: var(--panel-2); color: var(--muted); }
+#spec { width: 100%; height: 34px; display: block; }
+
+.rack { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; min-width: 0; }
+.tabs { display: flex; border-bottom: 1px solid var(--line); }
+.tabs button { flex: 1; background: none; border: 0; padding: 11px 6px; color: var(--muted); font-weight: 600; border-bottom: 2px solid transparent; }
+.tabs button[aria-selected="true"] { color: var(--fg); border-bottom-color: var(--amber); }
+.pane { padding: 14px; display: flex; flex-direction: column; gap: 14px; }
+.pane h3 { margin: 0; font-size: 11px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+.pane p { margin: 0; color: var(--muted); font-size: 13.5px; }
+.auto { display: flex; align-items: center; justify-content: space-between; gap: 10px; background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+.auto strong { display: block; }
+.auto span { font-size: 12.5px; color: var(--muted); }
+.switch { width: 42px; height: 24px; border-radius: 999px; background: var(--line); border: 0; position: relative; flex: none; }
+.switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--fg); transition: left .15s; }
+.switch[aria-checked="true"] { background: var(--amber); }
+.switch[aria-checked="true"]::after { left: 21px; background: var(--amber-ink); }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.fx { text-align: left; background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; padding: 7px 9px; font-size: 13.5px; font-weight: 500; }
+.fx small { display: block; font-size: 10.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.fx[aria-pressed="true"] { border-color: var(--amber); color: var(--amber); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.row label { font-size: 13.5px; }
+.row output { font-family: var(--font-mono); font-size: 12px; color: var(--muted); min-width: 48px; text-align: right; }
+input[type=range] { width: 100%; accent-color: var(--amber); }
+.field { display: flex; flex-direction: column; gap: 4px; }
+.add { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.add button { background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; padding: 8px 4px; font-size: 12.5px; display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.add button svg { width: 22px; height: 22px; stroke: var(--fg); fill: none; stroke-width: 1.6; }
+.add button.on { border-color: var(--amber); color: var(--amber); }
+.sel { background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+.sel input[type=text] { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; width: 100%; }
+.btnrow { display: flex; gap: 6px; flex-wrap: wrap; }
+.btnrow .btn { padding: 6px 10px; font-size: 13px; }
+.danger { color: #ff7a7a; }
+.wire { display: flex; flex-direction: column; gap: 6px; }
+.wi { display: grid; grid-template-columns: 1fr auto; gap: 2px 8px; align-items: center; background: var(--panel-2); border: 1px solid var(--line); border-radius: 7px; padding: 8px 10px; }
+.wi.cur { border-color: var(--amber); }
+.wi b { font-size: 13.5px; }
+.wi code { grid-column: 1; font-family: var(--font-mono); font-size: 11.5px; color: var(--muted); }
+.wi .btnrow { grid-row: 1 / span 2; grid-column: 2; }
+.wi .btn { padding: 4px 8px; font-size: 12px; }
+select { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 5px 6px; }
+.note { border-left: 2px solid var(--amber); padding-left: 10px; }
+@media (prefers-reduced-motion: reduce) { .switch::after { transition: none; } }
+</style>
+
+<div class="top">
+  <div class="brand"><i></i>LED Room Playground</div>
+  <button class="btn primary" id="play" type="button">▶ Play demo track</button>
+  <label class="btn file">Load your song…<input id="file" type="file" accept="audio/*"></label>
+  <span class="track" id="trackname">Demo: original 128 BPM track</span>
+</div>
+
+<div class="main">
+  <div class="stagewrap">
+    <div class="stage" id="stage">
+      <canvas id="cv"></canvas>
+      <div class="fxname" id="fxname">Ready <small>press play</small></div>
+      <button class="fs" id="fs" type="button">Full screen</button>
+      <div class="hint" id="hint">Drag shapes to move them. Select one to resize it.</div>
+    </div>
+    <div class="meters">
+      <div class="m"><label>Tempo</label><div class="big" id="bpm">—</div></div>
+      <div class="m"><label>Beat</label><div class="dots" id="dots"><span></span><span></span><span></span><span></span></div></div>
+      <div class="m"><label>Hits</label><div class="lamps"><span class="lamp" id="lk">KICK</span><span class="lamp" id="ls">SNARE</span><span class="lamp" id="lh">HAT</span></div></div>
+      <div class="m"><label>What it hears</label><canvas id="spec"></canvas></div>
+      <div class="m"><label>Song part</label><span class="chip silent" id="sec">waiting</span></div>
+    </div>
+  </div>
+
+  <div class="rack">
+    <div class="tabs" role="tablist">
+      <button role="tab" aria-selected="true" data-tab="fx" type="button">Effects</button>
+      <button role="tab" aria-selected="false" data-tab="layout" type="button">Layout</button>
+      <button role="tab" aria-selected="false" data-tab="wiring" type="button">Wiring</button>
+    </div>
+
+    <div class="pane" id="pane-fx">
+      <div class="auto">
+        <div><strong>Song-aware auto mode</strong><span>Picks effects by song part: calm, build-up, drop.</span></div>
+        <button class="switch" id="auto" role="switch" aria-checked="true" aria-label="Song-aware auto mode" type="button"></button>
+      </div>
+      <div class="field"><label for="style">Music style</label><select id="style">
+        <option value="auto">Auto-detect</option><option value="party">Party / EDM: kicks, build-ups, drops</option><option value="poprock">Pop / Rock: snare, verse vs chorus</option>
+        <option value="hiphop">Hip-hop / Trap: bass and kick</option><option value="chill">Chill / Lo-fi: slow, soft beat</option><option value="emotional">Emotional / Ballad: follows loudness and melody</option></select></div>
+      <div class="two">
+        <div class="field"><label for="pal">Colours</label><select id="pal">
+          <option value="auto">Auto (changes per section)</option><option value="neon">Neon</option><option value="sunset">Sunset</option><option value="ocean">Ocean</option>
+          <option value="fire">Fire</option><option value="ice">Ice</option><option value="forest">Forest</option><option value="mono">Warm white</option></select></div>
+        <div class="field"><label for="every">Auto changes effect every</label><select id="every"><option value="4">1 bar</option><option value="8" selected>2 bars</option><option value="16">4 bars</option><option value="32">8 bars</option></select></div>
+      </div>
+      <div class="two">
+        <div class="field"><label for="ambient">When there's no music</label><select id="ambient">
+          <option value="northern" selected>Northern Lights</option><option value="aurora">Aurora Drift</option><option value="fireflies">Firefly Swarm</option><option value="lavablobs">Lava Lamp</option>
+          <option value="candle">Candlelight</option><option value="flow">Rainbow Flow</option><option value="breath">Deep Breath</option><option value="off">Lights off</option></select></div>
+        <div class="field"><label for="glow">Glow quality</label><select id="glow"><option value="2">High</option><option value="1">Low (slow computers)</option><option value="0">Off (fastest)</option></select></div>
+      </div>
+      <div class="field"><div class="row"><label for="bright">Brightness</label><output id="brighto">100%</output></div><input id="bright" type="range" min="20" max="150" step="5" value="100"></div>
+      <div class="row"><h3 id="fxcount">Effects</h3><input id="fxfind" type="search" placeholder="Find an effect" aria-label="Find an effect" style="max-width:160px;background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:5px 8px"></div>
+      <div class="grid" id="fxgrid"></div>
+      <div class="auto">
+        <div><strong>Look ahead</strong><span id="premsg">Analyses the whole song first, so it knows every beat and drop before it plays.</span></div>
+        <button class="switch" id="pre" role="switch" aria-checked="true" aria-label="Look ahead with whole-song analysis" type="button"></button>
+      </div>
+      <h3>Latency lab</h3>
+      <div class="field">
+        <div class="row"><label for="delay">Simulated output delay</label><output id="delayo">0 ms</output></div>
+        <input id="delay" type="range" min="0" max="300" step="10" value="0">
+      </div>
+      <div class="auto">
+        <div><strong>Predict beats</strong><span>Fire beat-locked light early by the delay.</span></div>
+        <button class="switch" id="predict" role="switch" aria-checked="false" aria-label="Predict beats" type="button"></button>
+      </div>
+      <p>Set a delay like 150 ms to feel how late light ruins the groove, then turn on Predict beats. With Look ahead on, everything lines up again. With it off (live listening only), the beat grid lines up but individual drum hits stay late.</p>
+    </div>
+
+    <div class="pane" id="pane-layout" hidden>
+      <div class="field"><label for="room">Room</label><select id="room">
+        <option value="living">Living room: mixed shapes</option><option value="fourwalls">One strip around 4 walls</option><option value="bedroom">Bedroom</option>
+        <option value="gaming">Gaming desk</option><option value="matrix">Matrix wall</option><option value="club">Club / DJ booth</option></select></div>
+      <p>Picking a room replaces the current layout.</p>
+      <h3>Add a shape</h3>
+      <div class="add" id="addbar">
+        <button type="button" data-add="line"><svg viewBox="0 0 24 24"><path d="M3 18L21 6"/></svg>Strip</button>
+        <button type="button" data-add="pole"><svg viewBox="0 0 24 24"><path d="M12 3v18"/></svg>Pole</button>
+        <button type="button" data-add="circle"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>Circle</button>
+        <button type="button" data-add="rect"><svg viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="14"/></svg>Square</button>
+        <button type="button" data-add="hex"><svg viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/></svg>Hexagon</button>
+        <button type="button" data-add="tri"><svg viewBox="0 0 24 24"><path d="M12 4l9 16H3z"/></svg>Triangle</button>
+        <button type="button" data-add="matrix"><svg viewBox="0 0 24 24"><path d="M5 5h.01M10 5h.01M15 5h.01M20 5h.01M5 10h.01M10 10h.01M15 10h.01M20 10h.01M5 15h.01M10 15h.01M15 15h.01M20 15h.01M5 20h.01M10 20h.01M15 20h.01M20 20h.01" stroke-width="3" stroke-linecap="round"/></svg>Matrix</button>
+        <button type="button" data-add="free" id="drawbtn"><svg viewBox="0 0 24 24"><path d="M3 17c4-9 6 4 9-3s5-6 9-4"/></svg>Draw</button>
+      </div>
+      <p id="drawhint" hidden>Drag on the stage to draw a strip in any shape. Release to finish.</p>
+      <div class="sel" id="selbox" hidden>
+        <div class="field"><label for="sname">Name</label><input id="sname" type="text"></div>
+        <div class="two" id="mfield"><div class="field"><div class="row"><label for="mcols">Columns</label><output id="mcolso"></output></div><input id="mcols" type="range" min="4" max="48" step="1"></div>
+          <div class="field"><div class="row"><label for="mrows">Rows</label><output id="mrowso"></output></div><input id="mrows" type="range" min="2" max="32" step="1"></div></div>
+        <div class="field" id="countfield"><div class="row"><label for="scount">LEDs</label><output id="scounto"></output></div><input id="scount" type="range" min="6" max="300" step="1"></div>
+        <div class="field" id="sizefield"><div class="row"><label for="ssize">Size</label><output id="ssizeo"></output></div><input id="ssize" type="range" min="0.3" max="6" step="0.05"></div>
+        <div class="field" id="rotfield"><div class="row"><label for="srot">Rotation</label><output id="sroto"></output></div><input id="srot" type="range" min="0" max="360" step="1"></div>
+        <div class="btnrow">
+          <button class="btn" id="sdup" type="button">Duplicate</button>
+          <button class="btn danger" id="sdel" type="button">Delete</button>
+        </div>
+      </div>
+      <p id="nosel">Click a shape on the stage to edit it.</p>
+    </div>
+
+    <div class="pane" id="pane-wiring" hidden>
+      <p class="note">The software can't see your room. Each shape is a segment: a range of LED numbers on one controller. Tell it the controller, the first and last LED number, and which way it runs. Identify blinks the first LED green and sends a dot along it so you can check.</p>
+      <div class="sel" id="wsel" hidden>
+        <b id="wname"></b>
+        <div class="row"><label for="wdev">Controller</label><select id="wdev"></select></div>
+        <div class="two"><div class="field"><label for="wfrom">First LED</label><input id="wfrom" type="number" min="0" step="1"></div>
+          <div class="field"><label for="wto">Last LED</label><input id="wto" type="number" min="0" step="1"></div></div>
+        <div class="field"><div class="row"><label for="wstart">First LED position on the shape</label><output id="wstarto"></output></div><input id="wstart" type="range" min="0" max="1" step="0.005"></div>
+        <div class="btnrow"><button class="btn" id="wrev" type="button">Reverse direction</button><button class="btn" id="wup" type="button">Move up in chain</button></div>
+      </div>
+      <div class="row"><h3>Segments by controller</h3><button class="btn" id="wauto" type="button">Auto-number</button></div>
+      <div class="wire" id="wire"></div>
+      <div class="row"><h3>WLED segment settings</h3><button class="btn" id="wcopy" type="button">Copy</button></div>
+      <pre class="export" id="wjson"></pre>
+      <p>This is the JSON the app would send to each WLED device (its <code>/json/state</code> endpoint) so WLED knows the same segments.</p>
+      <p>In the real app a phone camera can do this automatically: each LED blinks in turn, the camera records where it lights up, and the layout builds itself.</p>
+    </div>
+  </div>
+</div>
+
+
+<script>
+// Whole-song analysis. Pure JavaScript, no dependencies; runs in Node and in the browser.
+function lastLE(arr, t) { let lo = 0, hi = arr.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (arr[m] <= t) { r = m; lo = m + 1; } else hi = m - 1; } return r; }
+/**
+ * Analyse a whole song once: onsets (kick, snare, hi-hat), tempo, beat grid, bars,
+ * song parts (calm, build, drop, silent), a loudness envelope and a music style.
+ * @param {Float32Array} x mono samples (about 22 kHz is enough)
+ * @param {number} sr sample rate of x
+ * @param {(p:number)=>void} [onProgress] called with 0..1
+ */
+async function preAnalyseCore(x, sr, onProgress) {
+  const NF = 1024, HOP = 256, nFrames = Math.max(0, Math.floor((x.length - NF) / HOP));
+  const dtF = HOP / sr, binHz = sr / NF, half = NF / 2;
+  const win = new Float32Array(NF); for (let i = 0; i < NF; i++) win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / NF);
+  const re = new Float32Array(NF), im = new Float32Array(NF), mag = new Float32Array(half), prev = new Float32Array(half);
+  const rev = new Uint16Array(NF); for (let i = 0, j = 0; i < NF; i++) { rev[i] = j; let b = NF >> 1; while (j & b) { j ^= b; b >>= 1; } j |= b; }
+  const cosT = new Float32Array(half), sinT = new Float32Array(half); for (let i = 0; i < half; i++) { cosT[i] = Math.cos(-2 * Math.PI * i / NF); sinT[i] = Math.sin(-2 * Math.PI * i / NF); }
+  function fft() {
+    for (let i = 0; i < NF; i++) { const j = rev[i]; if (j > i) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+    for (let size = 2; size <= NF; size <<= 1) { const h = size >> 1, step = NF / size;
+      for (let s = 0; s < NF; s += size) for (let k = 0; k < h; k++) {
+        const c = cosT[k * step], sn = sinT[k * step], a = s + k, b = a + h;
+        const tr = re[b] * c - im[b] * sn, ti = re[b] * sn + im[b] * c;
+        re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti; } }
+  }
+  const bin = f => Math.max(1, Math.min(half - 1, Math.round(f / binHz)));
+  const B = { k: [bin(40), bin(130)], low: [bin(40), bin(150)], mid: [bin(300), bin(2000)], high: [bin(4000), Math.min(half - 1, bin(11000))],
+              s1: [bin(180), bin(320)], s2: [bin(1800), bin(5000)], h: [bin(7000), Math.min(half - 1, bin(11000))] };
+  const F = { low: new Float32Array(nFrames), mid: new Float32Array(nFrames), high: new Float32Array(nFrames), rms: new Float32Array(nFrames),
+              fk: new Float32Array(nFrames), fs: new Float32Array(nFrames), fh: new Float32Array(nFrames) };
+  const mean = (a, b) => { let s = 0; for (let i = a; i <= b; i++) s += mag[i]; return s / (b - a + 1); };
+  const flux = (a, b) => { let s = 0; for (let i = a; i <= b; i++) { const d = mag[i] - prev[i]; if (d > 0) s += d; } return s; };
+  for (let f = 0; f < nFrames; f++) {
+    const o = f * HOP; let e = 0;
+    for (let i = 0; i < NF; i++) { const v = x[o + i]; re[i] = v * win[i]; im[i] = 0; e += v * v; }
+    fft(); for (let i = 0; i < half; i++) mag[i] = Math.hypot(re[i], im[i]);
+    F.rms[f] = Math.sqrt(e / NF); F.low[f] = mean(...B.low); F.mid[f] = mean(...B.mid); F.high[f] = mean(...B.high);
+    F.fk[f] = flux(...B.k); F.fs[f] = flux(...B.s1) * 0.6 + flux(...B.s2) * 0.4; F.fh[f] = flux(...B.h);
+    prev.set(mag);
+    if (f % 600 === 0) { onProgress && onProgress(f / nFrames * 0.9); await new Promise(r => setTimeout(r, 0)); }
+  }
+  const tOf = f => (f * HOP + NF * 0.5) / sr;
+  const pct = (arr, p) => { const s = Array.from(arr).sort((a, b) => a - b); return s.length ? s[Math.min(s.length - 1, Math.floor(p * s.length))] : 0; };
+  // peak picking with a local adaptive threshold
+  function pick(fl, minGap, k, strength) {
+    const W = Math.round(0.35 / dtF), out = []; let sum = 0, cnt = 0, last = -1e9;
+    const cs = new Float64Array(fl.length + 1); for (let i = 0; i < fl.length; i++) cs[i + 1] = cs[i] + fl[i];
+    const peaks = [];
+    for (let i = 1; i < fl.length - 1; i++) {
+      const a = Math.max(0, i - W), b = Math.min(fl.length, i + W + 1), m = (cs[b] - cs[a]) / (b - a);
+      if (fl[i] > m * k && fl[i] >= fl[i - 1] && fl[i] > fl[i + 1]) peaks.push(i);
+    }
+    const ref = pct(peaks.map(i => fl[i]), 0.9);
+    for (const i of peaks) { if (fl[i] < ref * strength) continue; const t = tOf(i); if (t - last >= minGap) { out.push(t); last = t; } }
+    return out;
+  }
+  // kicks: low-band transients that also carry real low energy
+  const lowRef = pct(F.low, 0.9), rms90 = pct(F.rms, 0.9), rms50 = pct(F.rms, 0.5);
+  const kicksRaw = pick(F.fk, 0.2, 1.6, 0.3);
+  const kicks = kicksRaw.filter(t => { const f = Math.min(nFrames - 1, Math.round((t * sr - NF * 0.5) / HOP) + 2); return F.low[f] > lowRef * 0.35; });
+  const snares = pick(F.fs, 0.1, 1.5, 0.3), hats = pick(F.fh, 0.06, 1.4, 0.2);
+  onProgress && onProgress(0.93);
+  // tempo
+  // tempo from kicks and snares together (backbeat genres need the snare), searched over 60-180 BPM
+  const src = kicks.concat(snares).sort((a, b) => a - b);
+  const hist = new Float32Array(241);
+  for (let i = 0; i < src.length; i++) for (let j = i + 1; j < src.length && src[j] - src[i] < 4; j++) {
+    const d = src[j] - src[i]; if (d < 0.28) continue;
+    for (let m = 1; m <= 4; m++) { const p = d / m; if (p < 0.333 || p > 1.0) continue; const bpm = 60 / p, c = Math.round((bpm - 60) * 2);
+      for (let k = Math.max(0, c - 4); k <= Math.min(240, c + 4); k++) hist[k] += Math.exp(-((((60 + k / 2) - bpm) / 0.7) ** 2)) / m; }
+  }
+  let best = 0, bi = 120; for (let k = 0; k <= 240; k++) { const v = hist[k] * Math.exp(-((((60 + k / 2) - 112) / 55) ** 2)); if (v > best) { best = v; bi = k; } }
+  // octave check: the right tempo has onsets locked in phase AND on most beats (so 64 vs 128, 70 vs 140 resolve)
+  const base = 60 + bi / 2, cands = [base, base * 2, base / 2, base * 1.5, base / 1.5, base * 4 / 3, base * 0.75].filter(b => b >= 58 && b <= 185);
+  const strong = src;
+  let bpm = base, off = 0, bestScore = -1;
+  for (const c0 of cands) {
+    let fitB = c0, fitOff = 0, fitR = -1;
+    for (let cand = c0 - 1; cand <= c0 + 1.001; cand += 0.05) {
+      const Pc = 60 / cand; let sx = 0, sy = 0; for (const t of strong) { const a2 = 2 * Math.PI * t / Pc; sx += Math.cos(a2); sy += Math.sin(a2); }
+      const r = Math.hypot(sx, sy) / Math.max(1, strong.length); if (r > fitR) { fitR = r; fitB = cand; fitOff = ((Math.atan2(sy, sx) / (2 * Math.PI) + 1) % 1) * Pc; }
+    }
+    const Pc = 60 / fitB; let hit = 0, tot = 0; const t0 = src[0] || 0, t1 = src[src.length - 1] || 0;
+    for (let bt = fitOff + Math.ceil((t0 - fitOff) / Pc) * Pc; bt <= t1; bt += Pc) { tot++; const i = lastLE(src, bt + 0.07); if (i >= 0 && src[i] > bt - 0.07) hit++; }
+    const cover = tot ? hit / tot : 0, score = fitR * Math.sqrt(cover) * Math.exp(-(((fitB - 112) / 80) ** 2));
+    if (score > bestScore) { bestScore = score; bpm = fitB; off = fitOff; }
+  }
+  // with the tempo settled, lock the grid's phase to the kick drums when there are enough of them,
+  // so off-beat hi-hats cannot pull beat 1 half a beat late
+  if (kicks.length >= 8) { const Pk = 60 / bpm; let sx = 0, sy = 0; for (const t of kicks) { const a2 = 2 * Math.PI * t / Pk; sx += Math.cos(a2); sy += Math.sin(a2); }
+    off = ((Math.atan2(sy, sx) / (2 * Math.PI) + 1) % 1) * Pk; }
+  if (bpm > 150) bpm /= 2;   // light shows read very fast tempos better at half time
+  const P = 60 / bpm, dur = x.length / sr;
+  // per-beat features
+  const nBeats = Math.floor((dur - off) / P);
+  const frameOf = t => Math.max(0, Math.min(nFrames - 1, Math.round((t * sr - NF * 0.5) / HOP)));
+  const beat = []; for (let k = 0; k < nBeats; k++) {
+    const a = frameOf(off + k * P), b = Math.max(a + 1, frameOf(off + (k + 1) * P)); let lo = 0, rm = 0, hi = 0, md = 0;
+    for (let f = a; f < b; f++) { lo += F.low[f]; rm += F.rms[f]; hi += F.high[f]; md += F.mid[f]; } const n = b - a;
+    beat.push({ lo: lo / n, rm: rm / n, hi: hi / n, md: md / n });
+  }
+  // downbeat: new sections start on beat 1, so pick the offset with the biggest energy jumps
+  const score = [0, 0, 0, 0];
+  for (let k = 1; k < nBeats; k++) { const j = Math.max(0, beat[k].lo - beat[k - 1].lo) / (lowRef || 1) + Math.max(0, beat[k].rm - beat[k - 1].rm) / (rms90 || 1); score[k % 4] += j * j; }
+  const barOff = score.indexOf(Math.max(...score));
+  // bars
+  const bars = []; for (let k = barOff; k + 4 <= nBeats; k += 4) {
+    const t0 = off + k * P, t1 = t0 + 4 * P, bb = beat.slice(k, k + 4);
+    const avg = key => bb.reduce((s, v) => s + v[key], 0) / 4;
+    bars.push({ t0, t1, lo: avg("lo"), rm: avg("rm"), hi: avg("hi"), md: avg("md"),
+      kicks: kicks.filter(t => t >= t0 && t < t1).length, snares: snares.filter(t => t >= t0 && t < t1).length });
+  }
+  const norm = key => { const v = bars.map(b => b[key]), lo = pct(v, 0.1), hi = pct(v, 0.9); bars.forEach(b => b[key + "N"] = Math.max(0, Math.min(1.2, (b[key] - lo) / ((hi - lo) || 1)))); };
+  ["lo", "rm", "hi", "snares"].forEach(norm);
+  bars.forEach(b => { b.dom = Math.log10((b.lo + 1e-9) / (b.md + 1e-9)); });
+  norm("dom");
+  bars.forEach(b => b.state = b.rmN < 0.05 && b.rm < rms50 * 0.3 ? "silent" : (b.loN > 0.55 && b.domN > 0.5 && b.rmN > 0.45 && b.kicks >= 3) ? "drop" : "calm");
+  for (let j = 1; j < bars.length - 1; j++) if (bars[j - 1].state === bars[j + 1].state && bars[j].state !== bars[j - 1].state && bars[j].state !== "silent") bars[j].state = bars[j - 1].state;
+  // build-ups: the run of rising tension right before each drop
+  for (let s = 1; s < bars.length; s++) {
+    if (bars[s].state !== "drop" || bars[s - 1].state === "drop") continue;
+    const T = j => j < 0 ? 0 : bars[j].snaresN + bars[j].hiN * 2 + bars[j].rmN * 0.5;
+    // builds are phrase-length (2, 4 or 8 bars): pick the length with the strongest rise versus the bars before it
+    let start = Math.max(0, s - 2), bestScore = -1e9;
+    for (const L of [2, 4, 8]) {
+      if (s - L < 0) continue; let inside = 0, before = 0, nb = 0, blocked = false;
+      for (let j = s - L; j < s; j++) { if (bars[j].state === "drop") blocked = true; inside += T(j); }
+      for (let j = s - 2 * L; j < s - L; j++) if (j >= 0) { before += T(j); nb++; }
+      if (blocked) continue;
+      const sc = (inside / L - (nb ? before / nb : 0)) * Math.sqrt(L);
+      if (sc > bestScore) { bestScore = sc; start = s - L; }
+    }
+    for (let j = start; j < s; j++) if (bars[j].state !== "drop") bars[j].state = "build";
+  }
+  const drops = []; bars.forEach((b, j) => { if (b.state === "drop" && (j === 0 || bars[j - 1].state !== "drop")) drops.push(b.t0); });
+  const rmsRef = pct(F.rms, 0.95);
+  const env = new Float32Array(Math.ceil(dur / 0.02)); // loudness envelope, 20 ms steps
+  for (let i = 0; i < env.length; i++) env[i] = F.rms[frameOf(i * 0.02)] / (rmsRef || 1);
+  // song character, used to pick a lighting style
+  let onBeat = 0; for (let k = 0; k < nBeats; k++) { const bt = off + k * P, i = lastLE(kicks, bt + 0.08); if (i >= 0 && kicks[i] > bt - 0.08) onBeat++; }
+  const kickFrac = nBeats ? onBeat / nBeats : 0;
+  const lv = Array.from(env).filter(v => v > 0.02), dyn = lv.length ? pct(lv, 0.9) / (pct(lv, 0.25) || 1e-6) : 1;
+  const onsetRate = (kicks.length + snares.length) / Math.max(1, dur);
+  const hatRate = hats.length / Math.max(1, dur), snareRate = snares.length / Math.max(1, dur);
+  const percussive = hatRate > 2 || snareRate > 3.2;
+  let style;
+  if (!percussive) style = dyn > 2.5 ? "emotional" : "chill";
+  else if (drops.length >= 1 && kickFrac > 0.25 && bpm >= 110) style = "party";
+  else if (bpm < 102) style = "hiphop";
+  else style = "poprock";
+  onProgress && onProgress(1);
+  return { bpm, P, off, barOff, kicks, snares, hats, bars: bars.map(b => ({ t0: b.t0, t1: b.t1, state: b.state, level: Math.min(1, b.rmN) })), drops, env, dur,
+           features: { kickFrac, dyn, onsetRate, hatRate, snareRate }, style };
+}
+
+
+</script>
+<script>
+(() => {
+"use strict";
+// ---------------------------------------------------------------- stage units: 16 x 9
+const SW = 16, SH = 9;
+const cv = document.getElementById("cv"), ctx = cv.getContext("2d");
+const stage = document.getElementById("stage");
+let scale = 1, dpr = 1;
+const bg = document.createElement("canvas"), bgx = bg.getContext("2d");
+
+function resize() {
+  const r = stage.getBoundingClientRect(); dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  scale = cv.width / SW; drawRoom();
+}
+function drawRoom() {
+  bg.width = cv.width; bg.height = cv.height; const s = scale, g = bgx;
+  g.fillStyle = "#050509"; g.fillRect(0, 0, bg.width, bg.height);
+  const x0 = 3.75 * s, y0 = 1.62 * s, x1 = 12.25 * s, y1 = 5.9 * s;
+  const poly = (pts, c) => { g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); g.fillStyle = c; g.fill(); };
+  poly([[0, 0], [bg.width, 0], [x1, y0], [x0, y0]], "#15141a");
+  poly([[0, 0], [x0, y0], [x0, y1], [0, bg.height]], "#111016");
+  poly([[bg.width, 0], [x1, y0], [x1, y1], [bg.width, bg.height]], "#111016");
+  poly([[x0, y0], [x1, y0], [x1, y1], [x0, y1]], "#17161c");
+  poly([[0, bg.height], [x0, y1], [x1, y1], [bg.width, bg.height]], "#100c0a");
+  g.strokeStyle = "rgba(255,255,255,0.035)"; g.lineWidth = 1 * dpr;
+  for (let i = 1; i < 9; i++) { g.beginPath(); g.moveTo(x0 + (x1 - x0) * i / 9, y1); g.lineTo(bg.width * i / 9, bg.height); g.stroke(); }
+}
+window.addEventListener("resize", resize); if (window.ResizeObserver) new ResizeObserver(() => resize()).observe(stage);
+
+// ---------------------------------------------------------------- shapes
+let shapes = [], selected = -1, uid = 1;
+const LOOP_TYPES = { circle: 1, rect: 1, hex: 1, tri: 1 };
+const DEFAULT_NAMES = { line: "Strip", pole: "Pole", circle: "Circle", rect: "Square", hex: "Hexagon", tri: "Triangle", free: "Freehand", matrix: "Matrix" };
+function mk(type, o) { const s = Object.assign({ id: uid++, type, name: DEFAULT_NAMES[type], count: 60, rot: 0, start: 0, rev: false, dev: "WLED Living Room", from: null }, o);
+  if (type === "matrix") { s.cols = s.cols || 16; s.rows = s.rows || 8; s.count = s.cols * s.rows; s.w = s.w || 3.2; s.h = s.h || 1.6; s.size = s.w; } return s; }
+function honey(cx, cy, r, rows, dev, base) {
+  const out = [], dx = Math.sqrt(3) * r * 1.04, dy = 1.5 * r * 1.04; let n = 0;
+  rows.forEach((cnt, ri) => { for (let k = 0; k < cnt; k++) { const x = cx + (k - (cnt - 1) / 2) * dx, y = cy + (ri - (rows.length - 1) / 2) * dy;
+    out.push(mk("hex", { name: base + " " + (++n), count: 24, cx: x, cy: y, size: r, dev })); } });
+  return out;
+}
+const CEIL_U = [[0.1, 0.06], [3.75, 1.66], [12.25, 1.66], [15.9, 0.06]];
+const PRESETS = {
+  living: defaultLayout,
+  fourwalls: () => { uid = 1; const d = "WLED Room"; return [
+    mk("line", { name: "Left wall", count: 100, pts: [[0.1, 0.06], [3.75, 1.66]], dev: d, from: 0 }),
+    mk("line", { name: "Back wall", count: 200, pts: [[3.75, 1.66], [12.25, 1.66]], dev: d, from: 100 }),
+    mk("line", { name: "Right wall", count: 100, pts: [[12.25, 1.66], [15.9, 0.06]], dev: d, from: 300 }),
+    mk("line", { name: "Front wall", count: 200, pts: [[15.9, 0.14], [0.1, 0.14]], dev: d, from: 400 }) ]; },
+  bedroom: () => { uid = 1; return [
+    mk("line", { name: "Ceiling, back wall", count: 160, pts: [[3.75, 1.66], [12.25, 1.66]], dev: "WLED Bedroom" }),
+    mk("rect", { name: "Headboard", count: 120, cx: 8, cy: 4.55, w: 4.2, h: 1.1, size: 4.2, dev: "WLED Bedroom" }),
+    mk("line", { name: "Under the bed", count: 90, pts: [[5.6, 5.8], [10.4, 5.8]], dev: "WLED Bedroom" }),
+    mk("pole", { name: "Lamp left", count: 24, pts: [[4.7, 5.85], [4.7, 4.3]], dev: "WLED Bedside" }),
+    mk("pole", { name: "Lamp right", count: 24, pts: [[11.3, 5.85], [11.3, 4.3]], dev: "WLED Bedside" }),
+    mk("circle", { name: "Moon ring", count: 60, cx: 10.9, cy: 2.75, size: 0.62, dev: "WLED Bedside" }),
+    ...honey(5.05, 2.75, 0.28, [2, 3, 2], "WLED Bedside", "Hexagon") ]; },
+  gaming: () => { uid = 1; return [
+    mk("free", { name: "Ceiling cove", count: 200, pts: CEIL_U.map(p => p.slice()), dev: "WLED Ceiling" }),
+    mk("rect", { name: "Main monitor", count: 90, cx: 8, cy: 3.85, w: 2.6, h: 1.5, size: 2.6, dev: "WLED Desk" }),
+    mk("rect", { name: "Left monitor", count: 70, cx: 5.35, cy: 3.95, w: 2.0, h: 1.2, size: 2.0, rot: 0, dev: "WLED Desk" }),
+    mk("rect", { name: "Right monitor", count: 70, cx: 10.65, cy: 3.95, w: 2.0, h: 1.2, size: 2.0, dev: "WLED Desk" }),
+    mk("line", { name: "Desk edge", count: 120, pts: [[4.1, 5.15], [11.9, 5.15]], dev: "WLED Desk" }),
+    mk("pole", { name: "Light bar left", count: 40, pts: [[3.98, 5.85], [3.98, 2.0]], dev: "WLED Desk" }),
+    mk("pole", { name: "Light bar right", count: 40, pts: [[12.02, 5.85], [12.02, 2.0]], dev: "WLED Desk" }),
+    ...honey(8, 2.3, 0.26, [3, 4], "WLED Wall", "Hex") ]; },
+  matrix: () => { uid = 1; return [
+    mk("matrix", { name: "Matrix wall", cx: 8, cy: 3.5, cols: 32, rows: 14, w: 6.6, h: 2.9, dev: "WLED Matrix" }),
+    mk("line", { name: "Floor strip", count: 100, pts: [[3.85, 5.86], [12.15, 5.86]], dev: "WLED Room" }),
+    mk("pole", { name: "Pole left", count: 45, pts: [[3.98, 5.85], [3.98, 1.9]], dev: "WLED Room" }),
+    mk("pole", { name: "Pole right", count: 45, pts: [[12.02, 5.85], [12.02, 1.9]], dev: "WLED Room" }) ]; },
+  club: () => { uid = 1; const out = [mk("free", { name: "Ceiling cove", count: 200, pts: CEIL_U.map(p => p.slice()), dev: "WLED Ceiling" })];
+    [4.3, 5.8, 7.3, 8.7, 10.2, 11.7].forEach((x, i) => out.push(mk("pole", { name: "Pole " + (i + 1), count: 40, pts: [[x, 5.85], [x, 2.1]], dev: i < 3 ? "WLED Stage L" : "WLED Stage R" })));
+    out.push(mk("circle", { name: "Big ring left", count: 72, cx: 6.55, cy: 3.2, size: 0.62, dev: "WLED Stage L" }));
+    out.push(mk("circle", { name: "Big ring right", count: 72, cx: 9.45, cy: 3.2, size: 0.62, dev: "WLED Stage R" }));
+    out.push(mk("tri", { name: "Triangle", count: 54, cx: 8, cy: 2.75, size: 0.55, dev: "WLED Booth" }));
+    out.push(mk("line", { name: "DJ booth front", count: 90, pts: [[6.2, 5.0], [9.8, 5.0]], dev: "WLED Booth" }));
+    return out; },
+};
+function defaultLayout() {
+  uid = 1;
+  return [
+    mk("free", { name: "Ceiling cove", count: 200, pts: [[0.1, 0.06], [3.75, 1.66], [12.25, 1.66], [15.9, 0.06]], dev: "WLED Ceiling" }),
+    mk("rect", { name: "TV backlight", count: 110, cx: 8, cy: 3.6, w: 3.3, h: 1.85, size: 3.3 }),
+    mk("circle", { name: "Ring light", count: 60, cx: 5.1, cy: 3.3, size: 0.75 }),
+    mk("rect", { name: "Square frame", count: 60, cx: 10.9, cy: 3.3, w: 1.4, h: 1.4, size: 1.4 }),
+    mk("hex", { name: "Hexagon 1", count: 30, cx: 7.4, cy: 2.25, size: 0.3, dev: "WLED Shelf" }),
+    mk("hex", { name: "Hexagon 2", count: 30, cx: 8.0, cy: 2.25, size: 0.3, dev: "WLED Shelf" }),
+    mk("hex", { name: "Hexagon 3", count: 30, cx: 8.6, cy: 2.25, size: 0.3, dev: "WLED Shelf" }),
+    mk("pole", { name: "Pole left", count: 45, pts: [[3.98, 5.85], [3.98, 1.9]] }),
+    mk("pole", { name: "Pole right", count: 45, pts: [[12.02, 5.85], [12.02, 1.9]] }),
+    mk("line", { name: "Floor strip", count: 100, pts: [[3.85, 5.86], [12.15, 5.86]] }),
+  ];
+}
+function outline(s) {
+  // returns polyline (closed for loops) in stage units
+  if (s.type === "line" || s.type === "pole" || s.type === "free") return s.pts;
+  if (s.type === "matrix") { const w = s.w / 2, h = s.h / 2; return [[s.cx - w, s.cy - h], [s.cx + w, s.cy - h], [s.cx + w, s.cy + h], [s.cx - w, s.cy + h]]; }
+  const r = s.size, a0 = s.rot * Math.PI / 180, pts = [];
+  if (s.type === "circle") { for (let k = 0; k < 96; k++) { const a = -Math.PI / 2 + a0 + k / 96 * Math.PI * 2; pts.push([s.cx + r * Math.cos(a), s.cy + r * Math.sin(a)]); } }
+  else if (s.type === "rect") {
+    const w = (s.w || s.size) / 2, h = (s.h || s.size) / 2, c = Math.cos(a0), sn = Math.sin(a0);
+    [[-w, -h], [w, -h], [w, h], [-w, h]].forEach(([x, y]) => pts.push([s.cx + x * c - y * sn, s.cy + x * sn + y * c]));
+  } else {
+    const n = s.type === "hex" ? 6 : 3, off = s.type === "hex" ? Math.PI / 6 : -Math.PI / 2;
+    for (let k = 0; k < n; k++) { const a = off + a0 + k / n * Math.PI * 2; pts.push([s.cx + r * Math.cos(a), s.cy + r * Math.sin(a)]); }
+  }
+  return pts;
+}
+function samplePath(pts, n, closed) {
+  const P = closed ? pts.concat([pts[0]]) : pts, segL = []; let tot = 0;
+  for (let i = 0; i < P.length - 1; i++) { const l = Math.hypot(P[i + 1][0] - P[i][0], P[i + 1][1] - P[i][1]); segL.push(l); tot += l; }
+  const out = [];
+  for (let k = 0; k < n; k++) {
+    let d = closed ? tot * k / n : tot * k / Math.max(1, n - 1), i = 0;
+    while (i < segL.length - 1 && d > segL[i]) { d -= segL[i]; i++; }
+    const f = segL[i] ? Math.min(1, d / segL[i]) : 0;
+    out.push([P[i][0] + (P[i + 1][0] - P[i][0]) * f, P[i][1] + (P[i + 1][1] - P[i][1]) * f]);
+  }
+  return out;
+}
+// LED arrays (struct of arrays)
+let N = 0, LX, LY, LS, LA, LU, LH, LR, LF, LL, LD, PX, PY, LG, COL, AMB, chainStart = [];
+function matrixPts(s) { // serpentine wiring, like most LED matrices
+  const pts = []; s.count = s.cols * s.rows;
+  for (let r = 0; r < s.rows; r++) for (let k = 0; k < s.cols; k++) { const c = r % 2 ? s.cols - 1 - k : k;
+    pts.push([s.cx - s.w / 2 + (s.cols > 1 ? c / (s.cols - 1) : 0.5) * s.w, s.cy - s.h / 2 + (s.rows > 1 ? r / (s.rows - 1) : 0.5) * s.h]); }
+  return pts;
+}
+function rebuild() {
+  const all = []; chainStart = []; let idx = 0;
+  shapes.forEach((s, si) => {
+    const loop = !!LOOP_TYPES[s.type];
+    let pts = s.type === "matrix" ? matrixPts(s) : samplePath(outline(s), s.count, loop);
+    if (loop && s.start) { const k = Math.round(s.start * pts.length) % pts.length; pts = pts.slice(k).concat(pts.slice(0, k)); }
+    if (s.rev) pts = loop ? [pts[0]].concat(pts.slice(1).reverse()) : pts.slice().reverse();
+    const cx = pts.reduce((a, p) => a + p[0], 0) / pts.length, cy = pts.reduce((a, p) => a + p[1], 0) / pts.length;
+    chainStart.push(idx);
+    pts.forEach((p, k) => {
+      const sAlong = loop ? k / pts.length : (pts.length > 1 ? k / (pts.length - 1) : 0);
+      let ang = (loop || s.type === "matrix") ? ((Math.atan2(p[1] - cy, p[0] - cx) / (2 * Math.PI)) + 1.25) % 1 : sAlong;
+      all.push([p[0], p[1], sAlong, ang, si, loop ? 1 : 0, Math.hypot(p[0] - cx, p[1] - cy)]);
+    }); idx += pts.length;
+  });
+  const maxD = {}; all.forEach(a => maxD[a[4]] = Math.max(maxD[a[4]] || 1e-6, a[6]));
+  N = all.length;
+  LX = new Float32Array(N); LY = new Float32Array(N); LS = new Float32Array(N); LA = new Float32Array(N);
+  LU = new Float32Array(N); LH = new Float32Array(N); LR = new Float32Array(N); LF = new Int16Array(N); LL = new Uint8Array(N); LD = new Float32Array(N);
+  all.forEach((a, i) => { LD[i] = a[6] / maxD[a[4]]; LX[i] = a[0]; LY[i] = a[1]; LS[i] = a[2]; LA[i] = a[3]; LF[i] = a[4]; LL[i] = a[5];
+    LU[i] = a[0] / SW; LH[i] = 1 - a[1] / SH; LR[i] = Math.hypot((a[0] - 8) / SW, (a[1] - 3.6) / SW) / 0.5; });
+  PX = new Float32Array(N); PY = new Float32Array(N); LG = new Float32Array(N);
+  for (let i = 0; i < N; i++) { PX[i] = LX[i] / SH; PY[i] = 1 - LY[i] / SH; LG[i] = N > 1 ? i / (N - 1) : 0; }
+  COL = new Float32Array(N * 3); AMB = new Float32Array(N * 3);
+  delayRing = []; save(); renderPanels();
+}
+
+// ---------------------------------------------------------------- audio + analysis
+// Songs are decoded in the page and played through Web Audio (no <audio> element),
+// so uploaded files play the same way as the built-in demo.
+let AC = null, analyser, freq, tdata, binHz = 1;
+const player = { buf: null, src: null, startAt: 0, offset: 0, playing: false };
+function curTime() { return player.playing && AC ? AC.currentTime - player.startAt : player.offset; }
+function startPlayback() {
+  if (!player.buf) return;
+  if (player.offset >= player.buf.duration - 0.05) player.offset = 0;
+  const src = AC.createBufferSource(); src.buffer = player.buf; src.connect(analyser);
+  src.onended = () => { if (player.src === src && player.playing) { player.playing = false; player.src = null; player.offset = 0; resetAnalysis(); setPlayLabel(); } };
+  src.start(0, player.offset); player.startAt = AC.currentTime - player.offset; player.src = src; player.playing = true; resetAnalysis();
+}
+function stopPlayback() {
+  if (!player.playing) return; player.offset = curTime(); player.playing = false;
+  const s = player.src; player.src = null; try { s.stop(); } catch (e) {}
+}
+function ensureAudio() {
+  if (AC) return;
+  AC = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = AC.createAnalyser(); analyser.fftSize = 2048; analyser.smoothingTimeConstant = 0;
+  analyser.connect(AC.destination);
+  freq = new Float32Array(analyser.frequencyBinCount); tdata = new Float32Array(analyser.fftSize);
+  binHz = AC.sampleRate / analyser.fftSize;
+}
+const A = {}; // analysis state
+function resetAnalysis() {
+  Object.assign(A, {
+    prev: null, hist: { k: [], s: [], h: [] }, last: { k: -9, s: -9, h: -9 }, onsets: [], kicks: [], snares: [],
+    bpm: 0, cand: 0, candN: 0, phase: 0, lastEst: -9, eFast: 0, eSlow: 0, eMax: 1e-4, bass: 0, bassMax: 1e-4, high: 0, highMax: 1e-4,
+    bands: new Float32Array(24), bandMax: new Float32Array(24).fill(1e-4),
+    state: "silent", cand2: "silent", candT: 0, stateT: 0, buildStart: 0, dropT: -9, barOff: 0, lastT: 0
+  });
+}
+resetAnalysis();
+function bandMag(lo, hi) { let s = 0; const a = Math.max(1, Math.floor(lo / binHz)), b = Math.min(freq.length - 1, Math.ceil(hi / binHz)); for (let i = a; i <= b; i++) s += freq[i]; return s / (b - a + 1); }
+function flux(lo, hi) { let s = 0; const a = Math.max(1, Math.floor(lo / binHz)), b = Math.min(freq.length - 1, Math.ceil(hi / binHz)); for (let i = a; i <= b; i++) { const d = freq[i] - A.prev[i]; if (d > 0) s += d; } return s; }
+function detect(key, val, t, refr, k) {
+  const h = A.hist[key]; h.push(val); if (h.length > 70) h.shift();
+  let m = 0; for (const v of h) m += v; m /= h.length; let sd = 0; for (const v of h) sd += (v - m) ** 2; sd = Math.sqrt(sd / h.length);
+  if (val > m + k * sd && val > m * 1.4 && val > 1e-4 && t - A.last[key] > refr) { A.last[key] = t; return true; }
+  return false;
+}
+const EDGES = (() => { const e = []; for (let i = 0; i <= 24; i++) e.push(40 * Math.pow(12000 / 40, i / 24)); return e; })();
+function analyse(t, dt) {
+  analyser.getFloatFrequencyData(freq); analyser.getFloatTimeDomainData(tdata);
+  for (let i = 0; i < freq.length; i++) freq[i] = Math.pow(10, freq[i] / 20);
+  if (!A.prev) { A.prev = Float32Array.from(freq); return; }
+  let rms = 0; for (let i = 0; i < tdata.length; i++) rms += tdata[i] * tdata[i]; rms = Math.sqrt(rms / tdata.length);
+  const kf = flux(40, 130), sf = flux(180, 320) * 0.6 + flux(1800, 5000) * 0.4, hf = flux(7000, 14000);
+  const kick = detect("k", kf, t, 0.2, 1.6), snare = detect("s", sf, t, 0.14, 1.8), hat = detect("h", hf, t, 0.07, 1.4);
+  if (kick) { A.kicks.push(t); A.onsets.push([t, 1.0]); }
+  if (snare) { A.snares.push(t); A.onsets.push([t, kick ? 0 : 0.5]); }
+  A.kicks = A.kicks.filter(x => t - x < 10); A.snares = A.snares.filter(x => t - x < 3); A.onsets = A.onsets.filter(o => t - o[0] < 10);
+  A.prev.set(freq);
+  // levels with slow auto-gain
+  const ef = 1 - Math.exp(-dt / 0.25), es = 1 - Math.exp(-dt / 4);
+  A.eFast += (rms - A.eFast) * ef; A.eSlow += (rms - A.eSlow) * es; A.eMax = Math.max(A.eMax * Math.pow(0.97, dt), A.eFast);
+  const bass = bandMag(40, 150), high = bandMag(4000, 12000);
+  A.bass += (bass - A.bass) * (1 - Math.exp(-dt / 0.15)); A.bassMax = Math.max(A.bassMax * Math.pow(0.97, dt), A.bass);
+  A.high += (high - A.high) * (1 - Math.exp(-dt / 0.3)); A.highMax = Math.max(A.highMax * Math.pow(0.97, dt), A.high);
+  for (let b = 0; b < 24; b++) {
+    const v = bandMag(EDGES[b], EDGES[b + 1]); A.bandMax[b] = Math.max(A.bandMax[b] * Math.pow(0.9, dt), v);
+    const nv = Math.min(1, v / A.bandMax[b]); A.bands[b] += (nv - A.bands[b]) * (nv > A.bands[b] ? 0.7 : 0.25);
+  }
+  if (t - A.lastEst > 0.5) { A.lastEst = t; estimateTempo(t); }
+  A.mid += ((bandMag(300, 2000)) - (A.mid || 0)) * (1 - Math.exp(-dt / 0.3));
+  sectionDetect(t, dt);
+  return { kick, snare, hat };
+}
+function estimateTempo(t) {
+  const src = A.kicks.length >= 6 ? A.kicks.map(x => [x, 1]) : A.onsets;
+  if (src.length < 5) return;
+  const hist = new Float32Array(201); // 80..180 step .5
+  for (let i = 0; i < src.length; i++) for (let j = i + 1; j < src.length; j++) {
+    const d = src[j][0] - src[i][0]; if (d < 0.28 || d > 3) continue;
+    for (let m = 1; m <= 4; m++) { const p = d / m; if (p < 0.333 || p > 0.75) continue;
+      const b = 60 / p, w = (src[i][1] + src[j][1]) / m;
+      const c = Math.round((b - 80) * 2); for (let k = Math.max(0, c - 4); k <= Math.min(200, c + 4); k++) hist[k] += w * Math.exp(-((((80 + k / 2) - b) / 0.8) ** 2)); }
+  }
+  let best = 0, bi = 0; for (let k = 0; k <= 200; k++) { const v = hist[k] * Math.exp(-((((80 + k / 2) - 124) / 45) ** 2)); if (v > best) { best = v; bi = k; } }
+  if (!best) return; const bpm = 80 + bi / 2;
+  if (!A.bpm || Math.abs(bpm - A.bpm) < 3) A.bpm = A.bpm ? A.bpm * 0.7 + bpm * 0.3 : bpm, A.candN = 0;
+  else if (Math.abs(bpm - A.cand) < 3) { if (++A.candN >= 3) { A.bpm = bpm; A.candN = 0; } } else { A.cand = bpm; A.candN = 1; }
+  // phase: circular mean of recent strong onsets
+  const P = 60 / A.bpm; let sx = 0, sy = 0;
+  for (const [x, w] of src) { if (t - x > 6) continue; const a = 2 * Math.PI * (x % P) / P, r = w * Math.exp(-(t - x) / 3); sx += Math.cos(a) * r; sy += Math.sin(a) * r; }
+  if (sx || sy) { const ph = ((Math.atan2(sy, sx) / (2 * Math.PI)) + 1) % 1 * P;
+    if (!A.phaseSet) { A.phase = ph; A.phaseSet = true; } else { let d = ph - A.phase; d -= Math.round(d / P) * P; A.phase = (A.phase + d * 0.35 + P) % P; } }
+}
+function sectionDetect(t, dt) {
+  const loud = A.eFast / A.eMax, kickRecent = t - A.last.k < 0.9;
+  // bass dominance (bass vs mids, log scale) against a slow-rising baseline: drops are where bass takes over
+  const dom = Math.log10(Math.max(1e-6, A.bass) / Math.max(1e-6, A.mid || 1e-6));
+  A.domS = A.domS == null ? dom : A.domS + (dom - A.domS) * (1 - Math.exp(-dt / 0.4));
+  if (!A.domHist) A.domHist = [];
+  if (t - (A.domHistT || -9) > 0.1 && loud > 0.06) { A.domHistT = t; A.domHist.push(A.domS); if (A.domHist.length > 300) A.domHist.shift(); }
+  const srt = A.domHist.slice().sort((a, b) => a - b); A.base = srt.length ? srt[Math.floor(srt.length * 0.3)] : A.domS;
+  const lift = A.domS - A.base, bass = (lift > 0.5 && A.domHist.length > 25) ? 1 : 0; A.lift = lift;
+  const snareRate = A.snares.filter(x => t - x < 2).length / 2;
+  let c;
+  if (loud < 0.06) c = "silent";
+  else if (bass && kickRecent && loud > 0.45 && A.kicks.filter(x => t - x < 2).length >= 3) c = "drop";
+  else if (!bass && ((snareRate >= 2.5 && loud > 0.4) || (A.eFast > A.eSlow * 1.12 && A.high / A.highMax > 0.45))) c = "build";
+  else c = "calm";
+  if (c !== A.cand2) { A.cand2 = c; A.candT = t; }
+  const need = c === "drop" ? 0.12 : c === "silent" ? 0.15 : 0.6;
+  if (c !== A.state && t - A.candT >= need) {
+    if (c === "drop" && (A.state === "build" || A.state === "silent" || t - A.stateT > 4)) {
+      A.dropT = t; if (A.bpm) { const P = 60 / A.bpm; const bi = Math.round((t - A.phase) / P); A.barOff = ((bi % 4) + 4) % 4; }
+    }
+    if (c === "build") A.buildStart = t;
+    A.state = c; A.stateT = t;
+  }
+}
+// beat grid (works for any time, so it can be evaluated slightly in the future)
+function grid(t) {
+  if (!A.bpm) return { has: false, P: 0.5, phase: 0, idx: 0, beatInBar: 0, env: 0, barPhase: 0, beatT: -9 };
+  const P = 60 / A.bpm, x = (t - A.phase) / P, idx = Math.floor(x), ph = x - idx;
+  return { has: true, P, phase: ph, idx, beatInBar: (((idx - A.barOff) % 4) + 4) % 4, env: Math.exp(-ph * P / 0.18), barPhase: (((((idx - A.barOff) % 4) + 4) % 4) + ph) / 4 };
+}
+
+// ---------------------------------------------------------------- effects
+const hex = h => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
+const PAL = [["#ff2bd6", "#ff8a1f"], ["#16e0ff", "#3d4dff"], ["#b14bff", "#ff3b6b"], ["#20ffa8", "#16a3ff"], ["#ffd23f", "#ff3d3d"]].map(p => p.map(hex));
+const WHITE = [1, 0.97, 0.94];
+const PALSETS = { neon: ["#ff2bd6", "#16e0ff"], sunset: ["#ff5e3a", "#ffb648"], ocean: ["#0a6cff", "#00e5d0"], fire: ["#ff3d00", "#ffc400"],
+  ice: ["#7cc8ff", "#e8f6ff"], forest: ["#19c37d", "#c6ff3d"], mono: ["#ffe2b8", "#fff4e6"] };
+let glowQ = 2, palMode = "auto", bright = 1, everyBeats = 8, styleSel = "auto", melodyHue = 0;
+function currentPal() { return palMode === "auto" ? PAL[palIdx % PAL.length] : PALSETS[palMode].map(hex); }
+const G = (x, w) => Math.exp(-(x / w) * (x / w));
+const wrapd = (a, b) => { const d = Math.abs(a - b) % 1; return Math.min(d, 1 - d); };
+function rainbow(x) { x = ((x % 1) + 1) % 1; return [Math.min(1, Math.max(0, Math.abs(x * 6 - 3) - 1)), Math.min(1, Math.max(0, 2 - Math.abs(x * 6 - 2))), Math.min(1, Math.max(0, 2 - Math.abs(x * 6 - 4)))]; }
+function add(i, c, k) { const j = i * 3; COL[j] += c[0] * k; COL[j + 1] += c[1] * k; COL[j + 2] += c[2] * k; }
+const hash = n => { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); };
+
+const FX = [
+  { id: "aurora", name: "Aurora Drift", tag: "calm", run(S) { const a = hex("#2a10a0"), b = hex("#00b3a5");
+      for (let i = 0; i < N; i++) { const m = 0.5 + 0.5 * Math.sin(2 * Math.PI * (LU[i] * 1.3 - S.t * 0.1) + LH[i] * 3); add(i, a, 0.4 * (1 - m)); add(i, b, 0.4 * m); } } },
+  { id: "stars", name: "Hi-hat Starfield", tag: "calm", run(S) { FX[0].run(S); for (let i = 0; i < COL.length; i++) COL[i] *= 0.5;
+      const e = Math.exp(-(S.t - S.hat) / 0.09), seed = Math.floor(S.hat * 100);
+      if (e > 0.02) for (let i = 0; i < N; i++) if (hash(i * 7.3 + seed) < 0.1) add(i, WHITE, e * 1.3); } },
+  { id: "lava", name: "Lava Breath", tag: "calm", run(S) { const a = hex("#ff3d00"), b = hex("#ff0055"), br = 0.24 + 0.08 * Math.sin(2 * Math.PI * S.g.barPhase);
+      for (let i = 0; i < N; i++) { const m = 0.5 + 0.5 * Math.sin(2 * Math.PI * (LU[i] * 0.9 + S.t * 0.06) + Math.sin(LH[i] * 4 + S.t * 0.7) * 1.5); add(i, a, m * br); add(i, b, (1 - m) * br); } } },
+  { id: "fill", name: "Tension Fill", tag: "build", run(S) { const p = S.buildP, col = [0.48 * (1 - p) + p, 0.24 * (1 - p) + 0.97 * p, 1];
+      for (let i = 0; i < N; i++) { const pos = LL[i] ? LA[i] : LS[i]; if (pos < p) add(i, col, 0.25 + 0.9 * p); add(i, WHITE, G(pos - p, 0.025) * 1.2); } } },
+  { id: "comets", name: "Snare Comets", tag: "build", run(S) { const base = hex("#5a2ccf"), p = S.buildP;
+      for (let i = 0; i < N; i++) add(i, base, 0.08 * (1 - p));
+      for (const e of S.snares) { const dt = S.t - e; if (dt < 0 || dt > 0.6) continue; const r = dt / 0.45, f = 1 - dt / 0.6;
+        for (let i = 0; i < N; i++) add(i, WHITE, G(LS[i] - r, 0.05) * f * 0.9); } } },
+  { id: "shock", name: "Kick Shockwave", tag: "drop", run(S) { const [A1, B1] = S.pal, dt = S.t - S.pulseT, r = dt / 0.4, f = Math.max(0, 1 - dt / 0.5);
+      for (let i = 0; i < N; i++) { add(i, A1, 0.1 + 0.5 * S.pulse); add(i, B1, G(LR[i] - r, 0.08) * f * 1.8); } } },
+  { id: "spin", name: "Ring Spinners", tag: "drop", run(S) { const [A1, B1] = S.pal, dir = S.pulseN % 2 ? -1 : 1, head = ((S.t / (S.g.P || 0.5)) * 0.5 * dir % 1 + 1) % 1;
+      for (let i = 0; i < N; i++) { add(i, A1, 0.05 + 0.12 * S.pulse); add(i, B1, (G(wrapd(LA[i], head), 0.06) + G(wrapd(LA[i], (head + 0.5) % 1), 0.06)) * (1.2 + 0.8 * S.pulse)); } } },
+  { id: "ping", name: "Ping-Pong Sweep", tag: "drop", run(S) { const [A1, B1] = S.pal, dt = S.t - S.pulseT, x = dt / 0.38, f = Math.max(0, 1 - dt / 0.45), flip = S.pulseN % 2;
+      for (let i = 0; i < N; i++) { add(i, A1, 0.1 + 0.5 * S.pulse); add(i, B1, G((flip ? 1 - LU[i] : LU[i]) - x, 0.06) * f * 1.8); } } },
+  { id: "strobe", name: "Snare Strobe", tag: "drop", run(S) { const [A1, B1] = S.pal, on = S.pulseN % 2, se = Math.exp(-(S.t - S.snare) / 0.06);
+      for (let i = 0; i < N; i++) { add(i, (LF[i] % 2) === on ? A1 : B1, 0.15 + 0.7 * S.pulse); add(i, WHITE, se * 1.4); } } },
+  { id: "fireworks", name: "Fireworks", tag: "drop", run(S) {
+      for (const e of S.pulses) { const dt = S.t - e; if (dt < 0 || dt > 0.9) continue; const k = Math.round(e * 10), cx = 0.2 + 0.6 * hash(k), cy = 0.35 + 0.5 * hash(k + 3), col = rainbow(hash(k + 9)), r = dt * 0.7;
+        for (let i = 0; i < N; i++) { const d = Math.hypot(LU[i] - cx, (LH[i] - cy) * 0.7); add(i, col, G(d - r, 0.04) * (1 - dt / 0.9) * 2); add(i, WHITE, G(d, 0.05) * Math.exp(-dt / 0.08) * 2); } } } },
+  { id: "kaleido", name: "Kaleido Bars", tag: "drop", run(S) { const bar = Math.floor(S.g.idx / 4);
+      for (let i = 0; i < N; i++) add(i, rainbow(bar * 0.25 + ((LA[i] * 6) % 1) * 0.25 + LR[i] * 0.3), 0.25 + 0.75 * S.pulse); } },
+  { id: "chase", name: "Lap Chase", tag: "drop", run(S) { const ph = S.g.barPhase, se = Math.exp(-(S.t - S.snare) / 0.1), [A1, B1] = S.pal;
+      for (let i = 0; i < N; i++) { const pos = LL[i] ? LA[i] : LS[i]; add(i, B1, G(wrapd(pos, ph), 0.05) * 1.6); add(i, A1, G(wrapd(pos, (ph + 0.5) % 1), 0.05) * 1.6); add(i, WHITE, se * 0.4); } } },
+  { id: "eq", name: "EQ Everywhere", tag: "drop", run(S) {
+      const lv = [S.bassL, S.kickE, S.snareE, S.hatE, S.pulse];
+      for (let i = 0; i < N; i++) { let pos = LL[i] ? 1 - Math.abs(LA[i] - 0.5) * 2 : LS[i]; const l = lv[LF[i] % 5] * 0.95 + 0.05;
+        if (pos < l) add(i, [Math.min(1, pos * 2), Math.min(1, 2 - pos * 2), 0.4], 0.9); } } },
+  { id: "spiral", name: "Spiral Up", tag: "build", run(S) { const sp = 0.5 + 3 * S.buildP;
+      for (let i = 0; i < N; i++) { const ph = ((LA[i] * 2 - S.t * sp) % 1 + 1) % 1; add(i, rainbow(S.t * 0.1 + LA[i] * 0.3), G(Math.min(ph, 1 - ph), 0.1) * (0.4 + 0.9 * S.buildP)); } } },
+  { id: "classic", name: "Classic Spectrum", tag: "LedFx-like", run(S) {
+      for (let i = 0; i < N; i++) { const pos = LL[i] ? Math.abs(LA[i] - 0.5) * 2 : Math.abs(LS[i] - 0.5) * 2; const b = S.bands[Math.min(23, Math.floor(pos * 23))]; add(i, rainbow(LS[i] + S.t * 0.1), b * b * 0.9); } } },
+  // ---- calm, slow and emotional
+  { id: "ocean", name: "Ocean Waves", tag: "calm", run(S) { const a = S.fixed ? S.pal[0] : hex("#0a3cff"), b = S.fixed ? S.pal[1] : hex("#00e5d0");
+      for (let i = 0; i < N; i++) { const w1 = 0.5 + 0.5 * Math.sin(2 * Math.PI * (LU[i] * 2 - S.t * 0.15) + LH[i] * 4), w2 = 0.5 + 0.5 * Math.sin(2 * Math.PI * (LU[i] * 3.3 + S.t * 0.11) - LH[i] * 2), m = (w1 + w2) / 2;
+        add(i, a, 0.12 + 0.25 * m); add(i, b, 0.3 * m * m * (0.5 + 0.7 * S.loud)); } } },
+  { id: "twinkle", name: "Twinkle Stars", tag: "calm", run(S) { const dens = 0.6 + 0.8 * S.hatE;
+      for (let i = 0; i < N; i++) { const ph = (S.t * 0.35 + hash(i * 3.1)) % 1, b = Math.pow(Math.max(0, Math.sin(ph * Math.PI * 2)), 10) * dens; add(i, hash(i * 1.7) < 0.5 ? S.pal[0] : WHITE, b * 1.1); add(i, [0.05, 0.04, 0.14], 1); } } },
+  { id: "plasma", name: "Plasma Field", tag: "calm", run(S) {
+      for (let i = 0; i < N; i++) { const u = LU[i], h = LH[i], t = S.t; const v = Math.sin(u * 7 + t * 0.6) + Math.sin(h * 6 - t * 0.8) + Math.sin((u + h) * 5 + t * 0.4) + Math.sin(Math.hypot(u - 0.5, h - 0.5) * 12 - t);
+        add(i, rainbow(v * 0.125 + t * 0.03), 0.28 + 0.12 * S.g.env * S.punch); } } },
+  { id: "flow", name: "Rainbow Flow", tag: "calm", run(S) { const sp = S.g.has ? 1 / (S.g.P * 8) : 0.15;
+      for (let i = 0; i < N; i++) add(i, rainbow((LL[i] ? LA[i] : LS[i]) - S.t * sp), 0.3 + 0.15 * S.g.env * S.punch); } },
+  { id: "heart", name: "Heartbeat", tag: "calm", run(S) { const ph = S.g.phase * (S.g.P || 0.5), e = Math.exp(-ph / 0.08) + (ph > 0.16 ? 0.7 * Math.exp(-(ph - 0.16) / 0.08) : 0), col = S.fixed ? S.pal[0] : hex("#ff1f4b");
+      for (let i = 0; i < N; i++) add(i, col, 0.06 + 0.7 * e * (1 - LD[i] * 0.6)); } },
+  { id: "melody", name: "Melody Colour", tag: "calm", run(S) { let bi = 6, bv = 0; for (let b = 6; b < 24; b++) if (S.bands[b] > bv) { bv = S.bands[b]; bi = b; }
+      let d = (bi - 6) / 18 * 0.8 - melodyHue; melodyHue += d * 0.04;
+      for (let i = 0; i < N; i++) add(i, rainbow(melodyHue + LU[i] * 0.12), 0.12 + 0.45 * S.loud); } },
+  { id: "swell", name: "Tide Swell", tag: "calm", run(S) { const a = S.fixed ? S.pal[0] : hex("#ff8a3d"), b = S.fixed ? S.pal[1] : hex("#ffd6a0"), lvl = 0.15 + 0.9 * S.loud;
+      for (let i = 0; i < N; i++) { const h = LH[i], w = 0.04 * Math.sin(LU[i] * 9 + S.t * 0.8); const k = h < lvl + w ? 1 : G(h - lvl - w, 0.06);
+        add(i, h < lvl * 0.6 ? a : b, k * (0.15 + 0.6 * S.loud)); } } },
+  { id: "candle", name: "Candlelight", tag: "calm", run(S) { const c = S.fixed ? S.pal[0] : hex("#ff9a3c");
+      for (let i = 0; i < N; i++) { const f = 0.75 + 0.15 * Math.sin(S.t * 7.3 + hash(i) * 20) + 0.1 * Math.sin(S.t * 13.1 + hash(i + 5) * 30); add(i, c, (0.1 + 0.25 * S.loud) * f); } } },
+  { id: "sunrise", name: "Sunrise", tag: "calm", run(S) {
+      for (let i = 0; i < N; i++) { const h = LH[i], k = 0.2 + 0.8 * S.loud; const c = [1, 0.25 + 0.6 * h * k, 0.1 + 0.6 * Math.max(0, h - 0.6) * k];
+        add(i, c, (0.15 + 0.65 * k) * (1.1 - h * 0.4)); } } },
+  // ---- build-up
+  { id: "mrain", name: "Code Rain", tag: "build", run(S) { const sp = 0.4 + 2.2 * S.buildP;
+      for (let i = 0; i < N; i++) { const col = Math.floor(LU[i] * 48), y = 1 - ((S.t * sp * (0.7 + 0.6 * hash(col)) + hash(col + 11)) % 1), d = LH[i] - y;
+        const b = d >= 0 ? (d < 0.35 ? Math.exp(-d / 0.08) : 0) : G(d, 0.01); add(i, [0.2, 1, 0.45], b * 0.9); add(i, WHITE, G(d, 0.012) * 0.8); } } },
+  { id: "scanner", name: "Beat Scanner", tag: "build", run(S) { const pos = 0.5 + 0.5 * Math.sin(2 * Math.PI * S.t * (0.25 + 1.75 * S.buildP));
+      for (let i = 0; i < N; i++) { add(i, [1, 0.1, 0.15], G(LU[i] - pos, 0.04) * 1.5 + 0.03); add(i, WHITE, 0.3 * S.snareE); } } },
+  { id: "riser", name: "Riser Glow", tag: "build", run(S) { const p = S.buildP, col = [S.pal[0][0] * (1 - p) + p, S.pal[0][1] * (1 - p) + p, S.pal[0][2] * (1 - p) + p], lvl = p * 1.1;
+      for (let i = 0; i < N; i++) { const h = LH[i], b = h < lvl ? 0.15 + 0.8 * p : G(h - lvl, 0.05); add(i, col, b * (0.85 + 0.15 * Math.sin(S.t * 40 * p + i))); } } },
+  // ---- drop / high energy
+  { id: "wipe", name: "Colour Wipe", tag: "drop", run(S) { const bar = Math.floor((S.g.idx - S.g.beatInBar) / 4), x = Math.min(1, S.g.barPhase * 4);
+      const cn = rainbow(bar * 0.17), co = rainbow((bar - 1) * 0.17); for (let i = 0; i < N; i++) add(i, LU[i] < x ? cn : co, 0.25 + 0.6 * S.pulse); } },
+  { id: "confetti", name: "Confetti", tag: "drop", run(S) { for (let i = 0; i < N; i++) add(i, S.pal[0], 0.05);
+      for (const e of S.pulses) { const dt = S.t - e; if (dt < 0 || dt > 0.5) continue; const seed = Math.round(e * 100);
+        for (let i = 0; i < N; i++) if (hash(i * 13.7 + seed) < 0.14) add(i, rainbow(hash(i + seed)), Math.exp(-dt / 0.18) * 1.6 * S.punch); } } },
+  { id: "burst", name: "Strobe Burst", tag: "drop", run(S) { const [A1, B1] = S.pal;
+      if (S.g.beatInBar === 3 && S.punch > 0.6) { const on = Math.floor(S.g.phase * 8) % 2 === 0; for (let i = 0; i < N; i++) add(i, WHITE, on ? 1.5 : 0); }
+      else for (let i = 0; i < N; i++) add(i, LH[i] > 0.5 ? A1 : B1, 0.12 + 0.8 * S.pulse); } },
+  { id: "split", name: "Split Swap", tag: "drop", run(S) { const [A1, B1] = S.pal, left = S.g.idx % 2 === 0;
+      for (let i = 0; i < N; i++) { const isL = LU[i] < 0.5; add(i, isL ? A1 : B1, isL === left ? 0.2 + 1.0 * S.pulse : 0.05); } } },
+  { id: "mirror", name: "Beat Mirror", tag: "drop", run(S) { const [A1, B1] = S.pal, b = S.g.beatInBar;
+      for (let i = 0; i < N; i++) { const band = Math.min(3, Math.floor(Math.abs(LU[i] - 0.5) * 8)); add(i, band === b ? B1 : A1, band === b ? 0.4 + 1.2 * S.pulse : 0.08); } } },
+  { id: "rings", name: "Shape Pulse", tag: "drop", run(S) { const [A1, B1] = S.pal, nS = Math.max(1, shapes.length), target = ((S.pulseN % nS) + nS) % nS, dt = S.t - S.pulseT;
+      for (let i = 0; i < N; i++) { add(i, A1, 0.08); if (LF[i] === target) add(i, B1, G(LD[i] - dt / 0.3, 0.15) * Math.max(0, 1 - dt / 0.45) * 2 + 0.3 * Math.exp(-dt / 0.15)); } } },
+  { id: "meteor", name: "Meteor Shower", tag: "drop", run(S) { for (let i = 0; i < N; i++) add(i, S.pal[0], 0.04);
+      for (const e of S.pulses) { const dt = S.t - e; if (dt < 0 || dt > 0.8) continue; const head = dt / 0.55, rv = Math.round(e * 10) % 2, f = 1 - dt / 0.8;
+        for (let i = 0; i < N; i++) { const pos = LL[i] ? LA[i] : LS[i], d = head - (rv ? 1 - pos : pos), b = d >= 0 ? Math.exp(-d / 0.12) : G(d, 0.01); add(i, S.pal[1], b * f * 1.4); add(i, WHITE, G(d, 0.015) * f); } } } },
+  { id: "lightning", name: "Lightning", tag: "drop", run(S) { const dt = S.t - S.snare, seed = Math.round(S.snare * 100), nS = Math.max(1, shapes.length), target = Math.floor(hash(seed) * nS);
+      const flick = dt < 0.35 && (Math.sin(dt * 90) + 1) / 2 > 0.4 ? Math.exp(-dt / 0.12) * 2.2 * S.punch : 0;
+      for (let i = 0; i < N; i++) { add(i, [0.02, 0.03, 0.12], 1); add(i, [0.1, 0.2, 0.8], 0.3 * S.pulse); if (flick && (LF[i] === target || hash(i + seed) < 0.1)) add(i, [0.85, 0.9, 1], flick); } } },
+  { id: "fire", name: "Fire Pit", tag: "drop", run(S) { const boost = 0.5 + 0.8 * S.bassL + 0.5 * S.pulse;
+      for (let i = 0; i < N; i++) { const u = LU[i], h = LH[i], t = S.t; const n = (0.5 + 0.5 * Math.sin(u * 31 + t * 6.3 + Math.sin(h * 13 - t * 4.1) * 2.2)) * (0.5 + 0.5 * Math.sin(u * 17 - t * 3.7 + h * 7));
+        const heat = Math.max(0, n * boost * (1.15 - h * 0.7)); add(i, heat < 0.5 ? [heat * 2, heat * 0.6, 0] : [1, 0.3 + (heat - 0.5) * 1.2, Math.max(0, heat - 0.85) * 2], 0.2 + heat * 0.9); } } },
+  { id: "wave", name: "Waveform", tag: "any", run(S) { if (!S.wave) return; const L = S.wave.length;
+      for (let i = 0; i < N; i++) add(i, rainbow(LU[i] * 0.8 + S.t * 0.05), Math.min(1.5, Math.abs(S.wave[Math.floor(LU[i] * (L - 1))]) * 3)); } },
+];
+// ===== Effects pack 2: room-space particles, beams, simulations. Every effect works on any layout:
+// PX/PY = position in the room (PY 0 floor .. 1 ceiling, PX 0 .. 1.78 left to right), LG = position along the whole wiring chain.
+const FXS = {};                                   // per-effect state (particles etc.)
+function st(S, id, init) {                        // fresh state when an effect starts or the song jumps
+  let o = FXS[id];
+  if (!o || S.t < o.t - 0.05 || S.t - o.t > 0.6) { o = FXS[id] = Object.assign({ t: S.t }, init ? init() : {}); }
+  o.dt = Math.min(0.05, Math.max(0, S.t - o.t)); o.t = S.t; return o;
+}
+function splat(px, py, r, c, k) {                 // soft round light at a room position
+  if (k < 0.004) return; const r2 = r * r, lim = 3 * r;
+  for (let i = 0; i < N; i++) { const dx = PX[i] - px; if (dx > lim || dx < -lim) continue; const dy = PY[i] - py; if (dy > lim || dy < -lim) continue;
+    const w = Math.exp(-(dx * dx + dy * dy) / r2); if (w > 0.01) add(i, c, k * w); }
+}
+const RW = 16 / 9;                                // room width in PX units
+const lerp3 = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+const rnd = Math.random;
+
+const FX2 = [
+  // ---------------- ambient, slow, emotional (always gives light)
+  { id: "fireflies", name: "Firefly Swarm", tag: "calm", run(S) {
+      const o = st(S, "fireflies", () => ({ p: Array.from({ length: 42 }, () => ({ x: rnd() * RW, y: rnd(), a: rnd() * 6.28, s: 0.05 + rnd() * 0.08, ph: rnd() * 6.28 })) }));
+      const act = 0.6 + 1.2 * S.loud, warm = S.fixed ? S.pal[0] : [1, 0.85, 0.3], cool = S.fixed ? S.pal[1] : [0.55, 1, 0.35];
+      for (let i = 0; i < N; i++) add(i, [0.02, 0.05, 0.03], 1);
+      o.p.forEach((f, k) => { f.a += (Math.sin(S.t * 0.7 + k) * 1.6) * o.dt; f.x += Math.cos(f.a) * f.s * act * o.dt; f.y += Math.sin(f.a) * f.s * act * o.dt * 0.7;
+        if (f.x < 0 || f.x > RW) f.a = Math.PI - f.a; if (f.y < 0 || f.y > 1) f.a = -f.a; f.x = Math.min(RW, Math.max(0, f.x)); f.y = Math.min(1, Math.max(0, f.y));
+        const glow = Math.pow(0.5 + 0.5 * Math.sin(S.t * (1.2 + k % 5 * 0.3) + f.ph), 3) * (0.6 + 0.8 * S.hatE + 0.4 * S.loud);
+        splat(f.x, f.y, 0.07, k % 3 ? warm : cool, glow * 1.6); });
+    } },
+  { id: "northern", name: "Northern Lights", tag: "calm", run(S) {
+      const g = S.fixed ? S.pal[0] : [0.1, 1, 0.55], p = S.fixed ? S.pal[1] : [0.55, 0.2, 1], t = S.t;
+      for (let i = 0; i < N; i++) { const x = PX[i], y = PY[i];
+        const curtain = 0.5 + 0.5 * Math.sin(x * 5.5 + 1.4 * Math.sin(t * 0.25 + x * 1.7) + 0.6 * Math.sin(t * 0.5 - x * 3.1));
+        const shimmer = 0.75 + 0.25 * Math.sin(y * 18 - t * 3 + x * 4);
+        const band = Math.pow(curtain, 2.2) * shimmer * (0.35 + 0.65 * y) * (0.55 + 0.6 * S.loud);
+        add(i, lerp3(g, p, Math.min(1, y * 1.2)), band * 0.9); add(i, [0.01, 0.03, 0.06], 1); } } },
+  { id: "rainglass", name: "Rain on Glass", tag: "calm", run(S) {
+      const o = st(S, "rainglass", () => ({ d: Array.from({ length: 28 }, () => ({ x: rnd() * RW, y: rnd(), v: 0.03 + rnd() * 0.08, w: rnd() * 6 })) }));
+      const c = S.fixed ? S.pal[1] : [0.6, 0.8, 1];
+      for (let i = 0; i < N; i++) add(i, [0.02, 0.04, 0.12], 1 + 0.6 * S.loud);
+      o.d.forEach(d => { d.y -= d.v * o.dt * (1 + 2 * S.loud) * (Math.sin(S.t * 2 + d.w) > 0.6 ? 2.5 : 0.6); if (d.y < -0.05) { d.y = 1.05; d.x = rnd() * RW; }
+        splat(d.x + 0.01 * Math.sin(S.t + d.w), d.y, 0.035, c, 1.2); splat(d.x, d.y + 0.06, 0.03, c, 0.35); splat(d.x, d.y + 0.12, 0.025, c, 0.15); });
+    } },
+  { id: "lavablobs", name: "Lava Lamp", tag: "calm", run(S) {
+      const t = S.t * 0.25, B = [0, 1, 2, 3, 4].map(k => [RW * (0.5 + 0.38 * Math.sin(t * (0.7 + k * 0.13) + k * 2.1)), 0.5 + 0.38 * Math.sin(t * (0.5 + k * 0.17) + k * 1.3), 0.03 + 0.012 * k]);
+      const a = S.fixed ? S.pal[0] : [1, 0.25, 0.05], b = S.fixed ? S.pal[1] : [1, 0.75, 0.1];
+      for (let i = 0; i < N; i++) { let f = 0; for (const [bx, by, r] of B) { const dx = PX[i] - bx, dy = PY[i] - by; f += r / (dx * dx + dy * dy + 1e-3); }
+        const k = Math.min(1, Math.max(0, (f - 0.7) * 1.4)); add(i, lerp3(a, b, k), 0.12 + k * (0.7 + 0.3 * S.loud)); } } },
+  { id: "breath", name: "Deep Breath", tag: "calm", run(S) {
+      const ph = S.g.has ? ((S.g.idx - S.g.beatInBar) / 4 % 4 + S.g.barPhase) / 4 : S.t / 12;  // one breath every 4 bars
+      const br = 0.25 + 0.55 * Math.pow(0.5 - 0.5 * Math.cos(2 * Math.PI * ph), 1.5);
+      for (let i = 0; i < N; i++) add(i, lerp3(S.pal[0], S.pal[1], PY[i]), br * (0.8 + 0.4 * S.loud)); } },
+  { id: "hypno", name: "Hypno Spiral", tag: "calm", run(S) {
+      const sp = 0.15 + 0.5 * S.loud + (S.g.has ? 0.25 / (S.g.P * 2) : 0);
+      for (let i = 0; i < N; i++) { const dx = PX[i] - RW / 2, dy = PY[i] - 0.5, a = Math.atan2(dy, dx) / (2 * Math.PI), r = Math.log(Math.hypot(dx, dy) + 0.05);
+        const v = ((a * 3 + r * 1.6 - S.t * sp) % 1 + 1) % 1; add(i, rainbow(a + S.t * 0.02), (0.08 + 0.7 * G(Math.min(v, 1 - v), 0.12)) * (0.6 + 0.5 * S.loud)); } } },
+
+  // ---------------- build-ups
+  { id: "pillars", name: "Rising Pillars", tag: "build", run(S) { const p = S.buildP, cols = 14;
+      for (let i = 0; i < N; i++) { const c = Math.min(cols - 1, Math.floor(PX[i] / RW * cols)), stag = hash(c * 3.7) * 0.35, lvl = Math.max(0, p * 1.35 - stag);
+        const y = PY[i], col = lerp3(S.pal[0], WHITE, p * p);
+        add(i, col, y < lvl ? 0.18 + 0.7 * p : 0); add(i, WHITE, G(y - lvl, 0.025) * (0.6 + 1.2 * S.snareE)); } } },
+  { id: "tstrobe", name: "Tension Strobe", tag: "build", run(S) { const p = S.buildP, rate = Math.pow(2, Math.floor(p * 4.99));  // 1,2,4,8,16 flashes per beat
+      const on = (S.g.phase * rate) % 1 < 0.22, col = lerp3(S.pal[0], WHITE, p);
+      for (let i = 0; i < N; i++) add(i, col, 0.05 + (on ? 0.25 + 1.0 * p : 0)); } },
+  { id: "vortex", name: "Vortex Charge", tag: "build", run(S) { const p = S.buildP, tight = 1 + 6 * p, sp = 0.3 + 3 * p, reach = 1.2 - p;
+      for (let i = 0; i < N; i++) { const dx = PX[i] - RW / 2, dy = PY[i] - 0.5, d = Math.hypot(dx, dy), a = Math.atan2(dy, dx) / (2 * Math.PI);
+        const v = ((a * 2 + d * tight - S.t * sp) % 1 + 1) % 1, arm = G(Math.min(v, 1 - v), 0.09);
+        add(i, lerp3(S.pal[0], S.pal[1], d), arm * (0.3 + 0.9 * p) * (d < reach + 0.3 ? 1 : 0.2)); add(i, WHITE, G(d, 0.05 + 0.25 * p * p) * p * 1.5); } } },
+  { id: "implode", name: "Implosion", tag: "build", run(S) {
+      const o = st(S, "implode", () => ({ p: [] })), p = S.buildP;
+      for (let k = 0; k < 2 + Math.floor(p * 10); k++) { const a = rnd() * 6.28, r = 0.9 + rnd() * 0.3; o.p.push({ x: RW / 2 + Math.cos(a) * r * RW / 2, y: 0.5 + Math.sin(a) * r * 0.6, c: rnd() < 0.5 ? 0 : 1 }); }
+      for (let i = 0; i < N; i++) add(i, S.pal[0], 0.05);
+      o.p = o.p.filter(q => { const dx = RW / 2 - q.x, dy = 0.5 - q.y, d = Math.hypot(dx, dy); const v = (0.2 + 1.8 * p) * o.dt / Math.max(d, 0.05);
+        q.x += dx * v; q.y += dy * v; splat(q.x, q.y, 0.035, q.c ? S.pal[1] : WHITE, 1.1); return d > 0.03; }).slice(-220);
+      splat(RW / 2, 0.5, 0.06 + 0.2 * p, WHITE, p * 1.8); } },
+
+  // ---------------- high energy
+  { id: "laser", name: "Laser Show", tag: "drop", run(S) {
+      const bar = Math.floor((S.g.idx - S.g.beatInBar) / 4), pivots = [[RW / 2, -0.05], [0.05, 0.02], [RW - 0.05, 0.02]];
+      const piv = bar % 3 === 0 ? [pivots[0]] : [pivots[1], pivots[2]], nb = 3 + bar % 3, spread = 0.9 + 0.4 * Math.sin(S.t * 0.7);
+      const swing = Math.sin(2 * Math.PI * (S.g.barPhase + (S.g.idx % 2) * 0.1)) * 0.6, w = 0.028 + 0.03 * S.pulse;
+      for (let i = 0; i < N; i++) add(i, S.pal[0], 0.03);
+      piv.forEach(([px, py], pk) => { for (let b = 0; b < nb; b++) {
+        const ang = Math.PI / 2 + (b - (nb - 1) / 2) * spread / nb * 2 + swing * (pk ? -1 : 1), cx = Math.cos(ang), cy = Math.sin(ang), col = b % 2 ? S.pal[1] : S.pal[0];
+        for (let i = 0; i < N; i++) { const dx = PX[i] - px, dy = PY[i] - py, along = dx * cx + dy * cy; if (along < 0) continue;
+          const perp = Math.abs(dx * cy - dy * cx); if (perp < 5 * w) add(i, col, G(perp, w) * (0.9 + 1.4 * S.pulse) + G(perp, w * 4) * 0.22); } } });
+    } },
+  { id: "hyper", name: "Hyperspace", tag: "drop", run(S) {
+      const o = st(S, "hyper", () => ({ s: [] })), sp = 0.4 + 2.5 * S.pulse + 0.8 * S.loud;
+      for (let k = 0; k < 3 + Math.floor(S.pulse * 8); k++) { const a = rnd() * 6.28; o.s.push({ a, r: 0.02, c: rnd() < 0.15 ? 1 : 0 }); }
+      for (let i = 0; i < N; i++) add(i, [0.01, 0.0, 0.04], 1);
+      o.s = o.s.filter(q => { q.r += q.r * sp * o.dt * 3 + 0.05 * o.dt; const x = RW / 2 + Math.cos(q.a) * q.r * 1.4, y = 0.5 + Math.sin(q.a) * q.r * 0.8;
+        const k = Math.min(1, q.r * 2); splat(x, y, 0.02 + q.r * 0.03, q.c ? S.pal[1] : WHITE, k * 1.4);
+        splat(RW / 2 + Math.cos(q.a) * q.r * 1.2, 0.5 + Math.sin(q.a) * q.r * 0.68, 0.02, q.c ? S.pal[1] : S.pal[0], k * 0.5); return q.r < 1.1; }).slice(-160);
+    } },
+  { id: "nova", name: "Supernova", tag: "drop", run(S) {
+      const o = st(S, "nova", () => ({ bar: -1, x: RW / 2, y: 0.5, t0: -9, sp: [] }));
+      const bar = Math.floor((S.g.idx - S.g.beatInBar) / 4);
+      if (bar !== o.bar && S.g.beatInBar === 0) { o.bar = bar; o.x = RW * (0.25 + 0.5 * rnd()); o.y = 0.3 + 0.4 * rnd(); o.t0 = S.t;
+        for (let k = 0; k < 40; k++) { const a = rnd() * 6.28, v = 0.2 + rnd() * 0.6; o.sp.push({ x: o.x, y: o.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, life: 1 }); } }
+      const dt = S.t - o.t0, r = dt * 1.6;
+      for (let i = 0; i < N; i++) { const d = Math.hypot(PX[i] - o.x, PY[i] - o.y), f = Math.max(0, 1 - dt / 1.6);
+        add(i, [1, 0.2, 0.3], G(d - r, 0.05) * f * 1.6); add(i, [0.3, 1, 0.4], G(d - r * 0.93, 0.04) * f * 1.2); add(i, [0.3, 0.4, 1], G(d - r * 0.86, 0.05) * f * 1.4);
+        add(i, WHITE, G(d, 0.08) * Math.exp(-dt / 0.15) * 2.5); add(i, S.pal[0], 0.04 + 0.2 * S.pulse * Math.max(0, 1 - d)); }
+      o.sp = o.sp.filter(q => { q.x += q.vx * o.dt; q.y += q.vy * o.dt; q.vy -= 0.3 * o.dt; q.life -= o.dt * 0.6; splat(q.x, q.y, 0.025, S.pal[1], q.life * 1.3); return q.life > 0; });
+    } },
+  { id: "cannon", name: "Bass Cannon", tag: "drop", run(S) {
+      const o = st(S, "cannon", () => ({ last: -9, sh: [], sp: [] }));
+      if (S.pulseT > o.last + 0.05 && S.t - S.pulseT < 0.1) { o.last = S.pulseT; o.sh.push({ x: RW * (0.15 + 0.7 * rnd()), y: 0, vy: 1.6 + rnd() * 0.5, c: rainbow(rnd()) }); }
+      for (let i = 0; i < N; i++) add(i, S.pal[0], 0.04 + 0.12 * S.pulse * (1 - PY[i]));
+      o.sh = o.sh.filter(q => { q.y += q.vy * o.dt; q.vy -= 2.2 * o.dt; splat(q.x, q.y, 0.03, WHITE, 1.4);
+        if (q.vy <= 0) { for (let k = 0; k < 26; k++) { const a = rnd() * 6.28, v = 0.15 + rnd() * 0.45; o.sp.push({ x: q.x, y: q.y, vx: Math.cos(a) * v, vy: Math.sin(a) * v, c: q.c, life: 1 }); } return false; } return true; });
+      o.sp = o.sp.filter(q => { q.x += q.vx * o.dt; q.y += q.vy * o.dt; q.vy -= 0.45 * o.dt; q.life -= o.dt * 0.8; splat(q.x, q.y, 0.03, q.c, q.life * 1.5); return q.life > 0; }).slice(-300);
+    } },
+  { id: "disco", name: "Disco Ball", tag: "drop", run(S) {
+      const rot = S.t * (0.25 + 0.15 * S.loud), spots = 70, flash = 0.8 + 1.4 * S.pulse;
+      for (let i = 0; i < N; i++) add(i, S.pal[0], 0.04);
+      for (let k = 0; k < spots; k++) { const lat = (hash(k) - 0.5) * 2.4, lon = hash(k + 99) * 6.283 + rot;
+        if (Math.cos(lon) < -0.1) continue;  // only the side facing the room
+        const x = RW / 2 + Math.sin(lon) * Math.cos(lat) * RW * 0.55, y = 0.55 + Math.sin(lat) * 0.5;
+        splat(x, y, 0.028, k % 4 ? WHITE : S.pal[1], flash * (0.5 + 0.5 * Math.cos(lon))); } } },
+  { id: "roomeq", name: "Room Equalizer", tag: "drop", run(S) {
+      const o = st(S, "roomeq", () => ({ pk: new Float32Array(24) }));
+      for (let b = 0; b < 24; b++) o.pk[b] = Math.max(S.bands[b], o.pk[b] - o.dt * 0.6);
+      for (let i = 0; i < N; i++) { const pos = Math.abs(PX[i] / RW - 0.5) * 2, b = Math.min(23, Math.floor(pos * 24)), lvl = S.bands[b] * 1.05, y = PY[i];
+        if (y < lvl) add(i, [Math.min(1, y * 2), Math.min(1, 2 - y * 2), 0.25], 0.85); add(i, WHITE, G(y - o.pk[b], 0.02) * 1.2); add(i, [0.03, 0.02, 0.06], 1); } } },
+  { id: "rgbsplit", name: "RGB Split", tag: "drop", run(S) {
+      const sep = 0.04 + 0.35 * S.pulse, base = S.t * 0.6;
+      const ch = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+      for (let i = 0; i < N; i++) for (let c = 0; c < 3; c++) { const x = PX[i] / RW + (c - 1) * sep; const v = 0.5 + 0.5 * Math.sin(2 * Math.PI * (x * 2.5 - base) + PY[i] * 3);
+        add(i, ch[c], Math.pow(v, 6) * 1.3); } } },
+  { id: "glitch", name: "Glitch", tag: "drop", run(S) {
+      const o = st(S, "glitch", () => ({ cuts: [], last: -9 }));
+      for (let i = 0; i < N; i++) add(i, S.pal[0], 0.12 + 0.3 * S.pulse);
+      if ((S.t - S.snare < 0.05 && S.snare !== o.last) || rnd() < 0.04 * (0.5 + S.loud)) { o.last = S.snare;
+        for (let k = 0; k < 2 + Math.floor(rnd() * 4); k++) o.cuts.push({ a: rnd(), len: 0.02 + rnd() * 0.12, until: S.t + 0.05 + rnd() * 0.12, c: [rnd() < 0.5 ? 1 : 0, rnd() < 0.5 ? 1 : 0, 1], inv: rnd() < 0.3 }); }
+      o.cuts = o.cuts.filter(c => S.t < c.until);
+      for (const c of o.cuts) for (let i = 0; i < N; i++) { const g2 = LG[i]; if (g2 >= c.a && g2 < c.a + c.len) { const j = i * 3; if (c.inv) { COL[j] = 1 - Math.min(1, COL[j]); COL[j + 1] = 1 - Math.min(1, COL[j + 1]); COL[j + 2] = 1 - Math.min(1, COL[j + 2]); } else add(i, c.c, 1.4); } }
+    } },
+  { id: "snake", name: "Neon Snakes", tag: "drop", run(S) {
+      const lap = S.g.has ? S.g.P * 16 : 6, len = 0.03 + 0.09 * S.loud + 0.04 * S.pulse, bar = Math.floor((S.g.idx - S.g.beatInBar) / 4);
+      for (let i = 0; i < N; i++) add(i, S.pal[0], 0.03);
+      for (let k = 0; k < 3; k++) { const head = ((S.t / lap) + k / 3) % 1, col = rainbow(bar * 0.13 + k * 0.33);
+        for (let i = 0; i < N; i++) { let d = head - LG[i]; if (d < 0) d += 1; if (d < len) add(i, d < 0.004 ? WHITE : col, (1 - d / len) * 1.5); } } } },
+  { id: "pong", name: "Pong", tag: "drop", run(S) {
+      const o = st(S, "pong", () => ({ x: RW / 2, y: 0.5, vx: 0.7, vy: 0.45, tr: [], last: -9 }));
+      if (S.pulseT !== o.last && S.t - S.pulseT < 0.08) { o.last = S.pulseT; const k = 1.25; o.vx *= k; o.vy *= k; }
+      const sp = Math.hypot(o.vx, o.vy); if (sp > 0.7) { o.vx *= 1 - o.dt * 0.8; o.vy *= 1 - o.dt * 0.8; }
+      o.x += o.vx * o.dt; o.y += o.vy * o.dt; if (o.x < 0 || o.x > RW) o.vx *= -1; if (o.y < 0 || o.y > 1) o.vy *= -1;
+      o.tr.push([o.x, o.y]); if (o.tr.length > 18) o.tr.shift();
+      for (let i = 0; i < N; i++) add(i, S.pal[0], 0.03);
+      o.tr.forEach(([x, y], k) => splat(x, y, 0.05, S.pal[1], (k / o.tr.length) * 0.5)); splat(o.x, o.y, 0.06, WHITE, 1.8); } },
+  { id: "ripple", name: "Ripple Pond", tag: "drop", run(S) {
+      const o = st(S, "ripple", () => ({ r: [], lk: -9, ls: -9 }));
+      if (S.pulseT !== o.lk && S.t - S.pulseT < 0.08) { o.lk = S.pulseT; o.r.push({ x: rnd() * RW, y: rnd(), t0: S.t, c: 0 }); }
+      if (S.snare !== o.ls && S.t - S.snare < 0.08) { o.ls = S.snare; o.r.push({ x: rnd() * RW, y: rnd(), t0: S.t, c: 1 }); }
+      o.r = o.r.filter(q => S.t - q.t0 < 1.4).slice(-8);
+      for (let i = 0; i < N; i++) { let v = 0, w = 0; for (const q of o.r) { const a = S.t - q.t0, d = Math.hypot(PX[i] - q.x, PY[i] - q.y), env2 = Math.exp(-a / 0.5) * G(d - a * 0.7, 0.25);
+          const s2 = Math.sin((d - a * 0.7) * 40) * env2; if (q.c) w += Math.max(0, s2); else v += Math.max(0, s2); }
+        add(i, S.pal[0], 0.05 + v * 1.3); add(i, S.pal[1], w * 1.3); } } },
+  { id: "balls", name: "Bouncing Balls", tag: "drop", run(S) {
+      const o = st(S, "balls", () => ({ b: shapes.map(() => ({ y: 0, v: 0 })), last: -9 }));
+      while (o.b.length < shapes.length) o.b.push({ y: 0, v: 0 });
+      if (S.pulseT !== o.last && S.t - S.pulseT < 0.08) { o.last = S.pulseT; o.b.forEach((b, k) => { if (hash(k + S.pulseN) < 0.6) b.v = 1.4 + hash(k * 3 + S.pulseN) * 0.8; }); }
+      o.b.forEach(b => { b.v -= 4 * o.dt; b.y += b.v * o.dt; if (b.y < 0) { b.y = 0; b.v = -b.v * 0.55; } });
+      for (let i = 0; i < N; i++) { const b = o.b[LF[i]] || { y: 0 }, pos = LL[i] ? LA[i] : LS[i], c = rainbow(LF[i] * 0.17);
+        add(i, c, G(pos - Math.min(1, b.y * 0.6), 0.05) * 1.6 + 0.04); } } },
+  { id: "curtain", name: "Curtain Fall", tag: "drop", run(S) {
+      const fall = S.g.phase, y0 = 1.1 - fall * 1.3, col = rainbow(S.g.idx * 0.11);
+      for (let i = 0; i < N; i++) { const d = PY[i] - y0; add(i, col, (d >= 0 ? Math.exp(-d / 0.25) : G(d, 0.02)) * (0.6 + 0.9 * S.pulse)); add(i, S.pal[0], 0.04); } } },
+  { id: "strobechase", name: "Strobe Chase", tag: "drop", run(S) {
+      const nS = Math.max(1, shapes.length), step = Math.floor(S.g.phase * 4) + S.g.beatInBar * 4, target = step % nS, on = (S.g.phase * 4) % 1 < 0.4;
+      for (let i = 0; i < N; i++) { add(i, S.pal[0], 0.05); if (LF[i] === target && on) add(i, LF[i] % 2 ? S.pal[1] : WHITE, 1.5); } } },
+  { id: "kaleido2", name: "Mirror Kaleidoscope", tag: "drop", run(S) {
+      const seg = 6 + 2 * (Math.floor((S.g.idx - S.g.beatInBar) / 4) % 3), rot = S.t * 0.2;
+      for (let i = 0; i < N; i++) { const dx = PX[i] - RW / 2, dy = PY[i] - 0.5, r = Math.hypot(dx, dy);
+        let a = (Math.atan2(dy, dx) + rot) / (2 * Math.PI) * seg; a = Math.abs((a % 1 + 1) % 1 - 0.5) * 2;
+        const v = 0.5 + 0.5 * Math.sin(a * 6 + r * 14 - S.t * 3); add(i, rainbow(a * 0.3 + r * 0.6 + S.t * 0.05), Math.pow(v, 3) * (0.3 + 1.1 * S.pulse)); } } },
+];
+
+FX.push(...FX2);
+const FXI = Object.fromEntries(FX.map((f, i) => [f.id, i]));
+const POOLS = { calm: ["northern", "aurora", "fireflies", "stars", "lavablobs", "ocean", "hypno", "lava", "twinkle", "plasma", "flow"],
+  build: ["fill", "pillars", "comets", "vortex", "riser", "tstrobe", "implode", "mrain", "spiral", "scanner"],
+  drop: ["laser", "shock", "hyper", "spin", "cannon", "ping", "nova", "confetti", "disco", "rgbsplit", "strobe", "snake", "fireworks", "roomeq", "wipe", "glitch",
+         "kaleido2", "meteor", "ripple", "chase", "curtain", "split", "pong", "eq", "balls", "rings", "burst", "strobechase", "mirror", "lightning", "fire", "kaleido"] };
+// each music style listens for different things and uses its own effect pools
+const STYLES = {
+  party: { name: "Party / EDM", mode: "sections", pools: POOLS, punch: 1, xfade: 0.3, every: 1, floor: 0.06 },
+  poprock: { name: "Pop / Rock", mode: "levels", pools: { low: ["flow", "northern", "melody", "breath", "aurora"], mid: ["laser", "ping", "snake", "chase", "curtain", "mirror", "rgbsplit", "rings", "wipe", "meteor"],
+    peak: ["nova", "shock", "cannon", "fireworks", "disco", "hyper", "confetti", "kaleido2", "spin", "fire"] }, punch: 0.85, xfade: 0.4, every: 1, floor: 0.07 },
+  hiphop: { name: "Hip-hop / Trap", mode: "levels", pools: { low: ["lava", "lavablobs", "plasma", "heart"], mid: ["roomeq", "shock", "glitch", "rgbsplit", "ripple", "eq", "rings", "split"],
+    peak: ["cannon", "nova", "laser", "fire", "glitch", "confetti", "ping", "meteor", "lightning"] }, punch: 1, xfade: 0.3, every: 1, floor: 0.07 },
+  chill: { name: "Chill / Lo-fi", mode: "levels", pools: { low: ["fireflies", "rainglass", "ocean", "aurora", "twinkle"], mid: ["lavablobs", "hypno", "flow", "plasma", "melody", "northern"],
+    peak: ["northern", "swell", "breath", "lava"] }, punch: 0.35, xfade: 1.2, every: 2, floor: 0.1 },
+  emotional: { name: "Emotional / Ballad", mode: "levels", pools: { low: ["candle", "fireflies", "rainglass", "swell", "breath"], mid: ["swell", "northern", "melody", "lavablobs", "ocean"],
+    peak: ["sunrise", "northern", "swell", "aurora"] }, punch: 0.1, xfade: 2.0, every: 2, floor: 0.12 },
+};
+function currentStyle() { return STYLES[styleSel !== "auto" ? styleSel : (PRE && usePre ? PRE.style : "party")] || STYLES.party; }
+
+// ---------------------------------------------------------------- engine loop
+let auto = true, manual = "shock", cur = "aurora", prevFx = null, xfadeT = -9, lastSwitchBeat = -99, poolIdx = { calm: 0, build: 0, drop: 0 }, palIdx = 0;
+let delayMs = 0, predict = false, delayRing = [], identify = null, lastFrame = performance.now();
+const H = { kick: -9, snare: -9, hat: -9, pulses: [], snares: [], pulseN: 0 };
+function choose(t, V) {
+  const g = V.g;
+  if (!auto) { if (cur !== manual) { prevFx = cur; cur = manual; xfadeT = t; } return; }
+  const ST = currentStyle();
+  const sec = ST.mode === "sections" ? (V.state === "silent" ? "calm" : V.state) : V.level, pool = ST.pools[sec] || ST.pools.calm || ST.pools.low;
+  const wrongPool = !pool.includes(cur), hot = sec === "drop" || sec === "peak";
+  const barReady = g.has && g.beatInBar === 0 && g.idx - lastSwitchBeat >= everyBeats * ST.every * (hot ? 1 : 2);
+  if (!poolIdx[sec]) poolIdx[sec] = 0;
+  if (V.state === "silent" && !wrongPool) return;
+  if (wrongPool || barReady) {
+    if (sec === "build" && wrongPool) poolIdx.build = 0;
+    const next = pool[poolIdx[sec] % pool.length]; poolIdx[sec]++;
+    if (next !== cur) { prevFx = cur; cur = next; xfadeT = t; palIdx++; }
+    lastSwitchBeat = g.has ? g.idx : lastSwitchBeat;
+  }
+}
+// ---- one "view" of the music at time te, from whole-song analysis (can look ahead) or from live listening
+let PRE = null, usePre = true, preBusy = false;
+function lastLE(arr, t) { let lo = 0, hi = arr.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (arr[m] <= t) { r = m; lo = m + 1; } else hi = m - 1; } return r; }
+function gridPre(t) {
+  const P = PRE.P, x = (t - PRE.off) / P, idx = Math.floor(x), ph = x - idx, bib = (((idx - PRE.barOff) % 4) + 4) % 4;
+  return { has: true, P, phase: ph, idx, beatInBar: bib, env: Math.exp(-ph * P / 0.18), barPhase: (bib + ph) / 4, beatT: PRE.off + idx * P };
+}
+function viewAt(t, te) {
+  if (usePre && PRE) {
+    const g = gridPre(te), ki = lastLE(PRE.kicks, te), si = lastLE(PRE.snares, te), hi = lastLE(PRE.hats, te);
+    const kick = ki >= 0 ? PRE.kicks[ki] : -9, pulses = [], snares = [];
+    for (let i = ki; i >= 0 && te - PRE.kicks[i] < 1; i--) pulses.push(PRE.kicks[i]);
+    for (let i = si; i >= 0 && te - PRE.snares[i] < 0.7; i--) snares.push(PRE.snares[i]);
+    const bi = lastLE(PRE.bars.map(b => b.t0), te); let state = bi >= 0 && te < PRE.bars[bi].t1 ? PRE.bars[bi].state : "calm", buildP = 0;
+    if (state === "build") { let a = bi, b = bi; while (a > 0 && PRE.bars[a - 1].state === "build") a--; while (b < PRE.bars.length - 1 && PRE.bars[b + 1].state === "build") b++;
+      buildP = Math.min(1, (te - PRE.bars[a].t0) / (PRE.bars[b].t1 - PRE.bars[a].t0)); }
+    const e = PRE.env[Math.min(PRE.env.length - 1, Math.max(0, Math.round(te / 0.02)))] || 0;
+    const quiet = e < 0.1;
+    const di = lastLE(PRE.drops, te + 1e-3);
+    let la = 0, ln = 0; for (let k = -15; k <= 0; k++) { const j = Math.round(te / 0.02) + k; if (j >= 0 && j < PRE.env.length) { la += PRE.env[j]; ln++; } }
+    const loud = Math.min(1, ln ? la / ln : 0), barLvl = bi >= 0 && te < PRE.bars[bi].t1 ? PRE.bars[bi].level : loud;
+    const lvl = barLvl * 0.7 + loud * 0.3;
+    const nxi = di + 1, nextDrop = nxi < PRE.drops.length ? PRE.drops[nxi] : null;
+    return { g, bpm: PRE.bpm, loud, nextDrop, level: lvl < 0.35 ? "low" : lvl < 0.72 ? "mid" : "peak", state: quiet ? "silent" : state, buildP, dropT: di >= 0 ? PRE.drops[di] : -9,
+      kick, snare: si >= 0 ? PRE.snares[si] : -9, hat: hi >= 0 ? PRE.hats[hi] : -9, pulses, snares, pulseN: ki, kickRecent: te - kick < 1.6, source: "pre" };
+  }
+  const g = grid(te), loudL = Math.min(1, A.eFast / A.eMax);
+  return { g, bpm: A.bpm, loud: loudL, level: loudL < 0.4 ? "low" : loudL < 0.75 ? "mid" : "peak", state: A.state, buildP: A.state === "build" ? Math.min(1, (t - A.buildStart) / 7) : 0, dropT: A.dropT,
+    kick: H.kick, snare: H.snare, hat: H.hat, pulses: H.pulses, snares: H.snares, pulseN: H.pulseN, kickRecent: t - H.kick < 1.6, source: "live" };
+}
+function signals(V, te) {
+  const g = V.g;
+  let pulseT = V.kickRecent ? V.kick : (g.has ? g.beatT ?? (g.idx * g.P + A.phase) : -9);
+  let pulses = V.kickRecent ? V.pulses : (g.has ? [0, 1, 2].map(k => pulseT - k * g.P) : []);
+  let pulseN = V.kickRecent ? V.pulseN : g.idx;
+  if (V.source === "live" && predict && g.has) { pulseT = g.idx * g.P + A.phase; pulses = [pulseT]; pulseN = g.idx; }
+  return {
+    t: te, g, pal: currentPal(), fixed: palMode !== "auto", punch: currentStyle().punch, loud: V.loud || 0, wave: tdata, hat: V.hat, snare: V.snare, snares: V.snares, pulseT, pulses, pulseN,
+    pulse: Math.exp(-(te - pulseT) / 0.2) * currentStyle().punch, kickE: Math.exp(-(te - V.kick) / 0.25) * currentStyle().punch,
+    snareE: Math.exp(-(te - V.snare) / 0.15) * currentStyle().punch, hatE: Math.exp(-(te - V.hat) / 0.12) * currentStyle().punch,
+    bassL: Math.min(1, A.bass / A.bassMax), bands: A.bands,
+    // outside a real build-up (e.g. picked by hand), build effects run their own 4-bar cycle
+    buildP: V.state === "build" ? V.buildP : (g.has ? ((((g.idx - g.beatInBar) / 4) % 4 + 4) % 4 + g.barPhase) / 4 : (te / 7) % 1),
+  };
+}
+let VIEW = null;
+function computeFrame(t) {
+  COL.fill(0);
+  const te = t + (predict ? delayMs / 1000 : 0);
+  const V = viewAt(t, te); VIEW = V;
+  const S = signals(V, te);
+  choose(t, V);
+  FX[FXI[cur]].run(S);
+  const XF = currentStyle().xfade;
+  if (prevFx && t - xfadeT < XF) { const k = (t - xfadeT) / XF, keep = Float32Array.from(COL); COL.fill(0); FX[FXI[prevFx]].run(S); for (let i = 0; i < COL.length; i++) COL[i] = keep[i] * k + COL[i] * (1 - k); }
+  // never let the room go dark: quiet parts fade to the ambient effect, only the planned pause before a drop is a blackout
+  const ST2 = currentStyle(), preDrop = ST2.mode === "sections" && V.nextDrop != null && V.nextDrop >= te && V.nextDrop - te < 1.4;
+  const quietFor = V.source === "live" ? t - A.stateT : 99;
+  if (V.state === "silent" && (preDrop || quietFor < 1.5)) { for (let i = 0; i < COL.length; i++) COL[i] *= 0.12; }
+  else if (V.state === "silent") blendAmbient(te, 0.8);
+  else keepAlive(te, ST2.floor * Math.max(0, Math.min(1, 1.3 - (V.loud || 0) * 1.6)));
+  const df = te - V.dropT; if (currentStyle().mode === "sections" && df >= 0 && df < 0.7) { const e = Math.exp(-df / 0.17) * 2.3; for (let i = 0; i < COL.length; i++) COL[i] += e; }
+  for (let i = 0; i < COL.length; i++) { const v = COL[i] * bright; COL[i] = v === v ? v : 0; }
+}
+// ---- ambient effect: used when nothing plays, and as a floor so quiet music never turns the lights off
+let ambientId = "northern";
+function idleSignals(t) {
+  const P = 1.2, x = t / P, idx = Math.floor(x), ph = x - idx;
+  return { t, g: { has: true, P, phase: ph, idx, beatInBar: idx % 4, env: Math.exp(-ph * P / 0.3), barPhase: (idx % 4 + ph) / 4, beatT: idx * P },
+    pal: currentPal(), fixed: palMode !== "auto", punch: 0.2, loud: 0.35, wave: null, hat: -9, snare: -9, snares: [], pulseT: -9, pulses: [], pulseN: idx,
+    pulse: 0, kickE: 0, snareE: 0, hatE: 0, bassL: 0, bands: new Float32Array(24), buildP: 0 };
+}
+function renderAmbient(t, S0) {
+  if (ambientId === "off") { AMB.fill(0); return false; }
+  const keep = COL; COL = AMB; AMB.fill(0);
+  try { const S = S0 || idleSignals(t); FX[FXI[ambientId]].run(S); } finally { COL = keep; }
+  return true;
+}
+function blendAmbient(t, k) { if (!renderAmbient(t)) { for (let i = 0; i < COL.length; i++) COL[i] *= 0.12; return; } for (let i = 0; i < COL.length; i++) COL[i] = COL[i] * (1 - k) + AMB[i] * k; }
+function keepAlive(t, floor) {
+  if (ambientId === "off" || cur === ambientId) return;
+  let m = 0; for (let i = 0; i < N; i++) m += Math.max(COL[i * 3], COL[i * 3 + 1], COL[i * 3 + 2]); m /= Math.max(1, N);
+  if (floor <= 0.001 || m >= floor) return; const w = (floor - m) / floor;
+  if (renderAmbient(t)) for (let i = 0; i < COL.length; i++) COL[i] += AMB[i] * w * 0.9;
+}
+function identifyOverlay(now) {
+  if (!identify) return; const dt = (now - identify.start) / 1000; if (dt > 3) { identify = null; return; }
+  const si = identify.si;
+  for (let i = 0; i < N; i++) { if (LF[i] !== si) { COL[i * 3] *= 0.12; COL[i * 3 + 1] *= 0.12; COL[i * 3 + 2] *= 0.12; continue; }
+    const pos = LS[i], blink = (pos === 0 || (LL[i] && i === chainStart[si])) ? (Math.floor(dt * 4) % 2 ? 0 : 2.5) : 0;
+    COL[i * 3] = 0.05 + G(pos - (dt / 2.4), 0.03) * 1.5; COL[i * 3 + 1] = 0.05 + blink + G(pos - (dt / 2.4), 0.03) * 1.5; COL[i * 3 + 2] = 0.08 + G(pos - (dt / 2.4), 0.03) * 1.5; }
+}
+
+// ---------------------------------------------------------------- drawing
+function draw(cols) {
+  const s = scale; ctx.globalCompositeOperation = "source-over"; ctx.drawImage(bg, 0, 0);
+  ctx.globalCompositeOperation = "lighter";
+  const step = glowQ === 2 ? (N > 500 ? Math.ceil(N / 350) : 2) : Math.max(4, Math.ceil(N / 150)), R = 0.85 * s;
+  for (let i = 0; glowQ > 0 && i < N; i += step) {
+    const r = cols[i * 3], g = cols[i * 3 + 1], b = cols[i * 3 + 2], m = Math.max(r, g, b); if (!(m >= 0.02) || !isFinite(m)) continue;
+    const k = Math.min(1, m), x = LX[i] * s, y = LY[i] * s;
+    const gr = ctx.createRadialGradient(x, y, 0, x, y, R);
+    const c = `rgba(${Math.round(255 * Math.min(1, r / m))},${Math.round(255 * Math.min(1, g / m))},${Math.round(255 * Math.min(1, b / m))},`;
+    gr.addColorStop(0, c + (0.075 * k * step).toFixed(3) + ")"); gr.addColorStop(0.35, c + (0.03 * k * step).toFixed(3) + ")"); gr.addColorStop(1, c + "0)");
+    ctx.fillStyle = gr; ctx.fillRect(x - R, y - R, R * 2, R * 2);
+  }
+  const dot = Math.max(1.2, 0.045 * s);
+  for (let i = 0; i < N; i++) {
+    const r = cols[i * 3], g = cols[i * 3 + 1], b = cols[i * 3 + 2], x = LX[i] * s, y = LY[i] * s;
+    const tm = v => Math.round(255 * (1 - Math.exp(-1.6 * v)));
+    ctx.fillStyle = `rgb(${tm(r) + 18},${tm(g) + 18},${tm(b) + 20})`;
+    ctx.beginPath(); ctx.arc(x, y, dot, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.globalCompositeOperation = "source-over";
+  // editor overlay
+  if (tab !== "fx" && selected >= 0 && shapes[selected]) {
+    const sh = shapes[selected], pts = outline(sh);
+    ctx.strokeStyle = "rgba(255,182,72,0.9)"; ctx.lineWidth = 1.5 * dpr; ctx.setLineDash([5 * dpr, 4 * dpr]);
+    ctx.beginPath(); pts.forEach((p, i) => i ? ctx.lineTo(p[0] * s, p[1] * s) : ctx.moveTo(p[0] * s, p[1] * s)); if (LOOP_TYPES[sh.type] || sh.type === "matrix") ctx.closePath(); ctx.stroke(); ctx.setLineDash([]);
+    handles(sh).forEach(h => { ctx.fillStyle = "#ffb648"; ctx.beginPath(); ctx.arc(h.x * s, h.y * s, 6 * dpr, 0, Math.PI * 2); ctx.fill(); });
+  }
+  if (tab === "wiring") {
+    shapes.forEach((sh, si) => { const i0 = chainStart[si], i1 = i0 + Math.min(4, sh.count - 1); if (i0 == null || i1 >= N) return;
+      const x = LX[i0] * s, y = LY[i0] * s, ax = LX[i1] * s, ay = LY[i1] * s, a = Math.atan2(ay - y, ax - x);
+      ctx.fillStyle = "#3dff8f"; ctx.beginPath(); ctx.arc(x, y, 5 * dpr, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "#3dff8f"; ctx.lineWidth = 2 * dpr; ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + Math.cos(a) * 22 * dpr, y + Math.sin(a) * 22 * dpr);
+      ctx.lineTo(x + Math.cos(a - 0.5) * 15 * dpr, y + Math.sin(a - 0.5) * 15 * dpr); ctx.moveTo(x + Math.cos(a) * 22 * dpr, y + Math.sin(a) * 22 * dpr); ctx.lineTo(x + Math.cos(a + 0.5) * 15 * dpr, y + Math.sin(a + 0.5) * 15 * dpr); ctx.stroke(); });
+  }
+  if (drawing && drawing.pts.length > 1) {
+    ctx.strokeStyle = "#ffb648"; ctx.lineWidth = 2 * dpr; ctx.beginPath(); drawing.pts.forEach((p, i) => i ? ctx.lineTo(p[0] * s, p[1] * s) : ctx.moveTo(p[0] * s, p[1] * s)); ctx.stroke();
+  }
+}
+
+// ---------------------------------------------------------------- UI readouts
+const el = id => document.getElementById(id);
+const dotsEl = [...el("dots").children], specCv = el("spec"), sx = specCv.getContext("2d");
+function readouts(t) {
+  const V = VIEW && player.playing ? viewAt(t, t) : null;
+  el("bpm").textContent = V && V.bpm ? Math.round(V.bpm) : (PRE ? Math.round(PRE.bpm) : "—");
+  dotsEl.forEach((d, i) => d.classList.toggle("on", !!V && V.g.has && V.g.beatInBar === i));
+  el("lk").classList.toggle("hit", !!V && t - V.kick < 0.1 && t >= V.kick); el("ls").classList.toggle("hit", !!V && t - V.snare < 0.1 && t >= V.snare); el("lh").classList.toggle("hit", !!V && t - V.hat < 0.06 && t >= V.hat);
+  const lvlMode = currentStyle().mode === "levels";
+  let st = V ? V.state : "silent"; if (V && lvlMode && st !== "silent") st = { low: "calm", mid: "build", peak: "drop" }[V.level];
+  const sec = el("sec"), label = preBusy ? "analysing" : st === "silent" ? (V ? "quiet" : "paused")
+    : lvlMode ? { calm: "soft", build: "verse", drop: "chorus / peak" }[st] : { calm: "calm", build: "build-up", drop: "drop" }[st];
+  if (sec.textContent !== label) { sec.textContent = label; sec.className = "chip " + st; }
+  const w = specCv.clientWidth * dpr, h = specCv.clientHeight * dpr; if (specCv.width !== w) { specCv.width = w; specCv.height = h; }
+  sx.clearRect(0, 0, w, h); sx.fillStyle = "#ffb648"; const bw = w / 24;
+  for (let b = 0; b < 24; b++) { const v = A.bands[b] * h; sx.fillRect(b * bw + 1, h - v, bw - 2, v); }
+  const f = FX[FXI[cur]]; el("fxname").innerHTML = (!player.playing && !preBusy && !loading) ? (ambientId === "off" ? `Lights off<small>no music playing</small>` : `${FX[FXI[ambientId]].name}<small>ambient · no music playing</small>`) : preBusy ? `Analysing song<small>${Math.round(preProg * 100)}%</small>` : `${f.name}<small>${auto ? currentStyle().name + " · auto" : "manual"}</small>`;
+}
+
+function frame(now) {
+  const fStart = performance.now();
+  try {
+  const dt = Math.min(0.05, (now - lastFrame) / 1000); lastFrame = now;
+  if (N) {
+    const t = curTime();
+    if (AC && player.playing) {
+      const hits = analyse(t, dt) || {};
+      if (hits.kick) { H.kick = t; H.pulses.push(t); H.pulseN++; }
+      if (hits.snare) { H.snare = t; H.snares.push(t); }
+      if (hits.hat) H.hat = t;
+      H.pulses = H.pulses.filter(x => t - x < 1); H.snares = H.snares.filter(x => t - x < 0.7);
+      computeFrame(t);
+    } else { if (renderAmbient(now / 1000)) { for (let i = 0; i < COL.length; i++) COL[i] += (AMB[i] * 0.85 - COL[i]) * 0.06; } else { for (let i = 0; i < COL.length; i++) COL[i] *= 0.92; idleGlow(now / 1000); } }
+    identifyOverlay(now);
+    delayRing.push([now, Float32Array.from(COL)]);
+    while (delayRing.length > 2 && now - delayRing[1][0] >= delayMs) delayRing.shift();
+    draw(delayMs > 0 ? delayRing[0][1] : COL);
+    readouts(curTime());
+  }
+  } catch (err) { COL && COL.fill(0); if (!frame.warned) { frame.warned = true; console.warn(err); } }
+  frame.ms = (frame.ms || 0) * 0.9 + (performance.now() - fStart) * 0.1; window.__frameMs = frame.ms;
+  requestAnimationFrame(frame);
+}
+function idleGlow(t) { // gentle preview so the layout is visible before play
+  for (let i = 0; i < N; i++) { const m = 0.5 + 0.5 * Math.sin(2 * Math.PI * (LS[i] - t * 0.15) + LF[i]); const c = rainbow(LF[i] * 0.13 + 0.55); const k = 0.08 + 0.12 * m;
+    COL[i * 3] = Math.max(COL[i * 3], c[0] * k); COL[i * 3 + 1] = Math.max(COL[i * 3 + 1], c[1] * k); COL[i * 3 + 2] = Math.max(COL[i * 3 + 2], c[2] * k); }
+}
+
+// ---------------------------------------------------------------- whole-song analysis
+let preProg = 0, preToken = 0;
+async function runPre(buf) {
+  const my = ++preToken; preBusy = true; preProg = 0; PRE = null;
+  try {
+    const ch = buf.getChannelData(0), ch1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : null;
+    const dec = buf.sampleRate > 32000 ? 2 : 1, n = Math.floor(ch.length / dec), x = new Float32Array(n), div = dec * (ch1 ? 2 : 1);
+    for (let i = 0; i < n; i++) { let v = 0; for (let k = 0; k < dec; k++) { v += ch[i * dec + k]; if (ch1) v += ch1[i * dec + k]; } x[i] = v / div; }
+    const r = await preAnalyseCore(x, buf.sampleRate / dec, p => { if (my === preToken) preProg = p; });
+    if (my === preToken) { PRE = r; el("premsg").textContent = `Song analysed: ${Math.round(r.bpm)} BPM, ${STYLES[r.style].name}${r.style === "party" ? `, ${r.drops.length} drop${r.drops.length === 1 ? "" : "s"}` : ""}.`; updateStyleOpt(); }
+  } catch (e) {
+    if (my === preToken) el("premsg").textContent = "Couldn't analyse this song ahead of time, so it's listening live instead.";
+  }
+  if (my === preToken) preBusy = false;
+}
+el("pre").addEventListener("click", () => { usePre = !usePre; el("pre").setAttribute("aria-checked", usePre); });
+
+// ---------------------------------------------------------------- play / load
+const playBtn = el("play"); let usingDemo = true, loading = false, loadToken = 0;
+function setPlayLabel() {
+  playBtn.disabled = loading;
+  playBtn.textContent = loading ? "Loading song…" : player.playing ? "❚❚ Pause" : (usingDemo ? "▶ Play demo track" : "▶ Play");
+}
+function decode(ab) { return new Promise((res, rej) => { const p = AC.decodeAudioData(ab, res, rej); if (p && p.catch) p.catch(rej); }); }
+async function loadSong(abPromise, name, autoplay) {
+  const my = ++loadToken; ensureAudio(); stopPlayback(); player.buf = null; player.offset = 0;
+  loading = true; setPlayLabel(); el("trackname").textContent = name;
+  try {
+    const buf = await decode(await abPromise);
+    if (my !== loadToken) return;
+    player.buf = buf; loading = false; runPre(buf);
+    if (autoplay) { try { if (AC.state === "suspended") await AC.resume(); } catch (e) {} if (AC.state === "running") startPlayback(); }
+  } catch (e) {
+    if (my !== loadToken) return;
+    loading = false; el("trackname").textContent = "Couldn't read " + name + ". Try an MP3, M4A, WAV or OGG file.";
+  }
+  setPlayLabel();
+}
+playBtn.addEventListener("click", async () => {
+  ensureAudio(); try { if (AC.state === "suspended") await AC.resume(); } catch (e) {}
+  if (!player.buf) return;
+  if (player.playing) stopPlayback(); else startPlayback();
+  setPlayLabel();
+});
+loadSong(fetch("demo.mp3").then(r => { if (!r.ok) throw new Error("load"); return r.arrayBuffer(); }), "Demo: original 128 BPM track", false);
+el("file").addEventListener("change", e => {
+  const f = e.target.files[0]; if (!f) return; usingDemo = false;
+  ensureAudio(); try { AC.resume(); } catch (err) {}   // resume inside the user's file pick, while it still counts as a click
+  loadSong(f.arrayBuffer(), f.name, true); e.target.value = "";
+});
+
+// ---------------------------------------------------------------- tabs & effect UI
+let tab = "fx";
+document.querySelectorAll("[data-tab]").forEach(b => b.addEventListener("click", () => {
+  tab = b.dataset.tab; document.querySelectorAll("[data-tab]").forEach(x => x.setAttribute("aria-selected", x === b));
+  ["fx", "layout", "wiring"].forEach(p => el("pane-" + p).hidden = p !== tab);
+  el("hint").textContent = tab === "wiring" ? "Green dot = first LED, arrow = direction the data runs." : "Drag shapes to move them. Select one to resize it.";
+  renderPanels();
+}));
+function renderFxGrid() {
+  const groups = [["calm", "Calm, slow and emotional"], ["build", "Build-up"], ["drop", "High energy"], ["any", "Other"]];
+  el("fxcount").textContent = `Effects (${FX.length})`;
+  el("fxgrid").innerHTML = groups.map(([g, label]) => `<h4 class="${g}">${label}</h4>` + FX.filter(f => (f.tag === g) || (g === "any" && !["calm", "build", "drop"].includes(f.tag)))
+    .map(f => `<button class="fx" type="button" data-fx="${f.id}" aria-pressed="${!auto && manual === f.id}">${f.name}</button>`).join("")).join("");
+  el("fxgrid").querySelectorAll("[data-fx]").forEach(b => b.addEventListener("click", () => { manual = b.dataset.fx; setAuto(false); }));
+}
+function setAuto(v) { auto = v; el("auto").setAttribute("aria-checked", v); renderFxGrid(); }
+el("auto").addEventListener("click", () => setAuto(!auto));
+el("predict").addEventListener("click", () => { predict = !predict; el("predict").setAttribute("aria-checked", predict); });
+el("delay").addEventListener("input", e => { delayMs = +e.target.value; el("delayo").textContent = delayMs + " ms"; });
+el("pal").addEventListener("change", e => { palMode = e.target.value; });
+el("ambient").addEventListener("change", e => { ambientId = e.target.value; });
+el("glow").addEventListener("change", e => { glowQ = +e.target.value; });
+el("fxfind").addEventListener("input", e => { const q = e.target.value.trim().toLowerCase();
+  el("fxgrid").querySelectorAll("[data-fx]").forEach(b => b.hidden = !!q && !b.textContent.toLowerCase().includes(q));
+  el("fxgrid").querySelectorAll("h4").forEach(h => h.hidden = !!q); });
+el("every").addEventListener("change", e => { everyBeats = +e.target.value; });
+el("bright").addEventListener("input", e => { bright = +e.target.value / 100; el("brighto").textContent = e.target.value + "%"; });
+el("style").addEventListener("change", e => { styleSel = e.target.value; lastSwitchBeat = -99; });
+function updateStyleOpt() { const o = el("style").options[0]; o.textContent = PRE ? `Auto-detect (${STYLES[PRE.style].name})` : "Auto-detect"; }
+el("fs").addEventListener("click", () => { try { if (document.fullscreenElement) document.exitFullscreen(); else stage.requestFullscreen().catch(() => {}); } catch (e) {} });
+document.addEventListener("fullscreenchange", () => { el("fs").textContent = document.fullscreenElement ? "Exit full screen" : "Full screen"; setTimeout(resize, 50); });
+
+// ---------------------------------------------------------------- layout editing
+function handles(sh) {
+  if (sh.type === "line" || sh.type === "pole") return sh.pts.map((p, k) => ({ x: p[0], y: p[1], k: "pt" + k }));
+  if (sh.type === "free") return [];
+  const pts = outline(sh); let mx = -1e9, h = null; pts.forEach(p => { const v = p[0] + p[1]; if (v > mx) { mx = v; h = p; } });
+  return [{ x: h[0], y: h[1], k: "size" }];
+}
+function toStage(e) { const r = cv.getBoundingClientRect(); return [(e.clientX - r.left) / r.width * SW, (e.clientY - r.top) / r.height * SH]; }
+let drag = null, drawing = null, drawMode = false;
+cv.addEventListener("pointerdown", e => {
+  const p = toStage(e); cv.setPointerCapture(e.pointerId);
+  if (drawMode) { drawing = { pts: [p] }; return; }
+  if (tab === "fx") { switchTab("layout"); }
+  if (selected >= 0 && shapes[selected]) {
+    const h = handles(shapes[selected]).find(h => Math.hypot(h.x - p[0], h.y - p[1]) < 0.3);
+    if (h) { drag = { mode: h.k, si: selected, p0: p, orig: JSON.parse(JSON.stringify(shapes[selected])) }; return; }
+  }
+  let best = -1, bd = 0.35; for (let i = 0; i < N; i++) { const d = Math.hypot(LX[i] - p[0], LY[i] - p[1]); if (d < bd) { bd = d; best = LF[i]; } }
+  selected = best; renderPanels();
+  if (best >= 0) drag = { mode: "move", si: best, p0: p, orig: JSON.parse(JSON.stringify(shapes[best])) };
+});
+cv.addEventListener("pointermove", e => {
+  const p = toStage(e);
+  if (drawing) { const l = drawing.pts[drawing.pts.length - 1]; if (Math.hypot(l[0] - p[0], l[1] - p[1]) > 0.12) drawing.pts.push(p); return; }
+  if (!drag) return; const sh = shapes[drag.si], o = drag.orig, dx = p[0] - drag.p0[0], dy = p[1] - drag.p0[1];
+  if (drag.mode === "move") { if (o.pts) sh.pts = o.pts.map(q => [q[0] + dx, q[1] + dy]); else { sh.cx = o.cx + dx; sh.cy = o.cy + dy; } }
+  else if (drag.mode.startsWith("pt")) { const k = +drag.mode.slice(2); sh.pts[k] = [o.pts[k][0] + dx, o.pts[k][1] + dy]; if (sh.type === "pole") sh.pts[k][0] = sh.pts[1 - k][0]; }
+  else if (drag.mode === "size") { const d0 = Math.hypot(drag.p0[0] - o.cx, drag.p0[1] - o.cy), d1 = Math.hypot(p[0] - o.cx, p[1] - o.cy), f = d1 / Math.max(0.05, d0);
+    sh.size = Math.max(0.15, o.size * f); if (sh.type === "rect" || sh.type === "matrix") { sh.w = (o.w || o.size) * f; sh.h = (o.h || o.size) * f; } }
+  rebuild();
+});
+cv.addEventListener("pointerup", () => {
+  if (drawing) { if (drawing.pts.length > 3) { const len = drawing.pts.reduce((a, q, i) => i ? a + Math.hypot(q[0] - drawing.pts[i - 1][0], q[1] - drawing.pts[i - 1][1]) : 0, 0);
+      shapes.push(mk("free", { pts: drawing.pts, count: Math.max(10, Math.min(300, Math.round(len * 14))) })); selected = shapes.length - 1; }
+    drawing = null; setDraw(false); rebuild(); return; }
+  drag = null;
+});
+function switchTab(t) { document.querySelector(`[data-tab="${t}"]`).click(); }
+function setDraw(v) { drawMode = v; el("drawbtn").classList.toggle("on", v); el("drawhint").hidden = !v; }
+el("addbar").addEventListener("click", e => {
+  const b = e.target.closest("[data-add]"); if (!b) return; const t = b.dataset.add;
+  if (t === "free") { setDraw(!drawMode); return; }
+  if (t === "matrix") { shapes.push(mk("matrix", { cx: 8, cy: 3.6, cols: 16, rows: 8, w: 3.2, h: 1.6 })); selected = shapes.length - 1; rebuild(); return; }
+  const c = [8 + (Math.random() - 0.5) * 3, 4 + (Math.random() - 0.5) * 1.5];
+  const o = t === "line" ? { pts: [[c[0] - 2, c[1]], [c[0] + 2, c[1]]], count: 60 } : t === "pole" ? { pts: [[c[0], 5.8], [c[0], 2.2]], count: 45 }
+    : { cx: c[0], cy: c[1], size: t === "rect" ? 1.4 : 0.7, w: 1.4, h: 1.4, count: t === "hex" ? 36 : t === "tri" ? 36 : 60 };
+  shapes.push(mk(t, o)); selected = shapes.length - 1; rebuild();
+});
+el("room").addEventListener("change", e => { shapes = PRESETS[e.target.value](); selected = -1; identify = null; rebuild(); });
+function segRanges() { // LED numbers on each controller: explicit "from" wins, otherwise continue after the previous segment
+  const next = {}, out = shapes.map(s => { const a = s.from != null ? s.from : (next[s.dev] || 0), b = a + s.count - 1; next[s.dev] = Math.max(next[s.dev] || 0, b + 1); return { a, b, warn: "" }; });
+  shapes.forEach((s, i) => shapes.forEach((t, j) => { if (j <= i || s.dev !== t.dev) return; const A2 = out[i], B2 = out[j];
+    if (A2.a <= B2.b && B2.a <= A2.b) { A2.warn = A2.warn || `Overlaps ${t.name}`; B2.warn = B2.warn || `Overlaps ${s.name}`; } }));
+  return out;
+}
+const DEVS = ["WLED Living Room", "WLED Ceiling", "WLED Shelf", "WLED Room", "WLED Desk", "WLED Bedroom", "WLED Matrix", "WLED Booth"];
+function renderPanels() {
+  const sh = shapes[selected];
+  el("selbox").hidden = !sh; el("nosel").hidden = !!sh;
+  if (sh) {
+    const isM = sh.type === "matrix";
+    el("sname").value = sh.name; el("scount").value = sh.count; el("scounto").textContent = sh.count;
+    el("countfield").hidden = isM; el("mfield").hidden = !isM;
+    if (isM) { el("mcols").value = sh.cols; el("mcolso").textContent = sh.cols; el("mrows").value = sh.rows; el("mrowso").textContent = sh.rows + " · " + sh.count + " LEDs"; }
+    const hasSize = !!LOOP_TYPES[sh.type] || isM; el("sizefield").hidden = !hasSize; el("rotfield").hidden = !LOOP_TYPES[sh.type];
+    if (hasSize) { el("ssize").value = sh.size; el("ssizeo").textContent = sh.size.toFixed(2); el("srot").value = sh.rot; el("sroto").textContent = sh.rot + "°"; }
+  }
+  // wiring: segments grouped by controller
+  const R = segRanges(), devs = [...new Set(shapes.map(x => x.dev))];
+  el("wire").innerHTML = devs.map(d => { const idx = shapes.map((x, i) => i).filter(i => shapes[i].dev === d), total = Math.max(...idx.map(i => R[i].b)) + 1;
+    return `<div class="wgroup"><header><b>${escapeHtml(d)}</b><span>${total} LEDs on this controller</span></header>` + idx.sort((x, y) => R[x].a - R[y].a).map(si =>
+      `<div class="wi ${si === selected ? "cur" : ""} ${R[si].warn ? "warn" : ""}" data-si="${si}"><b>${escapeHtml(shapes[si].name)}</b><code>LEDs ${R[si].a}–${R[si].b}${shapes[si].rev ? " · reversed" : ""}${shapes[si].from == null ? " · auto" : ""}</code>${R[si].warn ? `<span class="bad">${escapeHtml(R[si].warn)}</span>` : ""}
+        <div class="btnrow"><button class="btn" type="button" data-ident="${si}">Identify</button></div></div>`).join("") + `</div>`; }).join("");
+  el("wsel").hidden = !sh;
+  if (sh) {
+    const opts = [...new Set(DEVS.concat(shapes.map(x => x.dev)))];
+    el("wdev").innerHTML = opts.map(o => `<option${o === sh.dev ? " selected" : ""}>${escapeHtml(o)}</option>`).join("");
+    el("wname").textContent = sh.name;
+    if (document.activeElement !== el("wfrom")) el("wfrom").value = R[selected].a;
+    if (document.activeElement !== el("wto")) el("wto").value = R[selected].b;
+    el("wto").disabled = sh.type === "matrix";
+    el("wstart").value = sh.start; el("wstarto").textContent = LOOP_TYPES[sh.type] ? Math.round(sh.start * 360) + "°" : "end"; el("wstart").disabled = !LOOP_TYPES[sh.type];
+  }
+  // WLED JSON: one segment list per controller (WLED's "stop" is exclusive)
+  el("wjson").textContent = devs.map(d => `// ${d}\n` + JSON.stringify({ seg: shapes.map((x, i) => [x, R[i]]).filter(([x]) => x.dev === d).sort((p, q) => p[1].a - q[1].a)
+    .map(([x, r], k) => ({ id: k, start: r.a, stop: r.b + 1, n: x.name, rev: !!x.rev })) })).join("\n\n");
+}
+function escapeHtml(s) { return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c])); }
+el("wire").addEventListener("click", e => {
+  const id = e.target.closest("[data-ident]"); if (id) { identify = { si: +id.dataset.ident, start: performance.now() }; selected = +id.dataset.ident; renderPanels(); return; }
+  const row = e.target.closest("[data-si]"); if (row) { selected = +row.dataset.si; renderPanels(); }
+});
+const upd = (f) => { const sh = shapes[selected]; if (!sh) return; f(sh); rebuild(); };
+el("sname").addEventListener("input", e => { const sh = shapes[selected]; if (sh) { sh.name = e.target.value; save(); renderWireOnly(); } });
+function renderWireOnly() { const keep = document.activeElement; renderPanels(); if (keep && keep.id === "sname") { keep.focus(); } }
+el("scount").addEventListener("input", e => upd(sh => sh.count = +e.target.value));
+el("ssize").addEventListener("input", e => upd(sh => { const f = +e.target.value / sh.size; sh.size = +e.target.value; if (sh.type === "rect" || sh.type === "matrix") { sh.w = (sh.w || sh.size) * f; sh.h = (sh.h || sh.size) * f; } }));
+el("srot").addEventListener("input", e => upd(sh => sh.rot = +e.target.value));
+el("sdel").addEventListener("click", () => { if (selected < 0) return; shapes.splice(selected, 1); selected = -1; rebuild(); });
+el("sdup").addEventListener("click", () => { const sh = shapes[selected]; if (!sh) return; const c = JSON.parse(JSON.stringify(sh)); c.id = uid++; c.name = sh.name + " copy";
+  if (c.pts) c.pts = c.pts.map(p => [p[0] + 0.6, p[1] + 0.3]); else { c.cx += 0.8; c.cy += 0.3; } shapes.push(c); selected = shapes.length - 1; rebuild(); });
+el("wdev").addEventListener("change", e => upd(sh => { sh.dev = e.target.value; sh.from = null; }));
+el("wfrom").addEventListener("change", e => upd(sh => { const R = segRanges()[selected], v = Math.max(0, Math.round(+e.target.value || 0)); sh.from = v; }));
+el("wto").addEventListener("change", e => upd(sh => { const R = segRanges()[selected], v = Math.round(+e.target.value || 0); if (v >= R.a) sh.count = Math.min(1500, v - R.a + 1); }));
+el("wauto").addEventListener("click", () => { shapes.forEach(x => x.from = null); rebuild(); });
+el("wcopy").addEventListener("click", () => { const t = el("wjson").textContent; try { navigator.clipboard.writeText(t).then(() => { el("wcopy").textContent = "Copied"; setTimeout(() => el("wcopy").textContent = "Copy", 1500); }, () => selectJson()); } catch (e) { selectJson(); } });
+function selectJson() { const r = document.createRange(); r.selectNodeContents(el("wjson")); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); }
+el("mcols").addEventListener("input", e => upd(sh => { sh.cols = +e.target.value; sh.count = sh.cols * sh.rows; }));
+el("mrows").addEventListener("input", e => upd(sh => { sh.rows = +e.target.value; sh.count = sh.cols * sh.rows; }));
+el("wstart").addEventListener("input", e => upd(sh => sh.start = +e.target.value));
+el("wrev").addEventListener("click", () => { upd(sh => sh.rev = !sh.rev); if (selected >= 0) identify = { si: selected, start: performance.now() }; });
+el("wup").addEventListener("click", () => { if (selected <= 0) return; const s = shapes.splice(selected, 1)[0]; shapes.splice(selected - 1, 0, s); selected--; rebuild(); });
+
+// ---------------------------------------------------------------- persistence
+function save() { try { localStorage.setItem("ledpg-layout", JSON.stringify(shapes)); } catch (e) {} }
+function load() { try { const s = JSON.parse(localStorage.getItem("ledpg-layout") || "null"); if (Array.isArray(s) && s.length) { uid = Math.max(...s.map(x => x.id || 0)) + 1; return s; } } catch (e) {} return null; }
+
+shapes = load() || defaultLayout();
+renderFxGrid(); resize(); rebuild(); requestAnimationFrame(frame);
+})();
+</script>
