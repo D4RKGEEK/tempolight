@@ -6,6 +6,13 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Night mode: from a time (or sunset) until a time (or sunrise), brightness is capped, colours stay warm and there are no strobes or drop flashes.
+- Sunrise and sunset schedules (for example "sunset-15"), worked out offline from your location; "Use my location" fills it in.
+- Backup and restore of devices, room, zones, scenes, schedules and settings.
+- E1.31 (sACN) and Art-Net output, chosen per device, next to DDP.
+- MIDI controllers on the Live pads page (notes 36–45 by default, with Learn).
+- Record a 15-second clip of the preview with the music, and share or save it.
+- Text Scroller effect for LED matrix panels: the song, the tempo, the clock or your own text.
 - Like or ban effects: automatic mode never picks banned effects and picks liked ones more often.
 - Effect settings, kept per effect and saved in scenes: speed, intensity, colour shift, saturation, mirror.
 - Accent layer: a second effect added on top of whatever is showing.

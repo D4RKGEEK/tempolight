@@ -7,7 +7,7 @@
 | Audio sync | UDP 11988, multicast 239.0.0.1 | Letting WLED's own audio effects react | 44-byte "V2" packet, header `00002`: raw and smoothed level, peak flag, 16 frequency bands (0-255), magnitude, loudest frequency |
 | mDNS | UDP 5353 | Finding controllers | WLED announces `_wled._tcp`; Tempolight also scans the local /24 for `/json/info` |
 | OSC | UDP 9000 (configurable) | Control from lighting desks, TouchOSC, Companion | Input only; addresses under `/tempolight/` |
-| E1.31 / Art-Net | UDP 5568 / 6454 | Lighting-desk compatibility | Planned |
+| E1.31 (sACN) / Art-Net | UDP 5568 / 6454 | WLED set to E1.31 or Art-Net, Falcon/FPP pixel controllers, DMX nodes | 170 pixels per universe; first universe set per device (E1.31 default 1, Art-Net 0) |
 
 When a stream stops, WLED waits a few seconds and then returns to its own effect, so Tempolight can hand a room
 back to WLED's presets (for example at night) simply by stopping.

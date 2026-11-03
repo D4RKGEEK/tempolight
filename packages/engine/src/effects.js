@@ -1,4 +1,4 @@
-// Effects library: 93 effects that work on any LED layout.
+// Effects library: 94 effects that work on any LED layout.
 // Extracted from the playground (apps/playground). Each effect reads per-LED arrays from the layout
 // and a signals object S (see signals.js) and writes linear RGB into COL.
 /* eslint-disable */
@@ -444,6 +444,24 @@ export function createEffects(layout) {
           const y = 0.5 + Math.max(-0.48, Math.min(0.48, v)); add(i, col, G(PY[i] - y, 0.035) * 1.4 + 0.02); add(i, WHITE, G(PY[i] - y, 0.012) * 0.5); } } },
   ];
   FX2.push(...FX4);
+  // ---- text on LED matrix panels: a 5x7 font, scrolling (song name, BPM, clock or your own text: Settings → Text)
+  const FONT = {" ":[0,0,0,0,0],"0":[62,81,73,69,62],"1":[0,66,127,64,0],"2":[66,97,81,73,70],"3":[33,65,69,75,49],"4":[24,20,18,127,16],"5":[39,69,69,69,57],"6":[60,74,73,73,48],"7":[1,113,9,5,3],"8":[54,73,73,73,54],"9":[6,73,73,41,30],"A":[126,17,17,17,126],"B":[127,73,73,73,54],"C":[62,65,65,65,34],"D":[127,65,65,34,28],"E":[127,73,73,73,65],"F":[127,9,9,9,1],"G":[62,65,73,73,122],"H":[127,8,8,8,127],"I":[0,65,127,65,0],"J":[32,64,65,63,1],"K":[127,8,20,34,65],"L":[127,64,64,64,64],"M":[127,2,12,2,127],"N":[127,4,8,16,127],"O":[62,65,65,65,62],"P":[127,9,9,9,6],"Q":[62,65,81,33,94],"R":[127,9,25,41,70],"S":[70,73,73,73,49],"T":[1,1,127,1,1],"U":[63,64,64,64,63],"V":[31,32,64,32,31],"W":[63,64,56,64,63],"X":[99,20,8,20,99],"Y":[7,8,112,8,7],"Z":[97,81,73,69,67],":":[0,54,54,0,0],".":[0,96,96,0,0],"-":[8,8,8,8,8],"!":[0,0,95,0,0],"/":[32,16,8,4,2],"'":[0,5,3,0,0],"&":[54,73,85,34,80],"?":[2,1,81,9,6],",":[0,80,48,0,0],"+":[8,8,62,8,8],"#":[20,127,20,127,20],"(":[0,28,34,65,0],")":[0,65,34,28,0]};
+  const MC = new Int16Array(N).fill(-1), MR = new Int16Array(N).fill(-1), MCOLS = new Int16Array(N);
+  shapes.forEach((sh, si) => { if (sh.type !== "matrix") return; const x0 = sh.cx - sh.w / 2, y0 = sh.cy - sh.h / 2, dx = sh.w / Math.max(1, sh.cols - 1), dy = sh.h / Math.max(1, sh.rows - 1);
+    for (let i = 0; i < N; i++) if (LF[i] === si) { MC[i] = Math.round((LX[i] - x0) / dx); MR[i] = Math.round((LY[i] - y0) / dy); MCOLS[i] = sh.cols; } });
+  const hasMatrix = MC.some(v => v >= 0);
+  FX2.push({ id: "text", name: "Text Scroller", tag: "home", run(S) {
+    const txt = String(S.text || "TEMPOLIGHT").toUpperCase(), cols = []; for (const ch of txt) { const g = FONT[ch] || FONT["?"]; cols.push(...g, 0); } cols.push(0, 0, 0, 0, 0, 0);
+    const off = Math.floor(S.t * 8), [A1, B1] = S.pal;
+    for (let i = 0; i < N; i++) {
+      if (MC[i] < 0) { add(i, A1, 0.05 + 0.1 * S.pulse); continue; }
+      const mc = MCOLS[i], len = cols.length + mc, xi = (((MC[i] + off) % len) + len) % len - mc, row = MR[i] - 1; // text enters from the right; // a row of space above the letters
+      const bits = xi >= 0 && xi < cols.length ? cols[xi] : 0;
+      if (row >= 0 && row < 7 && (bits >> row) & 1) add(i, lerp3(A1, B1, MC[i] / Math.max(1, mc - 1)), 1 + 0.4 * S.pulse); else add(i, A1, 0.02);
+    }
+    if (!hasMatrix) for (let i = 0; i < N; i++) add(i, B1, 0.12 * (0.5 + 0.5 * Math.sin(2 * Math.PI * (LS[i] - S.t * 0.2))));
+  } });
+
 
   FX.push(...FX2);
   const FXI = Object.fromEntries(FX.map((f, i) => [f.id, i]));

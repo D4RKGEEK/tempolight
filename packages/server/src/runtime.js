@@ -1,6 +1,7 @@
 // The runtime: picks the music source, runs the director every frame, and streams each controller its LEDs.
 // Sources, best first: a song playing in the browser (analysed ahead of time), live audio (from a browser or this
 // computer's sound card), the metronome, and finally the idle/ambient effect when nothing is playing.
+import { inWindow } from "./sun.js";
 import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, toRGB8, LiveAnalyser } from "../../engine/src/index.js";
 // Everything that touches the network or the sound card comes in through `io` (see node-io.js), so the same runtime
 // runs on a PC or Pi and, with pretend devices, inside the browser for the online demo.
@@ -11,7 +12,7 @@ import { buildLayout, createEffects, createDirector, segmentRanges, songView, me
  *   discoverWled, startCapture, listSources, splitCommand, RATE
  */
 export function createRuntime(store, { io, logger = console } = {}) {
-  const { DDPSender, AudioSyncSender, getInfo, setState, setSegments, ipOf, discoverWled, startCapture, listSources, splitCommand, RATE } = io;
+  const { DDPSender, E131Sender, AudioSyncSender, getInfo, setState, setSegments, ipOf, discoverWled, startCapture, listSources, splitCommand, RATE } = io;
   const data = () => store.data;
   const log = [], listeners = new Set();
   function note(msg, level = "info") { const e = { t: Date.now(), level, msg }; log.push(e); if (log.length > 200) log.shift(); for (const f of listeners) f(e); if (logger) logger.log(`[tempolight] ${msg}`); }
@@ -39,7 +40,9 @@ export function createRuntime(store, { io, logger = console } = {}) {
       const used = Math.max(0, ...ranges.filter(r => r.dev === d.id).map(r => r.end + 1));
       const size = Math.max(used, 1), ip = ipOf(d.host), port = d.ddpPort || 4048;
       let o = outs.get(d.id);
-      if (!o || o.ip !== ip || o.port !== port) { if (o) o.sender.close(); o = { sender: new DDPSender(ip, port), ip, port }; outs.set(d.id, o); }
+      const proto = d.protocol && d.protocol !== "ddp" && E131Sender ? d.protocol : "ddp", key = `${ip}|${port}|${proto}|${d.universe ?? ""}`;
+      if (!o || o.key !== key) { if (o) o.sender.close();
+        o = { sender: proto === "ddp" ? new DDPSender(ip, port) : new E131Sender(ip, { protocol: proto, universe: d.universe }), ip, port, key }; outs.set(d.id, o); }
       o.size = size; o.buf = new Uint8Array(size * 3); o.used = used;
     }
     col8 = new Uint8Array(L.N * 3);
@@ -47,8 +50,9 @@ export function createRuntime(store, { io, logger = console } = {}) {
   }
   function syncDirector() {
     const s = data().settings, sh = data().show;
-    Object.assign(D.settings, { mode: sh.mode, effect: sh.effect, style: sh.style, palette: sh.palette, everyBeats: sh.everyBeats, speed: sh.speed,
-      ambient: s.ambient, safe: s.safe, dropFlash: s.dropFlash, prefs: s.effectPrefs || {}, params: sh.params || {}, layer: sh.layer || null, zones: data().room.zones || [] });
+    const night = !!rt.night; // night mode: no strobing, warm colours
+    Object.assign(D.settings, { mode: sh.mode, effect: sh.effect, style: sh.style, palette: night && s.night.warm ? "sunset" : sh.palette, everyBeats: sh.everyBeats, speed: sh.speed,
+      ambient: s.ambient, safe: s.safe || night, dropFlash: s.dropFlash && !night, prefs: s.effectPrefs || {}, params: sh.params || {}, layer: sh.layer || null, zones: data().room.zones || [] });
   }
   let col8 = new Uint8Array(0);
 
@@ -133,8 +137,11 @@ export function createRuntime(store, { io, logger = console } = {}) {
     if (rt.forced && !V) V = metronomeView(wall, s.metronome.bpm || 124), t = wall; // "build & drop" pad works even with no music
     V = applyForced(V, t, now);
     rt.view = V; rt.t = t;
+    const tx = s.text || {}; extra = { ...(extra || {}), text: tx.source === "custom" ? tx.custom : tx.source === "clock" ? new Date().toTimeString().slice(0, 5)
+      : tx.source === "bpm" ? (V && V.bpm ? `${Math.round(V.bpm)} BPM` : "TEMPOLIGHT") : (rt.song ? rt.song.name : rt.source === "idle" ? tx.custom : rt.sourceLabel) };
     const col = D.frame(V, t, extra, wall);
     let bri = s.brightness; if (!V && sh.mode === "auto") bri *= s.idleBrightness;
+    if (rt.night) bri = Math.min(bri, s.night.maxBrightness);
     if (!sh.power) { bri = 0; }
     toRGB8(col, col8, bri);
     // copy each shape's LEDs into its controller's buffer at its segment range
@@ -242,7 +249,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
       type: "status", source: rt.source, sourceLabel: rt.sourceLabel, fps: Math.round(rt.fps), leds: L.N, effect: D.showing, effectName: fx.list.find(e => e.id === D.showing)?.name || D.showing, style: D.style,
       styleName: fx.styles[D.style]?.name || D.style, bpm: V && V.bpm ? Math.round(V.bpm * 10) / 10 : null, part: V ? V.state : "idle",
       beat: V && V.g.has ? V.g.beatInBar : null, level: an ? Math.round(Math.min(1, an.eFast / an.eMax) * 100) / 100 : V ? Math.round((V.loud || 0) * 100) / 100 : 0,
-      bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, power: data().show.power, brightness: data().settings.brightness,
+      bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night,
       song: rt.song ? { name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
       capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null,
       overlay: overlayState(), devices: data().devices.map(d => ({ id: d.id, ...health.get(d.id), sent: outs.get(d.id)?.sender.sent || 0, used: outs.get(d.id)?.used || 0, amps: Math.round((outs.get(d.id)?.amps || 0) * 100) / 100, limited: !!outs.get(d.id)?.limited })),
@@ -254,15 +261,21 @@ export function createRuntime(store, { io, logger = console } = {}) {
     return { N: L.N, x: Array.from(L.LX, v => Math.round(v * 100) / 100), y: Array.from(L.LY, v => Math.round(v * 100) / 100), shape: Array.from(L.LF), chainStart: L.chainStart, ranges, shapes: data().room.shapes };
   }
 
-  rebuild(); startLoop();
+  function updateNight() {
+    const n = data().settings.night, on = !!(n && n.enabled && inWindow(n.from, n.to, new Date(), data().settings.location));
+    if (on !== !!rt.night) { rt.night = on; syncDirector(); note(on ? "Night mode on" : "Night mode off"); }
+  }
+  const nightTimer = setInterval(updateNight, 5000);
+
+  rebuild(); startLoop(); updateNight();
   healthLoop(); healthTimer = setInterval(healthLoop, 10_000);
   if (data().settings.capture.enabled) startCaptureSource();
 
   return {
     get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, rt, log, listeners, previewClients, health,
-    rebuild, syncDirector, startLoop, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
+    rebuild, syncDirector, startLoop, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
     identify, syncSegments, setPower, action, status, layoutInfo, checkDevice, note,
-    close() { clearInterval(timer); clearInterval(healthTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
+    close() { clearInterval(timer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
   };
 }
 

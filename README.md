@@ -52,10 +52,12 @@ designer: it knows where the beat is, which part of the song you're in, and what
 | 🎛️ **Live pads** | Flash, strobe, blackout, freeze, build & drop, drop now, next effect, boost, tap tempo, colour hold, with keyboard shortcuts |
 | 🏠 **Room layouts** | Presets (four walls, TV, gaming desk, bedroom, living room, matrix, club, rings), drag-and-drop editing, any LED ranges per shape, one click to write segments into WLED |
 | 🔎 **Plug and play** | Finds WLED controllers on your network (mDNS and a network scan), reads their LED counts, notices when one changes address |
-| 🕒 **Scenes & schedules** | Save a look as a scene; switch scenes, power or brightness at set times on chosen days |
+| 🕒 **Scenes & schedules** | Save a look as a scene; switch scenes, power or brightness at set times, at sunrise or sunset |
+| 🌙 **Night mode** | Late at night the lights stay dim and warm, with no strobes |
+| 🎹 **MIDI, clips, backups** | Play the pads from a MIDI controller, record a 15-second clip to share, back up your whole setup to one file |
 | 🔒 **PIN lock** | Guests at a party can pick effects and use the pads, but can't touch your setup |
 | 👁️ **Photosensitive-safe mode** | No more than three big flashes per second (WCAG 2.3.1) |
-| 🔌 **Integrations** | HTTP + WebSocket API, OSC (TouchOSC, Companion, lighting desks), WLED audio sync, Home Assistant via REST |
+| 🔌 **Integrations** | DDP, E1.31 (sACN) and Art-Net output, HTTP + WebSocket API, OSC (TouchOSC, Companion, lighting desks), WLED audio sync, Home Assistant via REST |
 | 📱 **An app on your phone** | Add it to your iPhone or Android home screen; it opens full screen with its own icon. Works offline in the online demo |
 | 🌐 **Online demo** | The whole app in the browser with pretend lights, deployed to Cloudflare on every push |
 

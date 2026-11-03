@@ -109,6 +109,16 @@ await step("scenes: save, apply; schedules: add and run now", async () => {
   await page.click("[data-run]"); await until(() => !app.store.data.show.power, 3000, "schedule did not turn lights off");
   await page.click('[data-apply="party"]'); await until(() => app.store.data.show.power && app.store.data.show.style === "party", 3000, "scene did not apply"); await shot("08-scenes");
 });
+await step("settings: location, night mode, backup; a sunset schedule", async () => {
+  await go("settings"); await page.fill("#l-lat", "19.076"); await page.fill("#l-lon", "72.8777"); await page.click("#l-save");
+  await until(() => app.store.data.settings.location?.lat === 19.076, 3000, "location not saved");
+  await go("settings"); await page.check("#n-on"); await until(() => app.store.data.settings.night.enabled, 3000, "night mode not saved");
+  await go("settings"); await page.selectOption("#x-src", "clock"); await until(() => app.store.data.settings.text.source === "clock", 3000, "text source not saved");
+  const dl = page.waitForEvent("download"); await page.click("#b-down"); const f = await dl; ok(/tempolight-backup/.test(f.suggestedFilename()), "no backup download");
+  await go("settings"); await page.uncheck("#n-on"); await sleep(300);
+  await go("scenes"); await page.selectOption("#t-kind", "sunset"); await page.fill("#t-off", "-15"); await page.selectOption("#t-act", "on"); await page.click("#t-add");
+  await until(() => app.store.data.schedules.some(x => x.time === "sunset-15"), 3000, "sunset schedule not added"); await shot("08b-settings");
+});
 await step("listen live with a microphone", async () => {
   await go("music"); await page.click("#m-stopsong"); await sleep(300); await page.click("#m-mic");
   await until(() => status().source === "browser" || status().sourceLabel.includes("quiet"), 8000, `mic not used as source (${status().sourceLabel})`);

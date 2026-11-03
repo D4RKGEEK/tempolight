@@ -44,7 +44,7 @@ Calls marked with a guest area (effects, scenes, pads, brightness) work without 
 | --- | --- | --- |
 | `GET /api/devices` | | |
 | `POST /api/devices` | admin | `{host: "192.168.1.42", name?, ddpPort?, force?}` (reads the LED count from WLED); `{virtual: true}` for a pretend room |
-| `PATCH /api/devices/:id` | admin | `{name?, host?, leds?, ddpPort?, enabled?, maxAmps?, mAperLed?}`; `maxAmps` caps brightness to the power supply |
+| `PATCH /api/devices/:id` | admin | `{name?, host?, leds?, ddpPort?, enabled?, maxAmps?, mAperLed?, protocol?: "ddp"\|"e131"\|"artnet", universe?}`; `maxAmps` caps brightness to the power supply |
 | `DELETE /api/devices/:id` | admin | also removes its shapes |
 | `POST /api/devices/:id/identify` | | lights that controller's shapes |
 | `POST /api/devices/:id/segments` | admin | writes the room's LED ranges into WLED as segments |
@@ -64,6 +64,17 @@ A shape: `{type: "line"|"pole"|"free"|"circle"|"rect"|"hex"|"tri"|"matrix", name
 | `DELETE /api/song` | |
 | `GET /api/audio/sources` | sound inputs the server can capture from |
 | `PATCH /api/settings` | admin: `{capture: {enabled: true, source: "auto"\|<id>, command?}}` |
+
+## Backup
+
+| Call | Body |
+| --- | --- |
+| `GET /api/backup` | admin: everything except the PIN, as one JSON file |
+| `POST /api/restore` | admin: a backup file; the current PIN is kept |
+
+Settings (`PATCH /api/settings`, admin) also take `location: {lat, lon}`, `night: {enabled, from, to, maxBrightness, warm}`
+(times like `23:00`, `sunset` or `sunrise-30`) and `text: {source: "song"|"bpm"|"clock"|"custom", custom}` for the
+Text Scroller. Schedules accept `time: "sunset+30"` or `"sunrise-15"` once a location is set.
 
 ## Lock
 

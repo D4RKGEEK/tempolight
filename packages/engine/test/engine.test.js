@@ -14,8 +14,8 @@ test("example room builds 710 LEDs with sane coordinates", () => {
   }
 });
 
-test("all 93 effects render finite colours on every LED", () => {
-  assert.equal(fx.list.length, 93);
+test("all 94 effects render finite colours on every LED", () => {
+  assert.equal(fx.list.length, 94);
   const col = new Float32Array(layout.N * 3);
   for (const e of fx.list) {
     for (const t of [0.05, 3.3, 7.77, 15.01]) {
@@ -72,4 +72,13 @@ test("v0.3 effects react the way they should", async () => {
   // Spectrum Rings follow the spectrum
   const loud = new Float32Array(24).fill(0.9), quiet = new Float32Array(24).fill(0.05);
   assert.ok(mean("specrings", sig(3, { bands: loud })) > 3 * mean("specrings", sig(3, { bands: quiet })), "spectrum rings react");
+});
+
+test("Text Scroller writes readable letters on a matrix", async () => {
+  const { metronomeView, buildSignals } = await import("../src/index.js");
+  const L = buildLayout([{ type: "matrix", name: "Panel", cols: 32, rows: 8, cx: 8, cy: 4.5, w: 6.4, h: 1.6, dev: "d" }]), F = createEffects(L), out = new Float32Array(L.N * 3);
+  const S = { ...buildSignals(metronomeView(0, 120), 0, { pal: F.palettes.neon, fixed: true }), text: "I", t: 32 / 8 }; // scrolled so the I sits at column 0
+  F.render("text", S, out);
+  const lit = []; for (let i = 0; i < L.N; i++) if (out[i * 3] + out[i * 3 + 1] + out[i * 3 + 2] > 1) lit.push(i);
+  assert.ok(lit.length >= 7 && lit.length <= 12, `an "I" is 9 pixels in this font (lit ${lit.length})`);
 });

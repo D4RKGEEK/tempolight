@@ -170,3 +170,33 @@ test("effect likes/bans and settings, zones, and the power limit", async () => {
     const sc = await s.call("POST", "/api/scenes", { name: "With settings" }); assert.ok(sc.body.show.params.strobechase, "scenes keep effect settings");
   } finally { await s.done(); wled.close(); }
 });
+
+test("night mode, sunset schedules, backup and restore, E1.31 output", async () => {
+  const { sunTimes, resolveTime, inWindow } = await import("../src/sun.js");
+  const ldn = sunTimes(new Date("2026-06-21T12:00:00Z"), 51.5074, -0.1278);
+  assert.ok(Math.abs(ldn.sunrise.getUTCHours() * 60 + ldn.sunrise.getUTCMinutes() - (3 * 60 + 43)) <= 3, "London midsummer sunrise about 03:43 UTC");
+  assert.ok(Math.abs(ldn.sunset.getUTCHours() * 60 + ldn.sunset.getUTCMinutes() - (20 * 60 + 21)) <= 3, "London midsummer sunset about 20:21 UTC");
+  assert.equal(resolveTime("18:30", new Date(), null), "18:30"); assert.equal(resolveTime("sunset", new Date(), null), null);
+  assert.ok(inWindow("23:00", "07:00", new Date(2026, 0, 1, 2, 0)) && !inWindow("23:00", "07:00", new Date(2026, 0, 1, 12, 0)), "night window across midnight");
+  const udp = (await import("node:dgram")).default.createSocket("udp4"), got = []; udp.on("message", m => got.push(m));
+  await new Promise(r => udp.bind(0, "127.0.0.1", r));
+  const s = await setup();
+  try {
+    assert.equal((await s.call("POST", "/api/schedules", { time: "sunset", action: { type: "on" } })).status, 400, "sunset needs a location");
+    await s.call("PATCH", "/api/settings", { location: { lat: 19.076, lon: 72.8777 } });
+    const sch = await s.call("POST", "/api/schedules", { name: "Dusk", time: "sunset-15", action: { type: "on" } }); assert.equal(sch.status, 200);
+    assert.ok((await s.call("GET", "/api/schedules")).body.find(x => x.id === sch.body.id).next, "next sunset run is known");
+    const now = new Date(), hm = d => `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+    await s.call("PATCH", "/api/settings", { brightness: 1, night: { enabled: true, from: hm(new Date(now - 60000)), to: hm(new Date(+now + 3600000)), maxBrightness: 0.2 } });
+    s.app.runtime.updateNight(); assert.equal(s.app.runtime.status().night, true); assert.equal(s.app.runtime.director.settings.safe, true, "no strobes at night");
+    const dev = (await s.call("POST", "/api/devices", { host: "127.0.0.1", force: true, leds: 200 })).body;
+    await s.call("PATCH", `/api/devices/${dev.id}`, { protocol: "e131", universe: 1 });
+    assert.equal(s.app.store.data.devices[0].protocol, "e131");
+    const port = udp.address().port, { E131Sender } = await import("../../outputs/src/e131.js"); const es = new E131Sender("127.0.0.1", { port }); es.send(new Uint8Array(600).fill(9)); await sleep(100); es.close();
+    assert.equal(got.length, 2, "two universes for 200 pixels"); assert.equal(got[0][126], 9);
+    const backup = (await s.call("GET", "/api/backup")).body; assert.equal(backup.data.devices.length, 1); assert.equal(backup.data.lock, undefined);
+    await s.call("POST", "/api/reset"); assert.equal(s.app.store.data.devices.length, 0);
+    assert.equal((await s.call("POST", "/api/restore", { nope: 1 })).status, 400);
+    assert.equal((await s.call("POST", "/api/restore", backup)).status, 200); assert.equal(s.app.store.data.devices.length, 1); assert.equal(s.app.store.data.settings.location.lat, 19.076);
+  } finally { await s.done(); udp.close(); }
+});

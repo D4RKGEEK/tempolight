@@ -8,6 +8,9 @@ export const DEFAULTS = () => ({
     capture: { enabled: false, source: "auto", command: "" }, metronome: { enabled: false, bpm: 120 },
     guest: { effects: true, scenes: true, pads: true, brightness: true },
     effectPrefs: {}, // effect id -> 1 liked, -1 banned (automatic mode)
+    location: null,  // {lat, lon, name} for sunrise/sunset schedules and night mode
+    night: { enabled: false, from: "23:00", to: "07:00", maxBrightness: 0.3, warm: true }, // calmer light at night
+    text: { source: "song", custom: "TEMPOLIGHT" }, // what Text Scroller shows on matrix panels: song, bpm, clock or custom
   },
   show: { power: true, mode: "auto", effect: "shock", style: "auto", palette: "auto", everyBeats: 8, speed: 1, params: {}, layer: null },
   devices: [],

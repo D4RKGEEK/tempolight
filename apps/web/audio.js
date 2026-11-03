@@ -113,6 +113,13 @@ export function createAudio({ ws, api, onChange }) {
   }
   function stopLive() { if (!S.stream) return; meter = null; try { S.stream.src.disconnect(); } catch {} S.stream.stream.getTracks().forEach(t => t.stop()); S.stream = null; if (S.mode !== "song") { S.mode = null; stopStream(); } emit(); }
 
-  return { state: S, addFiles, addUrl, playIndex, toggle, seek, next, prev, pos, remove, listen, stopLive, stopSong, listInputs, level, calibrate,
+  // for recording a clip: the song or live sound as a MediaStream
+  let recDest = null;
+  function captureStream() {
+    if (!ctx) return null; if (!recDest) recDest = ctx.createMediaStreamDestination();
+    try { if (S.song) S.song.gain.connect(recDest); if (S.stream) S.stream.src.connect(recDest); } catch {}
+    return recDest.stream;
+  }
+  return { captureStream, state: S, addFiles, addUrl, playIndex, toggle, seek, next, prev, pos, remove, listen, stopLive, stopSong, listInputs, level, calibrate,
     get duration() { return S.song ? S.song.item.buffer.duration : 0; } };
 }

@@ -1,6 +1,8 @@
 // Tempolight's core: every API call, scenes, schedules, the PIN lock and live updates. No Node.js modules here, so the
 // same code runs the server on a PC or Pi (app.js) and the online demo inside a browser (apps/web/demo.js).
 import { startScheduler, nextRun } from "./scheduler.js";
+import { resolveTime } from "./sun.js";
+import { DEFAULTS, merge } from "./defaults.js";
 import { ROOM_PRESETS, buildPreset } from "../../engine/src/index.js";
 
 const SHAPE_TYPES = new Set(["line", "pole", "free", "circle", "rect", "hex", "tri", "matrix"]);
@@ -30,7 +32,7 @@ export function createCore({ store, runtime, env }) {
   const pub = () => {
     const d = data();
     return { version: env.version, settings: d.settings, show: d.show, devices: d.devices, room: d.room, scenes: d.scenes,
-      schedules: d.schedules.map(s => ({ ...s, next: nextRun(s)?.toISOString() || null })), locked: locked(),
+      schedules: d.schedules.map(s => ({ ...s, next: nextRun(s, new Date(), d.settings.location)?.toISOString() || null })), locked: locked(),
       effects: runtime.effects.list, styles: Object.fromEntries(Object.entries(runtime.effects.styles).map(([k, v]) => [k, v.name])),
       palettes: Object.keys(runtime.effects.palettes), presets: Object.values(ROOM_PRESETS), captureSources: env.listSources().map(({ id, label }) => ({ id, label })), firstRun: store.firstRun && !d.devices.length };
   };
@@ -99,6 +101,15 @@ export function createCore({ store, runtime, env }) {
     if (b.metronome) Object.assign(s.metronome, { enabled: b.metronome.enabled ?? s.metronome.enabled, bpm: b.metronome.bpm !== undefined ? num(b.metronome.bpm, 40, 220) : s.metronome.bpm });
     if (b.osc) Object.assign(s.osc, { enabled: b.osc.enabled ?? s.osc.enabled, port: b.osc.port !== undefined ? Math.round(num(b.osc.port, 1024, 65535)) : s.osc.port });
     if (b.guest) for (const k of Object.keys(s.guest)) if (b.guest[k] !== undefined) s.guest[k] = !!b.guest[k];
+    if (b.location !== undefined) { if (b.location === null) s.location = null; else { const lat = Number(b.location.lat), lon = Number(b.location.lon);
+      if (!(lat >= -90 && lat <= 90 && lon >= -180 && lon <= 180)) throw new HttpError(400, "Latitude is -90 to 90 and longitude -180 to 180");
+      s.location = { lat: Math.round(lat * 1e4) / 1e4, lon: Math.round(lon * 1e4) / 1e4, name: String(b.location.name || "").slice(0, 60) }; } }
+    if (b.night) { const okT = t => /^([01]\d|2[0-3]):[0-5]\d$/.test(t) || /^(sunrise|sunset)([+-]\d{1,3})?$/.test(t);
+      for (const k of ["from", "to"]) if (b.night[k] !== undefined && !okT(b.night[k])) throw new HttpError(400, "Night mode times look like 23:00 or sunset");
+      Object.assign(s.night, { enabled: b.night.enabled ?? s.night.enabled, from: b.night.from ?? s.night.from, to: b.night.to ?? s.night.to,
+        maxBrightness: b.night.maxBrightness !== undefined ? num(b.night.maxBrightness, 0.02, 1) : s.night.maxBrightness, warm: b.night.warm ?? s.night.warm }); }
+    if (b.text) { if (b.text.source !== undefined && !["song", "bpm", "clock", "custom"].includes(b.text.source)) throw new HttpError(400, "Text source is song, bpm, clock or custom");
+      Object.assign(s.text, { source: b.text.source ?? s.text.source, custom: b.text.custom !== undefined ? String(b.text.custom).slice(0, 80) : s.text.custom }); }
     const after = JSON.stringify({ fps: s.fps, cap: s.capture, osc: s.osc }), prev = JSON.parse(before);
     if (prev.fps !== s.fps) runtime.startLoop();
     if (JSON.stringify(prev.cap) !== JSON.stringify(s.capture)) { if (s.capture.enabled) runtime.startCaptureSource(); else runtime.stopCaptureSource(); }
@@ -173,6 +184,8 @@ export function createCore({ store, runtime, env }) {
     const d = data().devices.find(x => x.id === p.id); if (!d) throw new HttpError(404, "No such device"); const b = ctx.body;
     if (b.name !== undefined) d.name = String(b.name).slice(0, 60); if (b.host !== undefined) d.host = String(b.host).trim(); if (b.ddpPort !== undefined) d.ddpPort = Number(b.ddpPort) || 4048;
     if (b.leds !== undefined) d.leds = Math.max(0, Math.round(Number(b.leds))); if (b.enabled !== undefined) d.enabled = !!b.enabled;
+    if (b.protocol !== undefined) { if (!["ddp", "e131", "artnet"].includes(b.protocol)) throw new HttpError(400, "Protocol is ddp, e131 or artnet"); d.protocol = b.protocol; }
+    if (b.universe !== undefined) d.universe = b.universe === null || b.universe === "" ? undefined : Math.max(0, Math.min(63999, Math.round(Number(b.universe))));
     if (b.maxAmps !== undefined) d.maxAmps = Math.max(0, Math.min(500, Number(b.maxAmps) || 0)); if (b.mAperLed !== undefined) d.mAperLed = Math.max(5, Math.min(200, Number(b.mAperLed) || 60));
     runtime.rebuild(); changed("devices"); return d;
   });
@@ -220,7 +233,9 @@ export function createCore({ store, runtime, env }) {
   const cleanSchedule = (b, old = {}) => {
     const s = { ...old, name: String(b.name ?? old.name ?? "Schedule").slice(0, 60), time: String(b.time ?? old.time ?? "18:00"), days: (b.days ?? old.days ?? [0, 1, 2, 3, 4, 5, 6]).map(Number).filter(d => d >= 0 && d <= 6),
       action: b.action ?? old.action ?? { type: "on" }, enabled: b.enabled ?? old.enabled ?? true };
-    if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(s.time)) throw new HttpError(400, "Time must look like 18:30");
+    const sun = /^(sunrise|sunset)([+-]\d{1,3})?$/.test(s.time);
+    if (!sun && !/^([01]\d|2[0-3]):[0-5]\d$/.test(s.time)) throw new HttpError(400, "Time must look like 18:30, sunset or sunrise-15");
+    if (sun && !data().settings.location) throw new HttpError(400, "Set your location in Settings first, so Tempolight knows when the sun rises and sets");
     if (!["scene", "on", "off", "brightness"].includes(s.action.type)) throw new HttpError(400, "Action must be scene, on, off or brightness");
     if (s.action.type === "scene" && !data().scenes.some(x => x.id === s.action.scene)) throw new HttpError(400, "Pick a scene for this schedule");
     return s;
@@ -243,6 +258,13 @@ export function createCore({ store, runtime, env }) {
   route("POST", "/api/unlock", null, async (ctx) => { const b = ctx.body; await new Promise(r => setTimeout(r, 300)); // slow down guessing
     if (!env.checkPin(data().lock, b.pin)) throw new HttpError(403, "Wrong PIN"); const tok = env.randomToken(); tokens.set(tok, Date.now() + 12 * 3600_000); return { token: tok }; });
   route("DELETE", "/api/lock", "admin", () => { data().lock = null; tokens.clear(); runtime.note("PIN lock removed"); changed("lock"); return { locked: false }; });
+  route("GET", "/api/backup", "admin", () => { const d = JSON.parse(JSON.stringify(data())); delete d.lock; return { tempolight: env.version, savedAt: new Date().toISOString(), data: d }; });
+  route("POST", "/api/restore", "admin", (ctx) => {
+    const d = ctx.body.data || ctx.body; if (!d || !Array.isArray(d.devices) || !d.room || !Array.isArray(d.room.shapes)) throw new HttpError(400, "That doesn't look like a Tempolight backup");
+    const lock = data().lock, fresh = merge(DEFAULTS(), d); fresh.lock = lock; // keep the current PIN
+    for (const k of Object.keys(data())) delete data()[k]; Object.assign(data(), fresh);
+    runtime.rebuild(); runtime.note(`Restored a backup: ${d.devices.length} devices, ${d.room.shapes.length} shapes, ${(d.scenes || []).length} scenes`); changed("all"); return { ok: true };
+  });
   route("POST", "/api/reset", "admin", () => { store.reset(); runtime.rebuild(); changed("all"); return { ok: true }; });
 
   // ---------------------------------------------------------------- live connections: status, preview, browser audio, song clock
@@ -271,7 +293,7 @@ export function createCore({ store, runtime, env }) {
   runtime.listeners.add(e => broadcast({ type: "log", ...e }));
 
   // ---------------------------------------------------------------- background jobs
-  const sched = startScheduler(() => data().schedules, runSchedule, env.now);
+  const sched = startScheduler(() => data().schedules, runSchedule, env.now, () => data().settings.location);
   restartOsc();
   async function firstRunDiscovery() {
     if (env.discover === false || !data().settings.autoDiscover || data().devices.length) return;

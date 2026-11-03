@@ -38,6 +38,10 @@ await step("opens in demo mode and finds the pretend controllers by itself", asy
   await until(async () => (await text("#h-leds")).includes("684"), 5000, "room not laid out (" + await text("#h-leds") + ")");
 });
 await step("preview shows light", async () => { await sleep(800); const lit = await page.evaluate(async () => { const { app } = await import("/app.js"); return app.frame ? app.frame.reduce((a, b) => a + b, 0) : 0; }); ok(lit > 1000, "preview frame is dark"); });
+await step("record a 15-second clip of the preview", async () => {
+  const dl = page.waitForEvent("download", { timeout: 30000 }); await page.click("#h-rec"); const f = await dl;
+  const p = await f.path(), size = (await import("node:fs")).statSync(p).size; ok(/\.(webm|mp4)$/.test(f.suggestedFilename()) && size > 20000, `clip ${f.suggestedFilename()} ${size} bytes`);
+});
 await step("play the demo song: analysed, tempo found, lights follow it", async () => {
   await go("music"); await page.click("#m-demo");
   await until(async () => (await text("#sb-source")).includes("demo"), 30000, "song never started");
@@ -50,7 +54,7 @@ await step("live pads: blackout and back", async () => {
 await step("effects: choose one", async () => { await go("effects"); await page.click('[data-fx="galaxy"]'); await until(async () => (await text("#sb-effect")) === "Spiral Galaxy", 3000, "effect not showing"); await page.click("#e-auto"); });
 await step("devices: scan finds the pretend controllers, frames are being sent", async () => {
   await go("devices"); await page.click("#d-scan"); await until(async () => (await text("#d-scanmsg")).includes("3 found"), 5000, "scan found nothing");
-  const sent = await page.$$eval("#d-rows tr td:nth-child(11)", tds => tds.map(t => Number(t.textContent))); ok(sent.every(n => n > 10), "frames sent " + sent);
+  const sent = await page.$$eval("#d-rows tr td:nth-child(12)", tds => tds.map(t => Number(t.textContent))); ok(sent.every(n => n > 10), "frames sent " + sent);
 });
 await step("room: four-walls preset and segments", async () => {
   await go("room"); await page.selectOption("#r-preset", "fourwalls"); await page.click("#r-use"); await sleep(500);

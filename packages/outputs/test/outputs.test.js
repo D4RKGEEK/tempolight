@@ -32,3 +32,15 @@ test("Audio sync packet is 44 bytes in WLED's V2 layout", () => {
   assert.equal(p.readFloatLE(8), 1.5); assert.equal(p.readFloatLE(12), 2.5); assert.equal(p[16], 1);
   assert.equal(p[18 + 15], 150); assert.equal(p.readFloatLE(36), 100); assert.equal(p.readFloatLE(40), 440);
 });
+
+test("E1.31 and Art-Net: one universe per 170 pixels, headers as the standards say", async () => {
+  const { e131Packets, artnetPackets } = await import("../src/index.js");
+  const rgb = new Uint8Array(300 * 3).map((_, i) => i & 255);
+  const e = e131Packets(rgb, 1, 7); assert.equal(e.length, 2);
+  assert.equal(e[0].toString("latin1", 4, 13), "ASC-E1.17"); assert.equal(e[0].readUInt16BE(113), 1); assert.equal(e[1].readUInt16BE(113), 2);
+  assert.equal(e[0].length, 126 + 510); assert.equal(e[1].length, 126 + 390); assert.equal(e[0][111], 7); assert.equal(e[0].readUInt16BE(123), 511);
+  assert.equal(e[0].readUInt16BE(16) & 0x0fff, e[0].length - 16); assert.equal(e[1][126], rgb[510]);
+  const a = artnetPackets(rgb, 0, 3); assert.equal(a.length, 2);
+  assert.equal(a[0].toString("latin1", 0, 7), "Art-Net"); assert.equal(a[0].readUInt16LE(8), 0x5000); assert.equal(a[0][14], 0); assert.equal(a[1][14], 1);
+  assert.equal(a[0].readUInt16BE(16), 510); assert.equal(a[1].readUInt16BE(16), 390); assert.equal(a[1][18], rgb[510]);
+});
