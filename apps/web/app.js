@@ -389,8 +389,13 @@ function livePage(el) {
     ${panel("Preview", `<span id="l-now"></span>`, "", `<div class="stage" id="l-stage"></div>`, "span-5")}
     ${panel("Scenes", "", "", `<div class="pb chips">${app.state.scenes.map(s => `<button class="chip" data-scene="${s.id}" type="button">${esc(s.name)}</button>`).join("")}</div>`, "span-5")}
     ${panel("MIDI controller", `<span id="midi-st">${navigator.requestMIDIAccess ? "Not connected" : "This browser has no MIDI (try Chrome or Edge on a computer)"}</span>`, navigator.requestMIDIAccess ? `<button class="btn" id="midi-on" type="button">Connect</button><button class="btn" id="midi-learn" type="button" aria-pressed="false">Learn</button>` : "",
-      `<div class="pb"><p class="faint" style="font-size:12.5px">Pads play from notes 36 to 45 (the bottom pads on most controllers). To change one, press Learn, tap a pad here, then hit the key or pad on your controller.</p></div>`, "span-5")}`;
+      `<div class="pb"><p class="faint" style="font-size:12.5px">Pads play from notes 36 to 45 (the bottom pads on most controllers). To change one, press Learn, tap a pad here, then hit the key or pad on your controller.</p></div>`, "span-5")}
+    ${panel("Phones as lights", `<span id="ph-n">No phones yet</span>`, "", `<div class="pb phones"><div class="qr" id="ph-qr" aria-live="polite"></div><div class="stack">
+      <p>Guests scan this code, tap Start, and their screen becomes another light that moves with the room. Works best with a crowd holding phones up at the drop.</p>
+      <p class="faint" style="font-size:12.5px" id="ph-url"></p>
+      ${DEMO ? `<p class="callout">In the online demo, open the link in another tab of this browser. At home, phones on the same Wi-Fi scan the code.</p>` : `<p class="faint" style="font-size:12.5px">Phones must be on the same Wi-Fi as this Tempolight.</p>`}</div></div>`, "span-7")}`;
   const prev = createPreview($("#l-stage"));
+  phoneQr();
   if (!guestOk("pads")) { $$(".pad, .swatch").forEach(b => b.disabled = true); }
   let flashColor = "#ffffff", holdColor = null;
   const send = a => { if (ws.open) ws.send({ type: "action", action: a }); else api("POST", "/api/action", a).catch(e => toast(e.message, true)); };
@@ -429,10 +434,19 @@ function livePage(el) {
     $$(".pad").forEach(b => b.addEventListener("pointerdown", () => { if (learning) learnPad = b.dataset.pad; }, true));
   }
   return { preview: true,
-    onStatus(m) { $("#l-now").textContent = m.effectName; const o = m.overlay;
+    onStatus(m) { $("#l-now").textContent = m.effectName; const o = m.overlay; $("#ph-n").textContent = m.phones ? `${m.phones} phone${m.phones > 1 ? "s" : ""} joined` : "No phones yet";
       $('[data-pad="blackout"]').setAttribute("aria-pressed", o.blackout); $('[data-pad="freeze"]').setAttribute("aria-pressed", o.freeze);
       $('[data-pad="strobe"]').setAttribute("aria-pressed", o.strobe); $('[data-pad="build"]').classList.toggle("hot", o.forced === "build"); $('[data-pad="drop"]').classList.toggle("hot", o.forced === "drop"); },
     destroy() { prev.destroy(); removeEventListener("keydown", kd); removeEventListener("keyup", ku); if (midi) [...midi.inputs.values()].forEach(i => i.onmidimessage = null); } };
+}
+
+async function phoneQr() {
+  let url = location.origin + "/phone";
+  if (!DEMO && /^(localhost|127\.|\[?::1)/.test(location.hostname)) { // a phone can't reach "localhost": use this computer's network address
+    const n = await api("GET", "/api/network").catch(() => ({ addresses: [] })), a = n.addresses.find(x => /^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))/.test(x)) || n.addresses[0];
+    if (a) url = `${location.protocol}//${a}${location.port ? ":" + location.port : ""}/phone`; }
+  const { qrSvg } = await import("/qr.js"), box = $("#ph-qr"); if (!box) return;
+  box.innerHTML = qrSvg(url, { px: 5 }); $("#ph-url").innerHTML = `Or open <a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`;
 }
 
 // ---------------------------------------------------------------- Scenes & schedules

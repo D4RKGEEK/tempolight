@@ -27,6 +27,7 @@ mkdirSync(path.join(out, "about"), { recursive: true }); copy("docs/index.html",
 // demo mode on, and the version for the About box
 const idx = path.join(out, "index.html");
 writeFileSync(idx, readFileSync(idx, "utf8").replace("<title>", `<meta name="tempolight-demo" content="1">\n<meta name="tempolight-version" content="${pkg.version}">\n<title>`));
+const ph = path.join(out, "phone.html"); writeFileSync(ph, readFileSync(ph, "utf8").replace("<title>", `<meta name="tempolight-demo" content="1">\n<title>`));
 const sw = path.join(out, "sw.js"); writeFileSync(sw, readFileSync(sw, "utf8").replace("__BUILD__", build));
 writeFileSync(path.join(out, "_headers"), `/sw.js
   Cache-Control: no-cache

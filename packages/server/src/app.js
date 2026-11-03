@@ -1,5 +1,6 @@
 // Tempolight server for a PC or Raspberry Pi: the HTTP API, the web app's files and the WebSocket, around the core
 // (core.js), with real network and sound-card access (node-io.js).
+import os from "node:os";
 import http from "node:http";
 import crypto from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
@@ -34,13 +35,14 @@ export async function createApp(opts) {
   const core = createCore({ store, runtime, env: {
     version: pkg.version, newId, hashPin, checkPin, randomToken: () => crypto.randomBytes(16).toString("hex"),
     getInfo: io.getInfo, discoverWled: io.discoverWled, ipOf: io.ipOf, listSources: io.listSources, startOsc,
-    uptime: () => process.uptime(), now: opts.now, discover: opts.discover } });
+    uptime: () => process.uptime(), now: opts.now, discover: opts.discover,
+    lan: () => Object.values(os.networkInterfaces()).flat().filter(a => a && a.family === "IPv4" && !a.internal).map(a => a.address) } });
   const ha = startHomeAssistant({ core, store, runtime, version: pkg.version });
 
   // ---------------------------------------------------------------- static files
   // /packages/ serves the engine and the server core to the browser too (the web app and the demo import them)
   const STATIC_DIRS = [["/engine/", path.join(ROOT, "packages/engine/src")], ["/packages/", path.join(ROOT, "packages")], ["/", path.join(ROOT, "apps/web")]];
-  const ALIASES = { "/playground": "apps/playground/index.html", "/demo.mp3": "apps/playground/demo.mp3" };
+  const ALIASES = { "/phone": "apps/web/phone.html", "/playground": "apps/playground/index.html", "/demo.mp3": "apps/playground/demo.mp3" };
   async function serveStatic(req, res, pathname) {
     let file = ALIASES[pathname] ? path.join(ROOT, ALIASES[pathname]) : null;
     if (!file) for (const [prefix, dir] of STATIC_DIRS) if (pathname.startsWith(prefix)) {

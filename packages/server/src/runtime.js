@@ -100,7 +100,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
 
   // ---------------------------------------------------------------- frame loop
   let lastT = performance.now(), fpsN = 0, fpsT = performance.now(), lastSync = 0, timer = null, previewTick = 0;
-  const previewClients = new Set(), syncSender = { s: null };
+  const previewClients = new Set(), phones = new Set(), syncSender = { s: null };
 
   function currentView(now) {
     const s = data().settings, off = (s.syncOffsetMs || 0) / 1000;
@@ -166,7 +166,16 @@ export function createRuntime(store, { io, logger = console } = {}) {
       const msg = new Uint8Array(1 + col8.length); msg[0] = 1; msg.set(col8, 1);
       for (const c of previewClients) if (c.open && !c.busy) c.send(msg);
     }
+    // phones as extra lights: each phone shows the colour of its own part of the room, so a crowd of phones moves with it
+    if (phones.size && previewTick % Math.max(1, Math.round((s.fps || 60) / 30)) === 0) sendPhones(sh.power ? 1 : 0);
     rt.frames++; fpsN++; if (now - fpsT > 1000) { rt.fps = fpsN * 1000 / (now - fpsT); fpsN = 0; fpsT = now; }
+  }
+  function sendPhones(on) {
+    const list = [...phones].filter(c => c.open), n = list.length, N = L.N; if (!N) return;
+    const win = Math.max(1, Math.round(N / Math.max(6, n * 2)));
+    list.forEach((c, i) => { if (c.busy) return; const mid = Math.floor((i + 0.5) / n * N); let r = 0, g = 0, b = 0, w = 0;
+      for (let k = mid - (win >> 1); k < mid - (win >> 1) + win; k++) { const q = ((k % N) + N) % N * 3, R = col8[q], G = col8[q + 1], B = col8[q + 2], l = 1 + R + G + B; r += R * l; g += G * l; b += B * l; w += l; }
+      const msg = new Uint8Array(5); msg[0] = 2; msg[1] = r / w * on; msg[2] = g / w * on; msg[3] = b / w * on; msg[4] = Math.min(255, i); c.send(msg); });
   }
   function sendAudioSync() {
     const an = rt.live.an; if (!syncSender.s) syncSender.s = new AudioSyncSender();
@@ -249,7 +258,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
       type: "status", source: rt.source, sourceLabel: rt.sourceLabel, fps: Math.round(rt.fps), leds: L.N, effect: D.showing, effectName: fx.list.find(e => e.id === D.showing)?.name || D.showing, style: D.style,
       styleName: fx.styles[D.style]?.name || D.style, bpm: V && V.bpm ? Math.round(V.bpm * 10) / 10 : null, part: V ? V.state : "idle",
       beat: V && V.g.has ? V.g.beatInBar : null, level: an ? Math.round(Math.min(1, an.eFast / an.eMax) * 100) / 100 : V ? Math.round((V.loud || 0) * 100) / 100 : 0,
-      bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, mqtt: rt.mqtt || null,
+      bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, mqtt: rt.mqtt || null, phones: phones.size,
       song: rt.song ? { name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
       capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null,
       overlay: overlayState(), devices: data().devices.map(d => ({ id: d.id, ...health.get(d.id), sent: outs.get(d.id)?.sender.sent || 0, used: outs.get(d.id)?.used || 0, amps: Math.round((outs.get(d.id)?.amps || 0) * 100) / 100, limited: !!outs.get(d.id)?.limited })),
@@ -272,7 +281,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
   if (data().settings.capture.enabled) startCaptureSource();
 
   return {
-    get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, rt, log, listeners, previewClients, health,
+    get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, rt, log, listeners, previewClients, phones, health,
     rebuild, syncDirector, startLoop, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
     identify, syncSegments, setPower, action, status, layoutInfo, checkDevice, note,
     close() { clearInterval(timer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },

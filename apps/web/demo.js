@@ -52,6 +52,15 @@ const core = createCore({ store, runtime, env: {
   hashPin, checkPin, getInfo: io.getInfo, discoverWled: io.discoverWled, ipOf, listSources: io.listSources, uptime: () => performance.now() / 1000, discover: true } });
 addEventListener("pagehide", () => store.flush());
 
+// phones as lights in the demo: the phone page, open in another tab of this browser, joins over a BroadcastChannel
+if (typeof BroadcastChannel !== "undefined") {
+  const ch = new BroadcastChannel("tempolight-phones"), seen = new Map();
+  ch.onmessage = e => { const m = e.data || {};
+    if (m.type === "join") { let c = seen.get(m.id); if (!c) { c = { open: true, busy: false, send: a => ch.postMessage({ to: m.id, c: [a[1], a[2], a[3]] }) }; seen.set(m.id, c); runtime.phones.add(c); runtime.note("A phone joined as a light"); } c.at = Date.now(); }
+    else if (m.type === "leave") { const c = seen.get(m.id); if (c) { runtime.phones.delete(c); seen.delete(m.id); } } };
+  setInterval(() => { for (const [id, c] of seen) if (Date.now() - c.at > 6000) { runtime.phones.delete(c); seen.delete(id); } }, 2000);
+}
+
 // first visit: the pretend controllers are "found" on the network; lay them out as a living room so there's something to see
 export const ready = (async () => {
   await core.discovery;

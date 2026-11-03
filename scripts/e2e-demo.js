@@ -13,7 +13,7 @@ const site = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../dist
 const MIME = { ".html": "text/html", ".js": "text/javascript", ".css": "text/css", ".json": "application/json", ".webmanifest": "application/manifest+json", ".png": "image/png", ".svg": "image/svg+xml", ".mp3": "audio/mpeg" };
 const server = http.createServer(async (req, res) => { // like Cloudflare static assets with single-page-application fallback
   let p = path.join(site, decodeURIComponent(new URL(req.url, "http://x").pathname));
-  try { if ((await stat(p)).isDirectory()) p = path.join(p, "index.html"); } catch { p = path.join(site, "index.html"); }
+  try { if ((await stat(p)).isDirectory()) p = path.join(p, "index.html"); } catch { try { await stat(p + ".html"); p += ".html"; } catch { p = path.join(site, "index.html"); } } // Pages serves /phone from phone.html
   try { const b = await readFile(p); res.writeHead(200, { "content-type": MIME[path.extname(p)] || "application/octet-stream" }); res.end(b); } catch { res.writeHead(404); res.end(); }
 });
 await new Promise(r => server.listen(0, "127.0.0.1", r));
@@ -71,6 +71,12 @@ await step("PIN lock works in the demo", async () => {
   await go("settings"); await page.fill("#s-pin", "1234"); await page.click("#s-lock"); await sleep(400); await go("settings");
   await page.click("#s-relock"); await sleep(600); await go("devices"); ok(await page.isVisible("#pin"), "devices not locked");
   await page.fill("#pin", "1234"); await page.click("#unlock"); await page.waitForSelector("#d-add"); await go("settings"); await page.click("#s-unlockset"); await sleep(300);
+});
+await step("phones as lights in the demo (another tab of the same browser)", async () => {
+  await page.goto(base + "/#/live"); await page.waitForSelector("#ph-qr svg");
+  const phone = await ctx.newPage(); await phone.goto(base + "/phone"); await phone.click("#go");
+  await until(async () => (await phone.evaluate(() => getComputedStyle(document.getElementById("light")).backgroundColor)) !== "rgb(0, 0, 0)", 6000, "demo phone stays black");
+  await until(() => page.textContent("#ph-n").then(t => /1 phone/.test(t)), 4000, "count not shown"); await phone.close();
 });
 await step("installable app: manifest, icons and service worker", async () => {
   const man = await (await fetch(base + "/manifest.webmanifest")).json(); ok(man.display === "standalone" && man.icons.length >= 3, "manifest");

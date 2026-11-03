@@ -200,3 +200,19 @@ test("night mode, sunset schedules, backup and restore, E1.31 output", async () 
     assert.equal((await s.call("POST", "/api/restore", backup)).status, 200); assert.equal(s.app.store.data.devices.length, 1); assert.equal(s.app.store.data.settings.location.lat, 19.076);
   } finally { await s.done(); udp.close(); }
 });
+
+test("phones as lights: each phone gets the colour of its part of the room", { skip: typeof WebSocket === "undefined" && "this Node.js has no WebSocket client (Node 22+)" }, async () => {
+  const s = await setup();
+  try {
+    await s.call("POST", "/api/devices", { virtual: true }); await s.call("PATCH", "/api/show", { effect: "solar" });
+    const net = await s.call("GET", "/api/network"); assert.ok(Array.isArray(net.body.addresses));
+    const open = () => new Promise(r => { const ws = new WebSocket(`ws://127.0.0.1:${s.port}/ws`); ws.binaryType = "arraybuffer"; ws.got = []; ws.onmessage = e => { if (typeof e.data !== "string") { const a = new Uint8Array(e.data); if (a[0] === 2) ws.got.push(a); } }; ws.onopen = () => { ws.send(JSON.stringify({ type: "phone", on: true })); r(ws); }; });
+    const a = await open(), b = await open();
+    assert.ok(await until(() => a.got.length > 5 && b.got.length > 5), "both phones get colours");
+    assert.equal(a.got.at(-1).length, 5); assert.notEqual(a.got.at(-1)[4], b.got.at(-1)[4], "phones get different places in the room");
+    assert.ok(a.got.some(x => x[1] + x[2] + x[3] > 0), "the colour is not black");
+    assert.equal((await s.call("GET", "/api/status")).body.phones, 2);
+    a.close(); assert.ok(await until(async () => (await s.call("GET", "/api/status")).body.phones === 1), "a phone that leaves is removed");
+    b.close();
+  } finally { await s.done(); }
+});

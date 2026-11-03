@@ -154,6 +154,7 @@ export function createCore({ store, runtime, env }) {
   route("GET", "/api/health", null, () => ({ ok: true, version: env.version, uptime: env.uptime(), fps: Math.round(runtime.rt.fps), leds: runtime.layout.N }));
   route("GET", "/api/effects", null, () => runtime.effects.list);
   route("GET", "/api/layout", null, () => runtime.layoutInfo());
+  route("GET", "/api/network", null, () => ({ addresses: env.lan ? env.lan() : [] })); // for the phone QR code
   route("GET", "/api/log", null, () => runtime.log.slice(-100));
 
   // like or ban an effect for automatic mode, and its settings: speed, intensity, hue (degrees), saturation, mirror
@@ -284,12 +285,13 @@ export function createCore({ store, runtime, env }) {
         if (binary) { if (c.data.audio) runtime.pushPcm(msg, "browser", c.data.audio.label, c.data.id, c.data.audio.rate); return; }
         let m; try { m = JSON.parse(msg); } catch { return; }
         if (m.type === "preview") { if (m.on) runtime.previewClients.add(c); else runtime.previewClients.delete(c); }
+        else if (m.type === "phone") { if (m.on) { if (!runtime.phones.has(c)) { runtime.phones.add(c); runtime.note(`A phone joined as a light (${runtime.phones.size} now)`); } } else runtime.phones.delete(c); }
         else if (m.type === "audio-start") { c.data.audio = { rate: Number(m.rate) || 22050, label: String(m.label || "Browser audio").slice(0, 80) }; }
         else if (m.type === "audio-stop") { c.data.audio = null; runtime.stopLive(c.data.id); }
         else if (m.type === "clock") runtime.songClock(m, null);
         else if (m.type === "action" && m.action) { if (c.data.auth("pads")) { try { runtime.action(m.action); } catch {} } }
       },
-      close() { clients.delete(c); runtime.previewClients.delete(c); runtime.stopLive(c.data.id); runtime.clearSong(c.data.id); },
+      close() { clients.delete(c); runtime.previewClients.delete(c); runtime.phones.delete(c); runtime.stopLive(c.data.id); runtime.clearSong(c.data.id); },
     };
   }
   function broadcast(o) { const s = JSON.stringify(o); for (const c of clients) if (c.open && !c.busy) c.send(s); }

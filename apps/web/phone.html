@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Tempolight phone light</title>
+<style>
+  :root { color-scheme: dark; }
+  html, body { margin: 0; height: 100%; background: #000; color: #fff; font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
+  #light { position: fixed; inset: 0; background: #000; }
+  #intro { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; background: radial-gradient(circle at 50% 35%, #2a1640, #000 70%); }
+  #intro h1 { font-size: 26px; margin: 0 0 8px; letter-spacing: -.01em; }
+  #intro p { margin: 0 auto 22px; max-width: 30ch; color: #c9c2d6; }
+  #go { font: inherit; font-weight: 650; font-size: 18px; color: #12051f; background: linear-gradient(135deg, #ffb35c, #ff5fa2 55%, #8a7bff); border: 0; border-radius: 999px; padding: 16px 34px; cursor: pointer; }
+  #go:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
+  #note { position: fixed; left: 0; right: 0; bottom: max(14px, env(safe-area-inset-bottom)); text-align: center; font-size: 13px; color: rgba(255,255,255,.55); pointer-events: none; text-shadow: 0 1px 3px #000; }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div id="light" aria-hidden="true"></div>
+<div id="intro">
+  <div>
+    <h1>Be a light</h1>
+    <p>Your screen joins the room's lights and changes colour with the music. Turn your brightness up and hold the phone up high.</p>
+    <button id="go" type="button">Start</button>
+  </div>
+</div>
+<div id="note" role="status"></div>
+<script type="module">
+const light = document.getElementById("light"), note = document.getElementById("note"), intro = document.getElementById("intro");
+const demo = !!document.querySelector('meta[name="tempolight-demo"]') || new URLSearchParams(location.search).has("demo");
+let sock = null, lock = null, fade = null, last = 0;
+const show = (r, g, b) => { light.style.background = `rgb(${r},${g},${b})`; last = performance.now(); };
+const say = t => { note.textContent = t; clearTimeout(fade); if (t) fade = setTimeout(() => note.textContent = "", 4000); };
+
+function connectServer() {
+  const token = new URLSearchParams(location.search).get("token");
+  sock = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws${token ? `?token=${encodeURIComponent(token)}` : ""}`);
+  sock.binaryType = "arraybuffer";
+  sock.onopen = () => { sock.send(JSON.stringify({ type: "phone", on: true })); say("Connected. Enjoy the show!"); };
+  sock.onmessage = e => { if (typeof e.data === "string") return; const a = new Uint8Array(e.data); if (a[0] === 2) show(a[1], a[2], a[3]); };
+  sock.onclose = () => { show(0, 0, 0); say("Lost the connection. Trying again…"); setTimeout(connectServer, 2000); };
+}
+// the online demo has no server: it talks to the demo running in another tab of this browser
+function connectDemo() {
+  const ch = new BroadcastChannel("tempolight-phones"), id = Math.random().toString(36).slice(2);
+  ch.onmessage = e => { const m = e.data; if (m && m.to === id) show(...m.c); };
+  const hello = () => ch.postMessage({ type: "join", id }); hello(); setInterval(hello, 2000);
+  addEventListener("pagehide", () => ch.postMessage({ type: "leave", id }));
+  setTimeout(() => { if (!last) say("Open the online demo in another tab of this browser to see this work. At home, phones join the Tempolight on your network."); }, 2500);
+}
+async function wake() { try { lock = await navigator.wakeLock?.request("screen"); } catch {} }
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && sock !== undefined) wake(); });
+document.getElementById("go").onclick = async () => {
+  intro.classList.add("hidden");
+  try { await document.documentElement.requestFullscreen?.({ navigationUI: "hide" }); } catch {}
+  wake(); if (demo) connectDemo(); else connectServer();
+};
+setInterval(() => { if (last && performance.now() - last > 3000) light.style.background = "#000"; }, 1000);
+</script>
+</body>
+</html>

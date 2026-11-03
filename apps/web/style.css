@@ -230,3 +230,10 @@ label.btn { display: inline-block; cursor: pointer; }
 .demo-bar a { color: var(--accent-ink); font-weight: 700; }
 body.demo .top { padding-top: 10px; }
 body.demo .side { top: 0; padding-top: 0; }
+
+/* phones as lights */
+.phones { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+.phones .qr { flex: none; background: #fff; border-radius: 12px; padding: 6px; line-height: 0; }
+.phones .qr svg { width: 168px; height: 168px; display: block; }
+.phones .stack { flex: 1 1 220px; min-width: 0; }
+.phones a { overflow-wrap: anywhere; }

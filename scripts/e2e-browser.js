@@ -75,6 +75,13 @@ await step("live pads: blackout, flash, build & drop", async () => {
   await page.click('[data-pad="build"]'); await sleep(300); ok(status().overlay.forced === "build", "build not forced");
   await page.keyboard.press("Escape"); await sleep(300); ok(!status().overlay.forced, "Esc did not clear"); await shot("06-live");
 });
+await step("phones as lights: QR code, a phone joins and shows the room's colours", async () => {
+  await go("live"); await until(() => page.$("#ph-qr svg"), 4000, "no QR code"); const href = await page.getAttribute("#ph-url a", "href"); ok(/\/phone$/.test(href), `phone link ${href}`);
+  const phone = await ctx.newPage(); phone.on("pageerror", e => errors.push("phone: " + e.message)); await phone.goto(`${base}/phone`); await phone.click("#go");
+  await until(() => status().phones === 1, 5000, "phone did not join"); await until(async () => (await phone.evaluate(() => getComputedStyle(document.getElementById("light")).backgroundColor)) !== "rgb(0, 0, 0)", 5000, "phone stays black");
+  await until(() => page.textContent("#ph-n").then(t => /1 phone/.test(t)), 3000, "count not shown"); await shot("06b-phones"); await phone.close();
+  await until(() => status().phones === 0, 5000, "phone not removed");
+});
 await step("effects: pick one by hand, then back to automatic", async () => {
   await go("effects"); await page.click('[data-fx="tunnel"]'); await sleep(400); ok(app.store.data.show.mode === "manual" && app.store.data.show.effect === "tunnel", "effect not set");
   await until(() => status().effect === "tunnel", 3000, "effect not showing"); await shot("07-effects"); await page.click("#e-auto"); await sleep(300); ok(app.store.data.show.mode === "auto", "not back to auto");
