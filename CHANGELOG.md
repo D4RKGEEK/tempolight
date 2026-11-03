@@ -6,6 +6,12 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Like or ban effects: automatic mode never picks banned effects and picks liked ones more often.
+- Effect settings, kept per effect and saved in scenes: speed, intensity, colour shift, saturation, mirror.
+- Accent layer: a second effect added on top of whatever is showing.
+- Zones: parts of the room can follow the main effect, run their own effect or the ambient light, have their own brightness, or be off.
+- Power limit per controller: the estimated current draw is shown and brightness is capped to the power supply.
+- Audio input picker with a level meter, and a one-tap timing fix that measures the speaker delay with the microphone.
 - 19 new effects (93 in total): Lighthouse, Corner Bounce, Gravity, Wave Collision, Portal, Stadium Wave, Vocal Glow, Chorus Bloom, Drop Rewind, Bass Rain, Beat Counter, Spectrum Rings, Neon Sign, Colour Cannons, Strobe Scatter, Oscilloscope, and three everyday ones that follow the clock: Box Breathing, Focus Timer, Wake-up Sunrise.
 - Effects can know how long until the next drop and since the last one (`S.dropIn`, `S.sinceDrop`).
 - Online demo: the real core runs in the browser with pretend WLED controllers; built by `scripts/build-site.js` and deployed to Cloudflare on every push (`wrangler.jsonc`).

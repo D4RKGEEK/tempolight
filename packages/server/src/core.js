@@ -39,7 +39,7 @@ export function createCore({ store, runtime, env }) {
   function cleanShape(s, devIds) {
     if (!s || !SHAPE_TYPES.has(s.type)) throw new HttpError(400, `Shape type must be one of: ${[...SHAPE_TYPES].join(", ")}`);
     const o = { type: s.type, name: String(s.name || s.type).slice(0, 60), count: Math.round(Number(s.count) || 0), dev: s.dev, rot: Number(s.rot) || 0, start: Number(s.start) || 0, rev: !!s.rev,
-      from: s.from === null || s.from === undefined || s.from === "" ? null : Math.max(0, Math.round(Number(s.from))) };
+      from: s.from === null || s.from === undefined || s.from === "" ? null : Math.max(0, Math.round(Number(s.from))), zone: s.zone ? String(s.zone).slice(0, 40) : null };
     if (!devIds.has(o.dev)) throw new HttpError(400, `Shape "${o.name}" points at a device that doesn't exist`);
     if (s.type === "matrix") { o.cols = Math.max(1, Math.min(256, Math.round(s.cols || 16))); o.rows = Math.max(1, Math.min(256, Math.round(s.rows || 16))); o.count = o.cols * o.rows; }
     if (!(o.count >= 1 && o.count <= 8192)) throw new HttpError(400, `Shape "${o.name}" needs between 1 and 8192 LEDs`);
@@ -113,6 +113,8 @@ export function createCore({ store, runtime, env }) {
     if (b.palette !== undefined) { if (!runtime.effects.palettes[b.palette]) throw new HttpError(400, `Unknown palette "${b.palette}"`); sh.palette = b.palette; }
     if (b.everyBeats !== undefined) sh.everyBeats = Math.max(1, Math.min(64, Math.round(Number(b.everyBeats))));
     if (b.speed !== undefined) sh.speed = Math.max(0.1, Math.min(4, Number(b.speed)));
+    if (b.layer !== undefined) { if (b.layer && !effectIds().has(b.layer.effect)) throw new HttpError(400, `Unknown effect "${b.layer.effect}"`);
+      sh.layer = b.layer ? { effect: b.layer.effect, amount: Math.max(0, Math.min(1.5, Number(b.layer.amount ?? 0.6))) } : null; }
     runtime.syncDirector(); changed("show");
   }
   function oscMessage({ address, args }) {
@@ -139,6 +141,25 @@ export function createCore({ store, runtime, env }) {
   route("GET", "/api/layout", null, () => runtime.layoutInfo());
   route("GET", "/api/log", null, () => runtime.log.slice(-100));
 
+  // like or ban an effect for automatic mode, and its settings: speed, intensity, hue (degrees), saturation, mirror
+  route("PATCH", "/api/effects/:id", "effects", async (ctx, p) => {
+    if (!effectIds().has(p.id)) throw new HttpError(404, `Unknown effect "${p.id}"`);
+    const b = ctx.body, prefs = data().settings.effectPrefs, sh = data().show; sh.params = sh.params || {};
+    if (b.pref !== undefined) { const v = Number(b.pref); if (v === 1 || v === -1) prefs[p.id] = v; else delete prefs[p.id]; }
+    if (b.params === null) delete sh.params[p.id];
+    else if (b.params) { const n = (v, lo, hi, d) => v === undefined ? d : Math.max(lo, Math.min(hi, Number(v)));
+      const cur = sh.params[p.id] || {}, q = { speed: n(b.params.speed, 0.1, 4, cur.speed ?? 1), intensity: n(b.params.intensity, 0, 3, cur.intensity ?? 1),
+        hue: n(b.params.hue, -180, 180, cur.hue ?? 0), saturation: n(b.params.saturation, 0, 2, cur.saturation ?? 1), mirror: b.params.mirror !== undefined ? !!b.params.mirror : !!cur.mirror };
+      if (q.speed === 1 && q.intensity === 1 && q.hue === 0 && q.saturation === 1 && !q.mirror) delete sh.params[p.id]; else sh.params[p.id] = q; }
+    runtime.syncDirector(); changed("show"); return { id: p.id, pref: prefs[p.id] || 0, params: sh.params[p.id] || null };
+  });
+  route("PUT", "/api/zones", "effects", async (ctx) => {
+    const list = ctx.body.zones; if (!Array.isArray(list)) throw new HttpError(400, "zones must be a list");
+    const zones = list.slice(0, 32).map((z, i) => { const mode = ["follow", "effect", "ambient", "off"].includes(z.mode) ? z.mode : "follow";
+      if (mode === "effect" && !effectIds().has(z.effect)) throw new HttpError(400, `Zone "${z.name}": pick an effect`);
+      return { id: String(z.id || `z${i + 1}`).slice(0, 40), name: String(z.name || `Zone ${i + 1}`).slice(0, 40), mode, effect: z.effect || null, brightness: Math.max(0, Math.min(1, Number(z.brightness ?? 1))) }; });
+    data().room.zones = zones; runtime.syncDirector(); changed("zones"); return zones;
+  });
   route("PATCH", "/api/show", "effects", async (ctx) => { applyShow(ctx.body); return data().show; });
   route("POST", "/api/power", "brightness", async (ctx) => { const b = ctx.body; await runtime.setPower(b.on ?? !data().show.power); changed("show"); return data().show; });
   route("POST", "/api/brightness", "brightness", async (ctx) => { const b = ctx.body; applySettings({ brightness: b.value }); return { brightness: data().settings.brightness }; });
@@ -152,6 +173,7 @@ export function createCore({ store, runtime, env }) {
     const d = data().devices.find(x => x.id === p.id); if (!d) throw new HttpError(404, "No such device"); const b = ctx.body;
     if (b.name !== undefined) d.name = String(b.name).slice(0, 60); if (b.host !== undefined) d.host = String(b.host).trim(); if (b.ddpPort !== undefined) d.ddpPort = Number(b.ddpPort) || 4048;
     if (b.leds !== undefined) d.leds = Math.max(0, Math.round(Number(b.leds))); if (b.enabled !== undefined) d.enabled = !!b.enabled;
+    if (b.maxAmps !== undefined) d.maxAmps = Math.max(0, Math.min(500, Number(b.maxAmps) || 0)); if (b.mAperLed !== undefined) d.mAperLed = Math.max(5, Math.min(200, Number(b.mAperLed) || 60));
     runtime.rebuild(); changed("devices"); return d;
   });
   route("DELETE", "/api/devices/:id", "admin", (ctx, p) => {
@@ -173,7 +195,7 @@ export function createCore({ store, runtime, env }) {
     const b = ctx.body, ids = new Set(data().devices.map(d => d.id));
     if (!Array.isArray(b.shapes)) throw new HttpError(400, "shapes must be a list");
     const shapes = b.shapes.map(s => cleanShape(s, ids));
-    data().room = { name: String(b.name || data().room.name || "My room").slice(0, 60), shapes }; runtime.rebuild(); changed("room"); return data().room;
+    data().room = { name: String(b.name || data().room.name || "My room").slice(0, 60), shapes, zones: data().room.zones || [] }; runtime.rebuild(); changed("room"); return data().room;
   });
   route("POST", "/api/room/preset", "admin", async (ctx) => {
     const b = ctx.body; if (!ROOM_PRESETS[b.id]) throw new HttpError(400, `Unknown preset "${b.id}"`);
@@ -186,7 +208,7 @@ export function createCore({ store, runtime, env }) {
   route("GET", "/api/scenes", null, () => data().scenes);
   route("POST", "/api/scenes", "scenes", async (ctx) => {
     const b = ctx.body, sh = data().show;
-    const sc = { id: env.newId("s"), name: String(b.name || "New scene").slice(0, 60), show: b.show || { mode: sh.mode, effect: sh.effect, style: sh.style, palette: sh.palette, everyBeats: sh.everyBeats, speed: sh.speed }, brightness: b.brightness ?? data().settings.brightness };
+    const sc = { id: env.newId("s"), name: String(b.name || "New scene").slice(0, 60), show: b.show || { mode: sh.mode, effect: sh.effect, style: sh.style, palette: sh.palette, everyBeats: sh.everyBeats, speed: sh.speed, params: JSON.parse(JSON.stringify(sh.params || {})), layer: sh.layer || null }, brightness: b.brightness ?? data().settings.brightness };
     data().scenes.push(sc); changed("scenes"); return sc;
   });
   route("PUT", "/api/scenes/:id", "scenes", async (ctx, p) => { const sc = data().scenes.find(s => s.id === p.id); if (!sc) throw new HttpError(404, "No such scene"); const b = ctx.body;

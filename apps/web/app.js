@@ -186,7 +186,9 @@ function musicPage(el) {
       `<div class="pb stack"><div id="m-now"></div><div class="tablewrap"><table><thead><tr><th>#</th><th>Song</th><th class="num">Tempo</th><th>Style</th><th class="num">Drops</th><th></th></tr></thead><tbody id="m-queue"></tbody></table></div></div>`, "span-8")}
     ${panel("Listen live", "For music you play anywhere else: Spotify, YouTube, a DJ app", "", `<div class="pb stack">
       <button class="btn" id="m-system" type="button">Listen to this computer's sound</button>
-      <button class="btn" id="m-mic" type="button">Listen with a microphone</button>
+      <div class="row" style="flex-wrap:nowrap"><button class="btn" id="m-mic" type="button" style="flex:1">Listen with a microphone</button></div>
+      <div class="field"><label for="m-input">Microphone or line-in</label><select id="m-input"><option value="">Default</option></select></div>
+      <div class="field"><span class="lbl">Input level <output id="m-lvl-o"></output></span><div class="meter"><i id="m-lvl"></i></div></div>
       <button class="btn danger" id="m-stop" type="button" hidden>Stop listening</button>
       <p class="faint" style="font-size:12.5px">Your browser will ask what to share. For computer sound in Chrome or Edge, choose the screen or tab and turn on “Share audio”. Audio stays on your network.</p>
       <div class="callout err" id="m-err" hidden></div></div>`, "span-4")}
@@ -196,6 +198,7 @@ function musicPage(el) {
     ${panel("Timing", "", "", `<div class="pb stack">
       <div class="field"><label for="m-off">Light timing <output id="m-off-o">${s.syncOffsetMs} ms</output></label><input type="range" id="m-off" min="-300" max="300" step="5" value="${s.syncOffsetMs}">
         <span class="help">If the lights come after the beat, move this to the right; if they come before it, move it left. Bluetooth speakers often need +150 to +250.</span></div>
+      <div class="row"><button class="btn" id="m-cal" type="button">Fix the timing automatically</button><span class="faint" id="m-cal-msg" style="font-size:12.5px">Plays a few clicks and listens with the microphone, so turn the speakers up and keep quiet for 5 seconds.</span></div>
       <label class="check"><input type="checkbox" id="m-pred" ${s.predict ? "checked" : ""}> Predict beats when listening live (lights land on the beat instead of just after it)</label>
       <div class="field"><label>Metronome when nothing plays</label><div class="row"><label class="check"><input type="checkbox" id="m-met" ${s.metronome.enabled ? "checked" : ""}> On</label><input type="number" id="m-bpmset" min="40" max="220" value="${s.metronome.bpm}" style="width:90px"> <span class="faint">BPM</span></div></div>
     </div>`, "span-6")}
@@ -210,7 +213,25 @@ function musicPage(el) {
   const lockedOut = !unlocked();
   $("#m-files").onchange = e => { A.addFiles([...e.target.files]); e.target.value = ""; };
   $("#m-demo").onclick = () => A.addUrl("/demo.mp3", "Tempolight demo track");
-  $("#m-system").onclick = () => A.listen("system"); $("#m-mic").onclick = () => A.listen("mic"); $("#m-stop").onclick = () => A.stopLive();
+  const inputKey = "tl.input"; const savedInput = (() => { try { return localStorage.getItem(inputKey) || ""; } catch { return ""; } })();
+  async function fillInputs() { const list = await A.listInputs(), selEl = $("#m-input"); if (!selEl) return;
+    selEl.innerHTML = '<option value="">Default</option>' + list.map((d, i) => opt(d.deviceId, d.label || `Input ${i + 1}`, d.deviceId === savedInput)).join(""); }
+  fillInputs(); navigator.mediaDevices?.addEventListener?.("devicechange", fillInputs);
+  $("#m-input").onchange = e => { try { localStorage.setItem(inputKey, e.target.value); } catch {} if (A.state.mode === "mic") A.listen("mic", e.target.value); };
+  $("#m-system").onclick = () => A.listen("system"); $("#m-mic").onclick = () => A.listen("mic", $("#m-input").value).then(fillInputs); $("#m-stop").onclick = () => A.stopLive();
+  if (!navigator.mediaDevices?.getUserMedia) { $("#m-cal").disabled = true; $("#m-cal-msg").textContent = "Needs microphone access, which this browser only allows on localhost or HTTPS."; }
+  $("#m-cal").onclick = async () => {
+    const b = $("#m-cal"), msg = $("#m-cal-msg"); b.disabled = true; msg.textContent = "Listening… keep quiet";
+    try {
+      const r = await A.calibrate($("#m-input").value, p => { msg.textContent = `Listening… ${Math.round(p * 100)}%`; });
+      if (!r.ok) { msg.textContent = r.heard ? `The clicks were hard to hear (${r.heard} of ${r.sent}). Turn the speakers up, move the phone or computer closer, and try again.` : "The microphone didn't hear the clicks. Turn the speakers up and try again."; return; }
+      const { offsetFromDelay } = await import("/calibrate.js"), off = offsetFromDelay(r.delayMs, r.reportedOutputMs);
+      await api("PATCH", "/api/settings", { syncOffsetMs: off }); await refreshState();
+      $("#m-off").value = off; $("#m-off-o").textContent = off + " ms";
+      msg.textContent = `Speakers to microphone: ${Math.round(r.delayMs)} ms. Light timing set to ${off > 0 ? "+" : ""}${off} ms.`;
+    } catch (e) { msg.textContent = e.name === "NotAllowedError" ? "Microphone permission was refused." : `Couldn't measure: ${e.message}`; }
+    finally { b.disabled = !unlocked(); }
+  };
   $("#m-tap").onclick = () => api("POST", "/api/action", { type: "tap" }).catch(e => toast(e.message, true));
   const setS = b => act(() => api("PATCH", "/api/settings", b)).then(refreshState).catch(() => {});
   $("#m-off").oninput = e => $("#m-off-o").textContent = e.target.value + " ms"; $("#m-off").onchange = e => setS({ syncOffsetMs: Number(e.target.value) });
@@ -220,7 +241,7 @@ function musicPage(el) {
     $("#m-capsrc").onchange = e => setS({ capture: { source: e.target.value } }); $("#m-capcmd").onchange = e => setS({ capture: { command: e.target.value.trim() } });
     $("#m-cap").onclick = () => setS({ capture: { enabled: !app.state.settings.capture.enabled } });
   }
-  for (const id of ["m-off", "m-pred", "m-met", "m-bpmset", "m-capsrc", "m-capcmd", "m-cap"]) if (lockedOut && $("#" + id)) $("#" + id).disabled = true;
+  for (const id of ["m-off", "m-pred", "m-met", "m-bpmset", "m-capsrc", "m-capcmd", "m-cap", "m-cal"]) if (lockedOut && $("#" + id)) $("#" + id).disabled = true;
   if (lockedOut && $("#m-capst")) $("#m-capst").textContent = "Timing and server settings are locked. Unlock in Settings to change them.";
 
   function renderQueue() {
@@ -250,6 +271,7 @@ function musicPage(el) {
     onStatus(m) {
       $("#m-src").textContent = m.sourceLabel; $("#m-bpm").textContent = m.bpm ? m.bpm.toFixed(0) : "–"; $("#m-part").textContent = partName[m.part] || m.part; $("#m-style").textContent = m.source === "idle" ? "–" : m.styleName;
       const bars = $$("#m-spec i"); bars.forEach((b, i) => b.style.height = (m.bands ? Math.max(2, m.bands[i] * 100) : 2) + "%");
+      const lv = A.level(); $("#m-lvl").style.width = Math.round(lv * 100) + "%"; $("#m-lvl-o").textContent = A.state.stream ? (lv < 0.02 ? "very quiet: turn it up or move closer" : Math.round(lv * 100) + "%") : "not listening";
       if (A.state.song && $("#m-fill")) { const p = A.pos(); $("#m-fill").style.width = (p / A.duration * 100) + "%"; $("#m-pos").textContent = fmtTime(p); }
       if (DEMO) return;
       const c = app.state.settings.capture; $("#m-cap").textContent = c.enabled ? "Stop listening on the server" : "Start listening on the server";
@@ -261,26 +283,57 @@ function musicPage(el) {
 
 // ---------------------------------------------------------------- Effects
 function effectsPage(el) {
-  const st = app.state; let tag = "all", q = "";
+  const st = app.state; let tag = "all", q = "", sel = null;
+  const prefs = () => app.state.settings.effectPrefs || {}, params = () => app.state.show.params || {};
   el.innerHTML = `${panel("Effects", `${st.effects.length} effects, all of them work on any layout`, `<button class="btn" id="e-auto" type="button">Back to automatic</button>`, `<div class="pb stack">
-      <div class="row"><input id="e-q" placeholder="Search effects" style="max-width:260px"><div class="chips" id="e-tags">${["all", "calm", "build", "drop", "home", "LedFx-like"].map(t => `<button class="chip" data-tag="${t}" aria-pressed="${t === "all"}" type="button">${t === "all" ? "All" : tagName[t]}</button>`).join("")}</div></div>
+      <div class="row"><input id="e-q" placeholder="Search effects" style="max-width:240px"><div class="chips" id="e-tags">${["all", "calm", "build", "drop", "home", "LedFx-like", "liked", "banned"].map(t => `<button class="chip" data-tag="${t}" aria-pressed="${t === "all"}" type="button">${t === "all" ? "All" : t === "liked" ? "♥ Liked" : t === "banned" ? "Banned" : tagName[t]}</button>`).join("")}</div></div>
+      <p class="faint" style="font-size:12.5px">Tap an effect to show it. ♥ makes automatic mode pick it more often; ⊘ means automatic mode never picks it.</p>
       <div class="grid-fx" id="e-grid"></div></div>`, "span-8")}
     ${panel("Preview", `<span id="e-now"></span>`, "", `<div class="stage" id="e-stage"></div>`, "span-4")}
+    ${panel("Effect settings", `<span id="e-selname"></span>`, `<button class="btn sm" id="e-reset" type="button">Reset</button>`, `<div class="pb stack" id="e-params">
+      <div class="field"><label for="e-sel">Effect</label><select id="e-sel">${st.effects.map(e => opt(e.id, e.name)).join("")}</select><span class="help">Settings are kept per effect and saved in scenes.</span></div>
+      <div class="field"><label for="p-speed">Speed <output id="p-speed-o"></output></label><input type="range" id="p-speed" min="0.25" max="3" step="0.05"></div>
+      <div class="field"><label for="p-int">Intensity <output id="p-int-o"></output></label><input type="range" id="p-int" min="0.1" max="2.5" step="0.05"></div>
+      <div class="field"><label for="p-hue">Colour shift <output id="p-hue-o"></output></label><input type="range" id="p-hue" min="-180" max="180" step="5"></div>
+      <div class="field"><label for="p-sat">Saturation <output id="p-sat-o"></output></label><input type="range" id="p-sat" min="0" max="2" step="0.05"></div>
+      <label class="check"><input type="checkbox" id="p-mirror"> Mirror left and right</label></div>`, "span-4")}
     ${panel("How effects are chosen", "", "", `<div class="pb controls">
       <div class="field"><label for="e-style">Music style</label><select id="e-style">${Object.entries(STYLE_NAMES()).map(([k, v]) => opt(k, v, k === st.show.style)).join("")}</select><span class="help">Each style has its own effect lists for calm parts, build-ups and drops.</span></div>
       <div class="field"><label for="e-pal">Colours</label><select id="e-pal">${st.palettes.map(p => opt(p, p === "auto" ? "Automatic" : p[0].toUpperCase() + p.slice(1), p === st.show.palette)).join("")}</select></div>
       <div class="field"><label for="e-every">Change effect every <output id="e-every-o">${st.show.everyBeats} beats</output></label><input type="range" id="e-every" min="4" max="64" step="4" value="${st.show.everyBeats}"><span class="help">In automatic mode. Song changes (build-up, drop) always switch straight away.</span></div>
       <div class="field"><label for="e-speed">Ambient speed <output id="e-speed-o">${st.show.speed}×</output></label><input type="range" id="e-speed" min="0.25" max="3" step="0.25" value="${st.show.speed}"></div>
-    </div>`, "span-12")}`;
+      <div class="field"><label for="e-layer">Accent layer</label><select id="e-layer">${opt("", "None", !st.show.layer)}${st.effects.map(e => opt(e.id, e.name, st.show.layer?.effect === e.id)).join("")}</select><span class="help">An extra effect added on top, for example Hi-hat Starfield over a calm background.</span></div>
+      <div class="field"><label for="e-lamt">Accent amount <output id="e-lamt-o">${Math.round((st.show.layer?.amount ?? 0.6) * 100)}%</output></label><input type="range" id="e-lamt" min="0.1" max="1.5" step="0.05" value="${st.show.layer?.amount ?? 0.6}"></div>
+    </div>`, "span-8")}`;
   const prev = createPreview($("#e-stage"));
   const can = guestOk("effects");
   function grid() {
-    const showing = app.status?.effect;
-    $("#e-grid").innerHTML = st.effects.filter(e => (tag === "all" || e.tag === tag) && (!q || e.name.toLowerCase().includes(q))).map(e =>
-      `<button class="fx ${e.id === showing ? "showing" : ""}" data-fx="${e.id}" aria-pressed="${st.show.mode === "manual" && st.show.effect === e.id}" type="button"${can ? "" : " disabled"}><b>${esc(e.name)}</b><span>${tagName[e.tag] || e.tag}</span></button>`).join("");
-    $$("#e-grid [data-fx]").forEach(b => b.onclick = () => act(() => api("PATCH", "/api/show", { effect: b.dataset.fx, mode: "manual" })).catch(() => {}));
+    const showing = app.status?.effect, pr = prefs();
+    $("#e-grid").innerHTML = st.effects.filter(e => (tag === "all" || e.tag === tag || (tag === "liked" && pr[e.id] === 1) || (tag === "banned" && pr[e.id] === -1)) && (!q || e.name.toLowerCase().includes(q))).map(e =>
+      `<div class="fx ${e.id === showing ? "showing" : ""} ${pr[e.id] === -1 ? "banned" : ""}" aria-pressed="${app.state.show.mode === "manual" && app.state.show.effect === e.id}">
+        <button class="fx-main" data-fx="${e.id}" type="button"${can ? "" : " disabled"}><b>${esc(e.name)}</b><span>${tagName[e.tag] || e.tag}${params()[e.id] ? " · tuned" : ""}</span></button>
+        <div class="fx-tools"><button class="fx-pref" data-like="${e.id}" aria-pressed="${pr[e.id] === 1}" title="Like: automatic mode picks it more" aria-label="Like ${esc(e.name)}" type="button"${can ? "" : " disabled"}>♥</button><button class="fx-pref" data-ban="${e.id}" aria-pressed="${pr[e.id] === -1}" title="Ban: automatic mode never picks it" aria-label="Ban ${esc(e.name)}" type="button"${can ? "" : " disabled"}>⊘</button></div></div>`).join("");
+    $$("#e-grid [data-fx]").forEach(b => b.onclick = () => { selectFx(b.dataset.fx); act(() => api("PATCH", "/api/show", { effect: b.dataset.fx, mode: "manual" })).catch(() => {}); });
+    const setPref = (id, v) => act(() => api("PATCH", `/api/effects/${id}`, { pref: prefs()[id] === v ? 0 : v })).then(() => refreshState()).then(grid).catch(() => {});
+    $$("#e-grid [data-like]").forEach(b => b.onclick = () => setPref(b.dataset.like, 1));
+    $$("#e-grid [data-ban]").forEach(b => b.onclick = () => setPref(b.dataset.ban, -1));
   }
-  grid();
+  // effect settings: shown for the chosen effect (the one playing, until you pick another)
+  const P = [["p-speed", "speed", 1, v => v + "×"], ["p-int", "intensity", 1, v => Math.round(v * 100) + "%"], ["p-hue", "hue", 0, v => (v > 0 ? "+" : "") + v + "°"], ["p-sat", "saturation", 1, v => Math.round(v * 100) + "%"]];
+  function selectFx(id) {
+    sel = id; $("#e-sel").value = id; $("#e-selname").textContent = st.effects.find(e => e.id === id)?.name || id; const cur = params()[id] || {};
+    for (const [eid, key, def, fmt] of P) { const v = cur[key] ?? def; $("#" + eid).value = v; $(`#${eid}-o`).textContent = fmt(v); }
+    $("#p-mirror").checked = !!cur.mirror;
+  }
+  let pt = null;
+  const sendParams = () => { clearTimeout(pt); pt = setTimeout(() => { const id = sel, body = { mirror: $("#p-mirror").checked }; for (const [eid, key] of P) body[key] = Number($("#" + eid).value);
+    api("PATCH", `/api/effects/${id}`, { params: body }).then(r => { app.state.show.params = app.state.show.params || {}; if (r.params) app.state.show.params[id] = r.params; else delete app.state.show.params[id]; }).catch(e => toast(e.message, true)); }, 120); };
+  for (const [eid, , , fmt] of P) $("#" + eid).oninput = e => { $(`#${eid}-o`).textContent = fmt(Number(e.target.value)); sendParams(); };
+  $("#p-mirror").onchange = sendParams;
+  $("#e-sel").onchange = e => selectFx(e.target.value);
+  $("#e-reset").onclick = () => act(() => api("PATCH", `/api/effects/${sel}`, { params: null })).then(() => refreshState()).then(() => selectFx(sel)).catch(() => {});
+  if (!can) $$("#e-params input, #e-reset").forEach(x => x.disabled = true);
+  grid(); selectFx(app.status?.effect || st.show.effect);
   $("#e-q").oninput = e => { q = e.target.value.toLowerCase(); grid(); };
   $$("#e-tags [data-tag]").forEach(b => b.onclick = () => { tag = b.dataset.tag; $$("#e-tags .chip").forEach(c => c.setAttribute("aria-pressed", c === b)); grid(); });
   const show = b => act(() => api("PATCH", "/api/show", b)).catch(() => {});
@@ -288,10 +341,14 @@ function effectsPage(el) {
   $("#e-style").onchange = e => show({ style: e.target.value }); $("#e-pal").onchange = e => show({ palette: e.target.value });
   $("#e-every").oninput = e => $("#e-every-o").textContent = e.target.value + " beats"; $("#e-every").onchange = e => show({ everyBeats: Number(e.target.value) });
   $("#e-speed").oninput = e => $("#e-speed-o").textContent = e.target.value + "×"; $("#e-speed").onchange = e => show({ speed: Number(e.target.value) });
-  if (!can) $$("#e-style, #e-pal, #e-every, #e-speed, #e-auto").forEach(x => x.disabled = true);
-  let lastFx = null;
+  const layer = () => show({ layer: $("#e-layer").value ? { effect: $("#e-layer").value, amount: Number($("#e-lamt").value) } : null });
+  $("#e-layer").onchange = layer; $("#e-lamt").oninput = e => $("#e-lamt-o").textContent = Math.round(e.target.value * 100) + "%"; $("#e-lamt").onchange = layer;
+  if (!can) $$("#e-style, #e-pal, #e-every, #e-speed, #e-auto, #e-layer, #e-lamt").forEach(x => x.disabled = true);
+  let lastFx = null, followed = true;
+  $("#e-sel").addEventListener("change", () => { followed = false; });
   return { preview: true,
-    onStatus(m) { $("#e-now").textContent = `${m.effectName}${app.state.show.mode === "auto" ? " (automatic)" : ""}`; if (m.effect !== lastFx) { lastFx = m.effect; grid(); } },
+    onStatus(m) { $("#e-now").textContent = `${m.effectName}${app.state.show.mode === "auto" ? " (automatic)" : ""}`;
+      if (m.effect !== lastFx) { lastFx = m.effect; grid(); if (followed && !el.contains(document.activeElement)) selectFx(m.effect); } },
     onChanged(w) { if (w.has("show")) { Object.assign(st, app.state); grid(); } },
     destroy() { prev.destroy(); } };
 }
@@ -388,10 +445,10 @@ function scenesPage(el) {
 function devicesPage(el) {
   if (!unlocked()) return lockScreen(el, "Device setup");
   const st = app.state;
-  el.innerHTML = `${panel("Devices", "WLED controllers that receive the light", `<button class="btn" id="d-scan" type="button">Scan network</button><button class="btn" id="d-virtual" type="button">Add virtual device</button>`, `<div class="tablewrap"><table><thead><tr><th>On</th><th>Name</th><th>Address</th><th class="num">LEDs</th><th class="num">Used</th><th class="num">DDP port</th><th>Status</th><th>Firmware</th><th class="num">Frames sent</th><th></th></tr></thead><tbody id="d-rows"></tbody></table></div>`, "span-12")}
+  el.innerHTML = `${panel("Devices", "WLED controllers that receive the light", `<button class="btn" id="d-scan" type="button">Scan network</button><button class="btn" id="d-virtual" type="button">Add virtual device</button>`, `<div class="tablewrap"><table><thead><tr><th>On</th><th>Name</th><th>Address</th><th class="num">LEDs</th><th class="num">Used</th><th class="num">DDP port</th><th class="num" title="Power supply limit in amps. Brightness is capped so the strip never draws more.">Power limit (A)</th><th class="num">Drawing now</th><th>Status</th><th>Firmware</th><th class="num">Frames sent</th><th></th></tr></thead><tbody id="d-rows"></tbody></table></div>`, "span-12")}
     ${panel("Add a controller", "", "", `<div class="pb"><div class="row"><input id="d-ip" placeholder="IP address, e.g. 192.168.1.42 (or host:port)" style="max-width:340px"><input id="d-name" placeholder="Name (optional)" style="max-width:220px"><button class="btn primary" id="d-add" type="button">Add</button></div>
       ${DEMO ? `<p class="callout" style="margin-top:8px">This demo has pretend controllers at ${Object.keys(demo.FAKE_WLED).join(", ")}. Press “Scan network” to find them.</p>` : ""}
-      <p class="faint" style="margin-top:8px;font-size:12.5px">Find the address in the WLED app or your router. Tempolight sends light with DDP on UDP port 4048; in WLED, keep “Receive UDP realtime” on (Sync settings).</p></div>`, "span-6")}
+      <p class="faint" style="margin-top:8px;font-size:12.5px">Power limit: enter your power supply's amps (for example 10 for a 5 V 10 A supply) and Tempolight keeps the strip under it, estimating about 60 mA per LED at full white. Find the address in the WLED app or your router. Tempolight sends light with DDP on UDP port 4048; in WLED, keep “Receive UDP realtime” on (Sync settings).</p></div>`, "span-6")}
     ${panel("Found on the network", `<span id="d-scanmsg">Press “Scan network” to look</span>`, "", `<div class="tablewrap"><table><tbody id="d-found"></tbody></table></div>`, "span-6")}`;
   function rows(m) {
     const s = m || app.status || { devices: [] };
@@ -400,16 +457,19 @@ function devicesPage(el) {
       return `<tr><td><input type="checkbox" data-en="${d.id}" ${d.enabled ? "checked" : ""} aria-label="Send to this device"></td><td><input value="${esc(d.name)}" data-name="${d.id}" style="width:150px"></td>
         <td>${d.virtual ? '<span class="faint">virtual</span>' : `<input class="mono" value="${esc(d.host)}" data-host="${d.id}" style="width:150px">`}</td>
         <td class="num"><input type="number" min="1" value="${d.leds || ""}" data-leds="${d.id}"></td><td class="num">${h.used ?? 0}</td><td class="num">${d.virtual ? "–" : `<input type="number" min="1" max="65535" value="${d.ddpPort || 4048}" data-port="${d.id}">`}</td>
+        <td class="num"><input type="number" min="0" max="500" step="0.5" placeholder="none" value="${d.maxAmps || ""}" data-amps="${d.id}" aria-label="Power limit in amps"></td>
+        <td class="num">${h.amps != null ? `${h.amps.toFixed(1)} A${h.limited ? ' <span class="badge warn" title="Brightness is being held back to stay under the limit">capped</span>' : ""}` : "–"}</td>
         <td>${!d.enabled ? '<span class="badge">Off</span>' : h.online ? `<span class="badge live"><i></i>Online</span> ${sig}` : h.online === false ? `<span class="badge err" title="${esc(h.error)}"><i></i>Offline</span>` : '<span class="badge">Checking</span>'}</td>
         <td class="mono faint">${esc(h.version || "")}</td><td class="num">${h.sent ?? 0}</td>
         <td><button class="btn sm" data-id="${d.id}" type="button">Identify</button> ${d.virtual ? "" : `<button class="btn sm" data-seg="${d.id}" type="button" title="Write this room's segments into WLED">Send segments</button> <button class="btn sm" data-chk="${d.id}" type="button">Check</button>`} <button class="btn sm danger" data-del="${d.id}" type="button">Remove</button></td></tr>`; }).join("")
-      || '<tr><td colspan="10" class="faint">No devices yet. Scan the network or add one by address.</td></tr>';
+      || '<tr><td colspan="12" class="faint">No devices yet. Scan the network or add one by address.</td></tr>';
     const patch = (id, b) => act(() => api("PATCH", `/api/devices/${id}`, b), "Saved").catch(() => {});
     $$("[data-en]").forEach(x => x.onchange = () => patch(x.dataset.en, { enabled: x.checked }));
     $$("[data-name]").forEach(x => x.onchange = () => patch(x.dataset.name, { name: x.value }));
     $$("[data-host]").forEach(x => x.onchange = () => patch(x.dataset.host, { host: x.value }));
     $$("[data-leds]").forEach(x => x.onchange = () => patch(x.dataset.leds, { leds: Number(x.value) }));
     $$("[data-port]").forEach(x => x.onchange = () => patch(x.dataset.port, { ddpPort: Number(x.value) }));
+    $$("[data-amps]").forEach(x => x.onchange = () => patch(x.dataset.amps, { maxAmps: Number(x.value) || 0 }));
     $$("[data-id]").forEach(x => x.onclick = () => api("POST", `/api/devices/${x.dataset.id}/identify`).then(() => toast("Lighting it up in white")).catch(e => toast(e.message, true)));
     $$("[data-seg]").forEach(x => x.onclick = () => act(() => api("POST", `/api/devices/${x.dataset.seg}/segments`), "Segments sent to WLED").catch(() => {}));
     $$("[data-chk]").forEach(x => x.onclick = () => act(() => api("POST", `/api/devices/${x.dataset.chk}/check`)).then(h => toast(h.online ? `Online, WLED ${h.version}, ${h.ledsReported} LEDs` : `Offline: ${h.error}`, !h.online)).catch(() => {}));

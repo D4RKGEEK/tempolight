@@ -147,3 +147,26 @@ test("server-side capture: listens to a sound source with no browser open", { sk
     await s.call("PATCH", "/api/settings", { capture: { enabled: false } }); assert.equal(s.app.runtime.status().capture, null);
   } finally { await s.done(); rmSync(dir, { recursive: true, force: true }); }
 });
+
+test("effect likes/bans and settings, zones, and the power limit", async () => {
+  const wled = await startFakeWled({ leds: 100 }), s = await setup();
+  try {
+    const d = (await s.call("POST", "/api/devices", { host: wled.host })).body; await s.call("PATCH", `/api/devices/${d.id}`, { ddpPort: wled.ddpPort });
+    await s.call("PATCH", "/api/show", { effect: "strobechase" }); await s.call("PATCH", "/api/effects/strobechase", { params: { intensity: 3 } });
+    await s.call("POST", "/api/brightness", { value: 1 }); await sleep(400);
+    const before = wled.lastFrame.reduce((a, b) => a + b, 0);
+    await s.call("PATCH", `/api/devices/${d.id}`, { maxAmps: 0.5, mAperLed: 60 }); await sleep(700);
+    const after = wled.lastFrame.reduce((a, b) => a + b, 0), mA = 100 + after * 20 / 255;
+    assert.ok(mA <= 520, `limited to 0.5 A (estimate ${mA.toFixed(0)} mA, before ${before})`);
+    const st = s.app.runtime.status().devices[0]; assert.ok(st.amps <= 0.55, `reported ${st.amps} A`);
+    const r = await s.call("PATCH", "/api/effects/laser", { pref: -1, params: { speed: 2, mirror: true } });
+    assert.equal(r.body.pref, -1); assert.equal(r.body.params.speed, 2); assert.equal(s.app.runtime.director.settings.prefs.laser, -1);
+    assert.equal((await s.call("PATCH", "/api/effects/nope", { pref: 1 })).status, 404);
+    const shapes = s.app.store.data.room.shapes.map(x => ({ ...x, zone: "desk" }));
+    assert.equal((await s.call("PUT", "/api/room", { shapes })).status, 200);
+    const z = await s.call("PUT", "/api/zones", { zones: [{ id: "desk", name: "Desk", mode: "off" }] }); assert.equal(z.status, 200);
+    await sleep(300); assert.equal(wled.lastFrame.reduce((a, b) => a + b, 0), 0, "zone off is dark");
+    assert.equal((await s.call("PUT", "/api/zones", { zones: [{ id: "desk", mode: "effect", effect: "nope" }] })).status, 400);
+    const sc = await s.call("POST", "/api/scenes", { name: "With settings" }); assert.ok(sc.body.show.params.strobechase, "scenes keep effect settings");
+  } finally { await s.done(); wled.close(); }
+});

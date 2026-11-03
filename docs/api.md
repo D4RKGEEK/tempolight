@@ -20,7 +20,9 @@ Calls marked with a guest area (effects, scenes, pads, brightness) work without 
 | --- | --- | --- |
 | `POST /api/power` | brightness | `{on: true}` (no body toggles) |
 | `POST /api/brightness` | brightness | `{value: 0.6}` (0 to 1) |
-| `PATCH /api/show` | effects | any of `{mode: "auto"\|"manual", effect, style, palette, everyBeats, speed}`. Setting `effect` alone switches to manual |
+| `PATCH /api/show` | effects | any of `{mode: "auto"\|"manual", effect, style, palette, everyBeats, speed, layer: {effect, amount} \| null}`. Setting `effect` alone switches to manual |
+| `PATCH /api/effects/:id` | effects | `{pref: 1}` like, `{pref: -1}` ban, `{pref: 0}` neither; `{params: {speed, intensity, hue, saturation, mirror}}` or `{params: null}` to reset |
+| `PUT /api/zones` | effects | `{zones: [{id, name, mode: "follow"\|"effect"\|"ambient"\|"off", effect, brightness}]}`; shapes join a zone with their `zone` field |
 | `POST /api/action` | pads | `{type: "flash", color: "#ff0000"}`, `{type: "strobe", on: true}`, `blackout`, `freeze`, `hold` (`color` or none to release), `boost` (`value` 0–2), `next`, `drop`, `build` (`seconds`), `tap`, `cancel`, `identify` (`device` or `shape`) |
 
 ## Scenes and schedules
@@ -42,7 +44,7 @@ Calls marked with a guest area (effects, scenes, pads, brightness) work without 
 | --- | --- | --- |
 | `GET /api/devices` | | |
 | `POST /api/devices` | admin | `{host: "192.168.1.42", name?, ddpPort?, force?}` (reads the LED count from WLED); `{virtual: true}` for a pretend room |
-| `PATCH /api/devices/:id` | admin | `{name?, host?, leds?, ddpPort?, enabled?}` |
+| `PATCH /api/devices/:id` | admin | `{name?, host?, leds?, ddpPort?, enabled?, maxAmps?, mAperLed?}`; `maxAmps` caps brightness to the power supply |
 | `DELETE /api/devices/:id` | admin | also removes its shapes |
 | `POST /api/devices/:id/identify` | | lights that controller's shapes |
 | `POST /api/devices/:id/segments` | admin | writes the room's LED ranges into WLED as segments |

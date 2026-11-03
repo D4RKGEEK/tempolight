@@ -27,7 +27,64 @@ export function createDirector(layout, fx) {
     identify: null, styleName: "party",
   };
   /** Settings the app can change at any time. */
-  const settings = { mode: "auto", effect: "shock", style: "auto", palette: "auto", ambient: "northern", everyBeats: 8, safe: false, dropFlash: true, speed: 1 };
+  const settings = { mode: "auto", effect: "shock", style: "auto", palette: "auto", ambient: "northern", everyBeats: 8, safe: false, dropFlash: true, speed: 1,
+    prefs: {},    // effect id -> 1 (liked: shows up more in automatic mode) or -1 (banned: never chosen automatically)
+    params: {},   // effect id -> {speed, intensity, hue, saturation, mirror}
+    zones: [],    // [{id, mode: "follow"|"effect"|"ambient"|"off", effect, brightness}]; shapes join a zone with shape.zone
+    layer: null,  // {effect, amount}: an accent effect added on top of whatever is showing
+  };
+  const ZBUF = new Float32Array(N * 3);
+  const fixedPal = () => settings.palette !== "auto";
+
+  // ---- per-effect settings, applied to any effect after it renders
+  let MIRROR = null;
+  function mirrorMap() { // for each LED, the LED closest to its left-right mirror image in the room
+    if (MIRROR) return MIRROR; const { PX, PY } = layout; let x0 = 1e9, x1 = -1e9; for (let i = 0; i < N; i++) { x0 = Math.min(x0, PX[i]); x1 = Math.max(x1, PX[i]); }
+    MIRROR = new Int32Array(N); for (let i = 0; i < N; i++) { const mx = x0 + x1 - PX[i], my = PY[i]; let bi = i, bd = 1e9;
+      for (let j = 0; j < N; j++) { const dx = PX[j] - mx; if (dx > bd || -dx > bd) continue; const d = dx * dx + (PY[j] - my) ** 2; if (d < bd) { bd = d; bi = j; } } MIRROR[i] = bi; }
+    return MIRROR;
+  }
+  function colourMatrix(hueDeg, sat) { // CSS hue-rotate then saturate, as one 3x3 matrix
+    const a = hueDeg * Math.PI / 180, c = Math.cos(a), s = Math.sin(a);
+    const H = [.213 + c * .787 - s * .213, .715 - c * .715 - s * .715, .072 - c * .072 + s * .928, .213 - c * .213 + s * .143, .715 + c * .285 + s * .140, .072 - c * .072 - s * .283, .213 - c * .213 - s * .787, .715 - c * .715 + s * .715, .072 + c * .928 + s * .072];
+    const S = [.213 + .787 * sat, .715 - .715 * sat, .072 - .072 * sat, .213 - .213 * sat, .715 + .285 * sat, .072 - .072 * sat, .213 - .213 * sat, .715 - .715 * sat, .072 + .928 * sat];
+    const M = new Array(9); for (let r = 0; r < 3; r++) for (let k = 0; k < 3; k++) M[r * 3 + k] = S[r * 3] * H[k] + S[r * 3 + 1] * H[3 + k] + S[r * 3 + 2] * H[6 + k]; return M;
+  }
+  function renderFx(id, S, out) {
+    const p = settings.params[id];
+    if (!p) { fx.render(id, S, out); return out; }
+    fx.render(id, p.speed && p.speed !== 1 ? { ...S, t: S.t * p.speed } : S, out);
+    const gain = p.intensity ?? 1, hue = p.hue || 0, sat = p.saturation ?? 1;
+    if (hue || sat !== 1) { const M = colourMatrix(hue, sat);
+      for (let i = 0; i < out.length; i += 3) { const r = out[i], g = out[i + 1], b = out[i + 2];
+        out[i] = Math.max(0, M[0] * r + M[1] * g + M[2] * b); out[i + 1] = Math.max(0, M[3] * r + M[4] * g + M[5] * b); out[i + 2] = Math.max(0, M[6] * r + M[7] * g + M[8] * b); } }
+    if (gain !== 1) for (let i = 0; i < out.length; i++) out[i] *= gain;
+    if (p.mirror) { const m = mirrorMap(); ZTMP.set(out); for (let i = 0; i < N; i++) { const j = m[i] * 3; out[i * 3] = ZTMP[j]; out[i * 3 + 1] = ZTMP[j + 1]; out[i * 3 + 2] = ZTMP[j + 2]; } }
+    return out;
+  }
+  const ZTMP = new Float32Array(N * 3);
+  const withPrefs = list => { const out = []; for (const id of list) { const p = settings.prefs[id]; if (p === -1) continue; out.push(id); if (p === 1) out.push(id); }
+    // liked effects come round twice as often; if everything in a list is banned, fall back to the list
+    return out.length ? out : list; };
+
+  // ---- zones: parts of the room with their own effect, the ambient effect, their own brightness, or off
+  const zoneIdx = new Map(); layout.LF && layout.shapes && (() => { for (let i = 0; i < N; i++) { const z = layout.shapes[layout.LF[i]]?.zone; if (!z) continue; if (!zoneIdx.has(z)) zoneIdx.set(z, []); zoneIdx.get(z).push(i); } })();
+  function applyZones(S, t) {
+    for (const z of settings.zones) {
+      const idx = zoneIdx.get(z.id); if (!idx) continue; const b = z.brightness ?? 1;
+      if (z.mode === "off") { for (const i of idx) { COL[i * 3] = COL[i * 3 + 1] = COL[i * 3 + 2] = 0; } continue; }
+      if (z.mode === "effect" || z.mode === "ambient") {
+        const id = z.mode === "ambient" ? settings.ambient : z.effect; if (!ids.has(id)) continue;
+        renderFx(id, z.mode === "ambient" || !S ? idleSignals(t * settings.speed, palette(), fixedPal()) : S, ZBUF);
+        for (const i of idx) { COL[i * 3] = ZBUF[i * 3] * b; COL[i * 3 + 1] = ZBUF[i * 3 + 1] * b; COL[i * 3 + 2] = ZBUF[i * 3 + 2] * b; } continue;
+      }
+      if (b !== 1) for (const i of idx) { COL[i * 3] *= b; COL[i * 3 + 1] *= b; COL[i * 3 + 2] *= b; }
+    }
+  }
+  function applyLayer(S, t) {
+    const L = settings.layer; if (!L || !ids.has(L.effect) || !(L.amount > 0)) return;
+    renderFx(L.effect, S || idleSignals(t * settings.speed, palette(), fixedPal()), ZBUF); for (let i = 0; i < COL.length; i++) COL[i] += ZBUF[i] * L.amount;
+  }
 
   const style = V => fx.styles[settings.style !== "auto" ? settings.style : (V && V.style) || "party"] || fx.styles.party;
   const palette = () => settings.palette === "auto" ? fx.palettes.auto[st.palIdx % fx.palettes.auto.length] : (fx.palettes[settings.palette] || fx.palettes.neon);
@@ -36,7 +93,7 @@ export function createDirector(layout, fx) {
     const g = V.g;
     if (settings.mode !== "auto") { const want = ids.has(settings.effect) ? settings.effect : "shock"; if (st.cur !== want) { st.prev = st.cur; st.cur = want; st.xfadeT = t; } return; }
     const ST = style(V);
-    const sec = ST.mode === "sections" ? (V.state === "silent" ? "calm" : V.state) : V.level, pool = ST.pools[sec] || ST.pools.calm || ST.pools.low;
+    const sec = ST.mode === "sections" ? (V.state === "silent" ? "calm" : V.state) : V.level, pool = withPrefs(ST.pools[sec] || ST.pools.calm || ST.pools.low);
     const wrongPool = !pool.includes(st.cur), hot = sec === "drop" || sec === "peak";
     const barReady = g.has && g.beatInBar === 0 && g.idx - st.lastSwitchBeat >= settings.everyBeats * ST.every * (hot ? 1 : 2);
     if (!st.poolIdx[sec]) st.poolIdx[sec] = 0;
@@ -51,7 +108,7 @@ export function createDirector(layout, fx) {
 
   function renderAmbient(t, out) {
     if (settings.ambient === "off" || !ids.has(settings.ambient)) { out.fill(0); return false; }
-    fx.render(settings.ambient, idleSignals(t * settings.speed, palette(), settings.palette !== "auto"), out); return true;
+    renderFx(settings.ambient, idleSignals(t * settings.speed, palette(), settings.palette !== "auto"), out); return true;
   }
   function keepAlive(t, floor) {
     if (settings.ambient === "off" || st.cur === settings.ambient || floor <= 0.001) return;
@@ -99,16 +156,16 @@ export function createDirector(layout, fx) {
     COL.fill(0);
     if (st.overlay.freeze) { COL.set(PREV); overlays(wall); return COL; }
     if (!V) {
-      if (settings.mode !== "auto" && ids.has(settings.effect)) { fx.render(settings.effect, idleSignals(t * settings.speed, palette(), settings.palette !== "auto"), COL); st.cur = settings.effect; st.showing = st.cur; }
+      if (settings.mode !== "auto" && ids.has(settings.effect)) { renderFx(settings.effect, idleSignals(t * settings.speed, palette(), settings.palette !== "auto"), COL); st.cur = settings.effect; st.showing = st.cur; }
       else { renderAmbient(t, COL); st.showing = settings.ambient; }
-      st.lastState = "idle";
+      st.lastState = "idle"; applyLayer(null, t); applyZones(null, t);
     } else {
       const ST = style(V); st.styleName = settings.style !== "auto" ? settings.style : V.style || "party";
       choose(t, V);
       const S = buildSignals(st.styleName === V.style ? V : { ...V, style: st.styleName }, t, { pal: palette(), fixed: settings.palette !== "auto", ...extra });
-      fx.render(st.cur, S, COL);
+      renderFx(st.cur, S, COL);
       if (st.prev && t - st.xfadeT < ST.xfade) {
-        const k = (t - st.xfadeT) / ST.xfade; PREV.set(COL); fx.render(st.prev, S, COL);
+        const k = (t - st.xfadeT) / ST.xfade; PREV.set(COL); renderFx(st.prev, S, COL);
         for (let i = 0; i < COL.length; i++) COL[i] = PREV[i] * k + COL[i] * (1 - k);
       }
       // never let the room go dark: quiet parts fade to the ambient effect; only the planned pause before a drop is a blackout
@@ -119,6 +176,7 @@ export function createDirector(layout, fx) {
       else keepAlive(t, ST.floor * Math.max(0, Math.min(1, 1.3 - (V.loud || 0) * 1.6)));
       const df = t - V.dropT; if (settings.dropFlash && ST.mode === "sections" && df >= 0 && df < 0.7) { const e = Math.exp(-df / 0.17) * 2.3; for (let i = 0; i < COL.length; i++) COL[i] += e; }
       st.lastState = V.state; st.showing = st.cur;
+      applyLayer(S, t); applyZones(S, t);
     }
     overlays(wall);
     if (settings.safe) limiter(wall);

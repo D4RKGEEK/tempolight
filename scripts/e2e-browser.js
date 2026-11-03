@@ -79,6 +79,29 @@ await step("effects: pick one by hand, then back to automatic", async () => {
   await go("effects"); await page.click('[data-fx="tunnel"]'); await sleep(400); ok(app.store.data.show.mode === "manual" && app.store.data.show.effect === "tunnel", "effect not set");
   await until(() => status().effect === "tunnel", 3000, "effect not showing"); await shot("07-effects"); await page.click("#e-auto"); await sleep(300); ok(app.store.data.show.mode === "auto", "not back to auto");
 });
+await step("effects: like, ban and tune an effect", async () => {
+  await go("effects"); await page.click('[data-like="laser"]'); await until(() => app.store.data.settings.effectPrefs.laser === 1, 3000, "like not saved");
+  await page.click('[data-ban="tunnel"]'); await until(() => app.store.data.settings.effectPrefs.tunnel === -1, 3000, "ban not saved");
+  await page.selectOption("#e-sel", "laser"); await page.fill("#p-int", "2"); await page.dispatchEvent("#p-int", "input");
+  await until(() => app.store.data.show.params.laser?.intensity === 2, 3000, "effect setting not saved");
+  await page.selectOption("#e-layer", "stars"); await until(() => app.store.data.show.layer?.effect === "stars", 3000, "accent layer not saved"); await shot("07b-effects");
+});
+await step("room: a zone switched off goes dark on its controller", async () => {
+  await go("room"); await page.click("#z-add"); await until(() => (app.store.data.room.zones || []).length === 1, 3000, "zone not created");
+  const zid = app.store.data.room.zones[0].id;
+  const n = (await page.$$('#r-rows select[data-k="zone"]')).length; for (let k = 0; k < n; k++) await page.locator('#r-rows select[data-k="zone"]').nth(k).selectOption(zid);
+  await page.click("#r-save"); await until(() => app.store.data.room.shapes.every(sh => sh.zone === zid), 4000, "shapes not in the zone");
+  await go("room"); await page.selectOption('#z-rows select[data-zk="mode"]', "off"); await until(() => app.store.data.room.zones[0].mode === "off", 3000, "zone mode not saved");
+  await sleep(400); ok(lum(A) === 0, "zone off but LEDs still lit"); await shot("07c-zones");
+  await page.click("#z-rows [data-zdel]"); await until(() => !app.store.data.room.zones.length, 3000, "zone not deleted"); await go("room"); await page.click("#r-save"); await sleep(300);
+});
+await step("devices: power limit", async () => {
+  await go("devices"); const inp = page.locator("[data-amps]").first(); await inp.fill("1.5"); await inp.dispatchEvent("change");
+  await until(() => app.store.data.devices[0].maxAmps === 1.5, 3000, "power limit not saved");
+});
+await step("music: input picker, level meter and timing fix are there", async () => {
+  await go("music"); ok(await page.isVisible("#m-input") && await page.isVisible("#m-cal") && (await page.$("#m-lvl")) !== null, "controls missing");
+});
 await step("scenes: save, apply; schedules: add and run now", async () => {
   await go("scenes"); await page.click("#sc-save"); await until(() => app.store.data.scenes.some(s => s.name === "Test scene"), 3000, "scene not saved");
   await go("scenes"); await page.selectOption("#t-act", "off"); await page.fill("#t-time", "23:15"); await page.click("#t-add");

@@ -46,6 +46,9 @@ designer: it knows where the beat is, which part of the song you're in, and what
 | 🎵 **Song analysis** | Tempo, beat grid, downbeats, bars, build-ups, drops and music style, from the whole song before it plays |
 | 🎧 **Live listening** | This computer's sound or a microphone from the browser; a sound card on a Raspberry Pi with no browser open |
 | ✨ **93 effects** | Every effect works on every layout: Warp Tunnel, Kick Shockwave, Spiral Galaxy, Laser Show, Fireworks, Thunderstorm, Aurora, Candlelight… ([full list](docs/effects.md)) |
+| ❤️ **Make it yours** | Like or ban effects, tune each one (speed, intensity, colour, mirror), add an accent layer, and split the room into zones with their own effect or brightness |
+| ⏱️ **One-tap timing fix** | Plays clicks, listens with the microphone and sets the light delay for your speakers, Bluetooth included |
+| 🔌 **Power limit** | Tell it your power supply's amps and the strip never draws more |
 | 🎛️ **Live pads** | Flash, strobe, blackout, freeze, build & drop, drop now, next effect, boost, tap tempo, colour hold, with keyboard shortcuts |
 | 🏠 **Room layouts** | Presets (four walls, TV, gaming desk, bedroom, living room, matrix, club, rings), drag-and-drop editing, any LED ranges per shape, one click to write segments into WLED |
 | 🔎 **Plug and play** | Finds WLED controllers on your network (mDNS and a network scan), reads their LED counts, notices when one changes address |

@@ -147,12 +147,21 @@ tr.sel td { background: var(--accent-bg) !important; }
 .log span:last-child { color: var(--text); overflow-wrap: anywhere; }
 
 .grid-fx { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
-.fx { text-align: left; border: 1px solid var(--line); background: var(--panel); border-radius: 7px; padding: 9px 11px; display: flex; flex-direction: column; gap: 3px; }
+.fx { border: 1px solid var(--line); background: var(--panel); border-radius: 7px; display: flex; align-items: stretch; min-width: 0; }
+.fx-main { flex: 1; min-width: 0; text-align: left; border: 0; background: none; padding: 9px 4px 9px 11px; display: flex; flex-direction: column; gap: 3px; }
+.fx-main b, .fx-main span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fx-tools { display: flex; flex-direction: column; justify-content: center; gap: 2px; padding: 4px 6px 4px 0; }
+.fx-pref { border: 0; background: none; color: var(--faint); font-size: 14px; line-height: 1; padding: 3px 4px; border-radius: 4px; }
+.fx-pref:hover:not(:disabled) { background: var(--panel-2); color: var(--text); }
+.fx-pref[data-like][aria-pressed="true"] { color: #e5486b; }
+.fx-pref[data-ban][aria-pressed="true"] { color: var(--err); }
+.fx.banned { opacity: .55; }
+.fx.banned .fx-main b { text-decoration: line-through; }
 .fx:hover { border-color: var(--faint); }
-.fx b { font-size: 13px; font-weight: 600; }
-.fx span { font-size: 11.5px; color: var(--faint); }
+.fx-main b { font-size: 13px; font-weight: 600; }
+.fx-main span { font-size: 11.5px; color: var(--faint); }
 .fx[aria-pressed="true"] { border-color: var(--accent); background: var(--accent-bg); }
-.fx.showing b::after { content: " ●"; color: var(--accent); }
+.fx.showing .fx-main b::after { content: " ●"; color: var(--accent); }
 .chips { display: flex; gap: 6px; flex-wrap: wrap; }
 .chip { border: 1px solid var(--line); border-radius: 999px; padding: 3px 11px; font-size: 12.5px; background: var(--panel); }
 .chip[aria-pressed="true"] { background: var(--text); color: var(--panel); border-color: var(--text); }

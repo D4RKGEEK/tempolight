@@ -7,10 +7,11 @@ export const DEFAULTS = () => ({
     audioSync: false, osc: { enabled: false, port: 9000 }, autoDiscover: true,
     capture: { enabled: false, source: "auto", command: "" }, metronome: { enabled: false, bpm: 120 },
     guest: { effects: true, scenes: true, pads: true, brightness: true },
+    effectPrefs: {}, // effect id -> 1 liked, -1 banned (automatic mode)
   },
-  show: { power: true, mode: "auto", effect: "shock", style: "auto", palette: "auto", everyBeats: 8, speed: 1 },
+  show: { power: true, mode: "auto", effect: "shock", style: "auto", palette: "auto", everyBeats: 8, speed: 1, params: {}, layer: null },
   devices: [],
-  room: { name: "My room", shapes: [] },
+  room: { name: "My room", shapes: [], zones: [] },
   scenes: [
     { id: "party", name: "Party", show: { mode: "auto", style: "party", palette: "auto" }, brightness: 1 },
     { id: "chill", name: "Chill evening", show: { mode: "auto", style: "chill", palette: "sunset" }, brightness: 0.55 },

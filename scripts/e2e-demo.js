@@ -50,7 +50,7 @@ await step("live pads: blackout and back", async () => {
 await step("effects: choose one", async () => { await go("effects"); await page.click('[data-fx="galaxy"]'); await until(async () => (await text("#sb-effect")) === "Spiral Galaxy", 3000, "effect not showing"); await page.click("#e-auto"); });
 await step("devices: scan finds the pretend controllers, frames are being sent", async () => {
   await go("devices"); await page.click("#d-scan"); await until(async () => (await text("#d-scanmsg")).includes("3 found"), 5000, "scan found nothing");
-  const sent = await page.$$eval("#d-rows tr td:nth-child(9)", tds => tds.map(t => Number(t.textContent))); ok(sent.every(n => n > 10), "frames sent " + sent);
+  const sent = await page.$$eval("#d-rows tr td:nth-child(11)", tds => tds.map(t => Number(t.textContent))); ok(sent.every(n => n > 10), "frames sent " + sent);
 });
 await step("room: four-walls preset and segments", async () => {
   await go("room"); await page.selectOption("#r-preset", "fourwalls"); await page.click("#r-use"); await sleep(500);

@@ -14,7 +14,7 @@ let rev = ""; try { rev = execSync("git rev-parse --short HEAD", { cwd: root, st
 const build = `${pkg.version}-${rev || Date.now().toString(36)}`;
 
 rmSync(out, { recursive: true, force: true }); mkdirSync(out, { recursive: true });
-const copy = (from, to) => cpSync(path.join(root, from), path.join(out, to), { recursive: true });
+const copy = (from, to) => cpSync(path.join(root, from), path.join(out, to), { recursive: true, filter: f => !f.endsWith(".test.js") });
 copy("apps/web", "");                                   // the app
 copy("packages/engine/src", "engine");                  // /engine/... (what the app imports)
 copy("packages/engine/src", "packages/engine/src");     // /packages/... (what the server core imports)

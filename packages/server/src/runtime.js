@@ -48,7 +48,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
   function syncDirector() {
     const s = data().settings, sh = data().show;
     Object.assign(D.settings, { mode: sh.mode, effect: sh.effect, style: sh.style, palette: sh.palette, everyBeats: sh.everyBeats, speed: sh.speed,
-      ambient: s.ambient, safe: s.safe, dropFlash: s.dropFlash });
+      ambient: s.ambient, safe: s.safe, dropFlash: s.dropFlash, prefs: s.effectPrefs || {}, params: sh.params || {}, layer: sh.layer || null, zones: data().room.zones || [] });
   }
   let col8 = new Uint8Array(0);
 
@@ -145,6 +145,11 @@ export function createRuntime(store, { io, logger = console } = {}) {
       o.buf.fill(0);
       shapes.forEach((sp, si) => { if (sp.dev !== d.id) return; const r = ranges[si], a = L.chainStart[si], n = Math.min(sp.type === "matrix" ? sp.cols * sp.rows : sp.count, o.size - r.start);
         if (n > 0) o.buf.set(col8.subarray(a * 3, (a + n) * 3), r.start * 3); });
+      // power: estimate the current the strip draws (about mAperLed at full white, ~1 mA idle per LED) and cap it to the supply
+      let sum = 0; for (let k = 0; k < o.buf.length; k++) sum += o.buf[k];
+      const perCh = (d.mAperLed || 60) / 3 / 255, idle = o.size; let mA = idle + sum * perCh; o.limited = false;
+      if (d.maxAmps > 0 && mA > d.maxAmps * 1000) { const k = Math.max(0, (d.maxAmps * 1000 - idle) / Math.max(1, sum * perCh)); for (let q = 0; q < o.buf.length; q++) o.buf[q] = o.buf[q] * k; mA = d.maxAmps * 1000; o.limited = true; }
+      o.amps = o.amps == null ? mA / 1000 : o.amps * 0.8 + mA / 1000 * 0.2;
       if (sendNow && !d.virtual) o.sender.send(o.buf);
     }
     // WLED audio sync, so the controllers' own sound-reactive effects can run too
@@ -240,7 +245,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
       bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, power: data().show.power, brightness: data().settings.brightness,
       song: rt.song ? { name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
       capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null,
-      overlay: overlayState(), devices: data().devices.map(d => ({ id: d.id, ...health.get(d.id), sent: outs.get(d.id)?.sender.sent || 0, used: outs.get(d.id)?.used || 0 })),
+      overlay: overlayState(), devices: data().devices.map(d => ({ id: d.id, ...health.get(d.id), sent: outs.get(d.id)?.sender.sent || 0, used: outs.get(d.id)?.used || 0, amps: Math.round((outs.get(d.id)?.amps || 0) * 100) / 100, limited: !!outs.get(d.id)?.limited })),
       uptime: Math.round((Date.now() - rt.startedAt) / 1000),
     };
   }

@@ -51,3 +51,24 @@ test("director: blackout, flash and photosensitivity limit", () => {
   for (let t = 0; t < 4; t += 1 / 60) { const c = D.frame(metronomeView(t, 175), t); const m = c.reduce((a, b) => a + b, 0) / c.length; if (m > prev * 1.8 + 0.12) jumps++; prev = m; }
   assert.ok(jumps <= 13, `at most ~3 big flashes a second in safe mode (got ${jumps} in 4 s)`);
 });
+
+test("director: banned effects never play, effect settings and zones apply", () => {
+  const shapes = exampleRoom(); shapes[0].zone = "ceiling"; shapes[1].zone = "tv";
+  const L = buildLayout(shapes), fx = createEffects(L), D = createDirector(L, fx);
+  const drop = t => ({ ...metronomeView(t, 128), state: "drop" });
+  D.settings.style = "party"; for (const id of fx.pools.drop) if (id !== "laser") D.settings.prefs[id] = -1;
+  for (let t = 0; t < 20; t += 1 / 30) D.frame(drop(t), t);
+  assert.equal(D.current, "laser", "only the effect that isn't banned plays");
+  const sum = (c, idx) => idx.reduce((a, i) => a + c[i * 3] + c[i * 3 + 1] + c[i * 3 + 2], 0);
+  const tv = [], ceil = []; for (let i = 0; i < L.N; i++) { if (L.LF[i] === 1) tv.push(i); if (L.LF[i] === 0) ceil.push(i); }
+  D.settings.mode = "manual"; D.settings.effect = "aurora";
+  const base = sum(D.frame(null, 3), tv);
+  D.settings.params.aurora = { intensity: 2 }; assert.ok(Math.abs(sum(D.frame(null, 3), tv) / base - 2) < 0.05, "intensity doubles the light");
+  D.settings.params.aurora = { hue: 120 }; const shifted = D.frame(null, 3); assert.ok(Math.abs(sum(shifted, tv) - base) / base < 0.5, "hue shift keeps roughly the same brightness");
+  D.settings.params = {};
+  D.settings.zones = [{ id: "tv", mode: "off" }, { id: "ceiling", mode: "follow", brightness: 0.5 }];
+  const z = D.frame(null, 3); assert.equal(sum(z, tv), 0, "the TV zone is off");
+  D.settings.zones = [{ id: "ceiling", mode: "follow", brightness: 1 }]; const full = sum(D.frame(null, 3), ceil);
+  D.settings.zones = [{ id: "ceiling", mode: "follow", brightness: 0.5 }]; assert.ok(Math.abs(sum(D.frame(null, 3), ceil) / full - 0.5) < 0.02, "zone brightness");
+  D.settings.zones = [{ id: "tv", mode: "effect", effect: "candle" }]; D.frame(null, 3); assert.ok(sum(D.frame(null, 3), tv) > 0, "zone runs its own effect");
+});

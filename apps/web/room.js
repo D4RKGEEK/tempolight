@@ -8,15 +8,18 @@ const clone = o => JSON.parse(JSON.stringify(o));
 
 export function roomPage(el) {
   const st = app.state, devs = st.devices;
-  let draft = clone(st.room.shapes), dirty = false, sel = draft.length ? 0 : -1, L = null, colors = null;
+  let draft = clone(st.room.shapes), dirty = false, sel = draft.length ? 0 : -1, L = null, colors = null, zones = clone(st.room.zones || []);
   el.innerHTML = `
     ${panel("Room", `<span id="r-sum"></span>`, `<button class="btn" id="r-discard" type="button" disabled>Discard</button><button class="btn primary" id="r-save" type="button" disabled>Save room</button>`,
       `<div class="stage" id="r-stage">${devs.length ? "" : '<div class="empty">Add a WLED controller on the Devices page first.</div>'}</div>`, "span-8")}
     ${panel("Start from a layout", "", "", `<div class="pb stack"><div class="field"><label for="r-preset">Preset</label><select id="r-preset">${st.presets.map(p => opt(p.id, p.name)).join("")}</select><span class="help" id="r-pdesc"></span></div>
       <button class="btn" id="r-use" type="button"${devs.length ? "" : " disabled"}>Use this layout</button><p class="faint" style="font-size:12.5px">Replaces the shapes below. LED counts are fitted to your controllers; you can change every number afterwards.</p></div>`, "span-4")}
     ${panel("Shapes", "Drag a shape in the picture to move it. LED numbers start at 0, like in WLED.", `<select id="r-newtype" style="width:auto">${Object.entries(TYPES).map(([k, v]) => opt(k, v)).join("")}</select><button class="btn" id="r-add" type="button"${devs.length ? "" : " disabled"}>Add shape</button>`,
-      `<div class="tablewrap"><table><thead><tr><th>Name</th><th>Type</th><th>Controller</th><th class="num">First LED</th><th class="num">LEDs</th><th>Uses LEDs</th><th>Reverse</th><th></th></tr></thead><tbody id="r-rows"></tbody></table></div>
+      `<div class="tablewrap"><table><thead><tr><th>Name</th><th>Type</th><th>Controller</th><th class="num">First LED</th><th class="num">LEDs</th><th>Uses LEDs</th><th>Reverse</th><th>Zone</th><th></th></tr></thead><tbody id="r-rows"></tbody></table></div>
        <div class="pb" id="r-geo" style="border-top:1px solid var(--line-2)"></div>`, "span-12")}
+    ${panel("Zones", "Give parts of the room their own effect, the ambient light, their own brightness, or switch them off", `<button class="btn" id="z-add" type="button">Add zone</button>`,
+      `<div class="tablewrap"><table><thead><tr><th>Name</th><th>What it shows</th><th>Effect</th><th>Brightness</th><th></th></tr></thead><tbody id="z-rows"></tbody></table></div>
+       <p class="faint pb" style="padding-top:0;font-size:12.5px">Put shapes in a zone with the Zone column above, then save the room. Zone settings apply straight away.</p>`, "span-12")}
     ${panel("Controllers", "Which LEDs each controller drives", "", `<div class="tablewrap"><table><thead><tr><th>Controller</th><th class="num">LEDs</th><th>Used by shapes</th><th>Check</th><th></th></tr></thead><tbody id="r-devs"></tbody></table></div>`, "span-12")}`;
 
   const preview = devs.length ? createPreview($("#r-stage"), { outlines: true, selected: () => sel, layout: () => dirty ? L : app.layout, colors: () => dirty ? colors : app.frame }) : null;
@@ -45,16 +48,17 @@ export function roomPage(el) {
         <td class="num">${s.type === "matrix" ? `${s.cols}×${s.rows}` : `<input type="number" min="1" max="8192" value="${s.count}" data-k="count" data-i="${i}">`}</td>
         <td class="mono">${r.start}–${r.end}</td>
         <td><input type="checkbox" data-k="rev" data-i="${i}" ${s.rev ? "checked" : ""} aria-label="Reverse direction"></td>
+        <td><select data-k="zone" data-i="${i}" aria-label="Zone">${opt("", "None", !s.zone)}${zones.map(z => opt(z.id, z.name, z.id === s.zone)).join("")}</select></td>
         <td><button class="btn sm" data-ident="${i}" type="button"${dirty ? ' disabled title="Save first"' : ""}>Identify</button> <button class="btn sm" data-dup="${i}" type="button">Copy</button> <button class="btn sm danger" data-rm="${i}" type="button">Delete</button></td></tr>`; }).join("")
-      || '<tr><td colspan="8" class="faint">No shapes. Pick a layout above, or add a shape.</td></tr>';
+      || '<tr><td colspan="9" class="faint">No shapes. Pick a layout above, or add a shape.</td></tr>';
     $$("#r-rows [data-k]").forEach(x => x.onchange = () => { const s = draft[Number(x.dataset.i)], k = x.dataset.k;
-      if (k === "rev") s.rev = x.checked; else if (k === "count") s.count = Math.max(1, Math.round(Number(x.value) || 1)); else if (k === "from") s.from = x.value === "" ? null : Math.max(0, Math.round(Number(x.value)));
+      if (k === "rev") s.rev = x.checked; else if (k === "zone") s.zone = x.value || null; else if (k === "count") s.count = Math.max(1, Math.round(Number(x.value) || 1)); else if (k === "from") s.from = x.value === "" ? null : Math.max(0, Math.round(Number(x.value)));
       else if (k === "type") Object.assign(s, convert(s, x.value)); else s[k] = x.value; touch(); });
     $$("#r-rows [data-row]").forEach(tr => tr.onclick = e => { if (e.target.closest("input,select,button")) return; sel = Number(tr.dataset.row); relayout(); render(); });
     $$("#r-rows [data-ident]").forEach(b => b.onclick = () => api("POST", "/api/room/identify", { shape: Number(b.dataset.ident) }).then(() => toast("Lighting it up: the blinking end is LED 0 of this shape")));
     $$("#r-rows [data-dup]").forEach(b => b.onclick = () => { const s = clone(draft[Number(b.dataset.dup)]); s.name += " copy"; s.from = null; move(s, 0.4, 0.4); draft.push(s); sel = draft.length - 1; touch(); });
     $$("#r-rows [data-rm]").forEach(b => b.onclick = () => { draft.splice(Number(b.dataset.rm), 1); sel = Math.min(sel, draft.length - 1); touch(); });
-    geometry(); devices(ranges);
+    geometry(); devices(ranges); zoneRows();
   }
 
   function geometry() {
@@ -73,6 +77,23 @@ export function roomPage(el) {
       else if (k === "cols" || k === "rows") { s[k] = Math.max(1, Math.round(v)); s.count = s.cols * s.rows; }
       else s[k] = v;
       touch(); });
+  }
+
+  // ---- zones: saved straight away (they're like a lighting setting), shapes join them via the Zone column
+  const MODES = { follow: "Follows the main effect", effect: "Its own effect", ambient: "The ambient light", off: "Off" };
+  let zt = null;
+  const saveZones = () => { clearTimeout(zt); zt = setTimeout(() => api("PUT", "/api/zones", { zones }).then(z => { zones = z; app.state.room.zones = z; }).catch(e => toast(e.message, true)), 150); };
+  function zoneRows() {
+    $("#z-rows").innerHTML = zones.map((z, i) => { const n = draft.filter(sh => sh.zone === z.id).length;
+      return `<tr><td><input value="${esc(z.name)}" data-zk="name" data-zi="${i}" style="width:140px"> <span class="faint">${n} shape${n === 1 ? "" : "s"}</span></td>
+        <td><select data-zk="mode" data-zi="${i}">${Object.entries(MODES).map(([k, v]) => opt(k, v, k === z.mode)).join("")}</select></td>
+        <td><select data-zk="effect" data-zi="${i}"${z.mode === "effect" ? "" : " disabled"}>${st.effects.map(e => opt(e.id, e.name, e.id === z.effect)).join("")}</select></td>
+        <td><input type="range" min="0" max="1" step="0.05" value="${z.brightness ?? 1}" data-zk="brightness" data-zi="${i}" style="width:120px" aria-label="Zone brightness"> <span class="mono">${Math.round((z.brightness ?? 1) * 100)}%</span></td>
+        <td><button class="btn sm danger" data-zdel="${i}" type="button">Delete</button></td></tr>`; }).join("") || '<tr><td colspan="5" class="faint">No zones yet. Example: a "TV" zone that turns off during movies, or a calm "Ceiling" zone while the desk parties.</td></tr>';
+    $$("#z-rows [data-zk]").forEach(x => { const ev = x.type === "range" ? "oninput" : "onchange"; x[ev] = () => { const z = zones[Number(x.dataset.zi)], k = x.dataset.zk;
+      z[k] = k === "brightness" ? Number(x.value) : x.value; if (k === "mode" && x.value === "effect" && !z.effect) z.effect = "aurora";
+      if (k === "brightness") x.nextElementSibling.textContent = Math.round(x.value * 100) + "%"; saveZones(); if (k === "mode") zoneRows(); }; });
+    $$("#z-rows [data-zdel]").forEach(b => b.onclick = () => { const z = zones.splice(Number(b.dataset.zdel), 1)[0]; draft.forEach(sh => { if (sh.zone === z.id) sh.zone = null; }); saveZones(); touch(); });
   }
 
   function devices(ranges) {
@@ -121,6 +142,8 @@ export function roomPage(el) {
     stageEl.onpointerup = () => { if (drag && drag.moved) touch(); drag = null; };
   }
 
+  $("#z-add").onclick = () => { const id = "z" + Date.now().toString(36); zones.push({ id, name: `Zone ${zones.length + 1}`, mode: "follow", effect: null, brightness: 1 });
+    if (sel >= 0 && !draft[sel].zone) { draft[sel].zone = id; touch(); } saveZones(); zoneRows(); };
   $("#r-add").onclick = () => { draft.push(newShape($("#r-newtype").value)); sel = draft.length - 1; touch(); };
   $("#r-use").onclick = async () => { if (draft.length && !confirm("Replace the current shapes with this layout?")) return;
     await act(() => api("POST", "/api/room/preset", { id: $("#r-preset").value }), "Layout applied").catch(() => {}); await refreshState(); await loadLayout(); route(); };

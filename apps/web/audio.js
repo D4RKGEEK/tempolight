@@ -88,7 +88,12 @@ export function createAudio({ ws, api, onChange }) {
   function remove(i) { if (i === S.index) { stopSong(); } S.queue.splice(i, 1); if (S.index > i) S.index--; emit(); }
 
   // ---------------------------------------------------------------- live listening
-  async function listen(kind) {
+  let meter = null; // analyser on whatever we're listening to, for the level meter
+  /** Microphones and line inputs this browser can use (names appear after permission is given once). */
+  async function listInputs() { try { return (await navigator.mediaDevices.enumerateDevices()).filter(d => d.kind === "audioinput"); } catch { return []; } }
+  function level() { if (!meter) return 0; const a = new Float32Array(meter.fftSize); meter.getFloatTimeDomainData(a); let s = 0; for (const v of a) s += v * v; return Math.min(1, Math.sqrt(s / a.length) * 4); }
+  async function calibrate(deviceId, onProgress) { const { measure } = await import("/calibrate.js"); const c = await ensureCtx(); return measure(c, deviceId, onProgress); }
+  async function listen(kind, deviceId) {
     S.error = null;
     if (!navigator.mediaDevices) { S.error = "This browser blocks audio capture on plain http. Open Tempolight as http://localhost on the computer that plays the music, or use server capture on the Music page."; emit(); return; }
     let stream;
@@ -97,16 +102,17 @@ export function createAudio({ ws, api, onChange }) {
         stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, systemAudio: "include", preferCurrentTab: false });
         stream.getVideoTracks().forEach(t => t.stop());
         if (!stream.getAudioTracks().length) { S.error = "No sound was shared. When the browser asks, pick a screen or tab and turn on “Share audio”."; emit(); return; }
-      } else stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
+      } else stream = await navigator.mediaDevices.getUserMedia({ audio: { deviceId: deviceId ? { exact: deviceId } : undefined, echoCancellation: false, noiseSuppression: false, autoGainControl: false } });
     } catch (e) { S.error = e.name === "NotAllowedError" ? "Permission was refused, so Tempolight can't hear anything." : `Couldn't start listening: ${e.message}`; emit(); return; }
     stopSong(); stopLive();
     const c = await ensureCtx(), src = c.createMediaStreamSource(stream); src.connect(tap);
+    meter = c.createAnalyser(); meter.fftSize = 1024; src.connect(meter);
     S.stream = { stream, src }; S.mode = kind; S.label = kind === "system" ? "This computer's sound" : (stream.getAudioTracks()[0]?.label || "Microphone");
     stream.getAudioTracks()[0].addEventListener("ended", () => { if (S.stream && S.stream.stream === stream) stopLive(); });
     startStream(S.label); emit();
   }
-  function stopLive() { if (!S.stream) return; try { S.stream.src.disconnect(); } catch {} S.stream.stream.getTracks().forEach(t => t.stop()); S.stream = null; if (S.mode !== "song") { S.mode = null; stopStream(); } emit(); }
+  function stopLive() { if (!S.stream) return; meter = null; try { S.stream.src.disconnect(); } catch {} S.stream.stream.getTracks().forEach(t => t.stop()); S.stream = null; if (S.mode !== "song") { S.mode = null; stopStream(); } emit(); }
 
-  return { state: S, addFiles, addUrl, playIndex, toggle, seek, next, prev, pos, remove, listen, stopLive, stopSong,
+  return { state: S, addFiles, addUrl, playIndex, toggle, seek, next, prev, pos, remove, listen, stopLive, stopSong, listInputs, level, calibrate,
     get duration() { return S.song ? S.song.item.buffer.duration : 0; } };
 }
