@@ -1,132 +1,266 @@
+<div align="center">
+
+<img src="docs/images/logo.svg" width="96" height="96" alt="Tempolight logo">
+
 # Tempolight
 
-Music-reactive lighting for [WLED](https://github.com/wled/WLED) that understands the song, not just the volume.
-Tempolight finds the beat, the bars, the build-ups and the drops, picks effects to match, and treats every LED in
-your room as one canvas, whatever shapes and wiring you have.
+**Music-reactive lighting for WLED that understands the song, not just the volume.**
 
-Runs on a PC, a Mac or a Raspberry Pi. Needs only Node.js: no packages to install, nothing to compile.
+A modern, lightweight alternative to LedFx. Tempolight finds the beat, the bars, the build-ups and the drops, picks
+effects to match, and treats every LED in your room as one canvas: strips, rings, frames, poles, hexagon panels
+and matrices.
+
+[![CI](https://github.com/D4RKGEEK/tempolight/actions/workflows/ci.yml/badge.svg)](https://github.com/D4RKGEEK/tempolight/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-f5a524.svg)](LICENSE)
+[![Node.js 20+](https://img.shields.io/badge/node-%E2%89%A520-339933.svg?logo=node.js&logoColor=white)](https://nodejs.org)
+[![Zero dependencies](https://img.shields.io/badge/dependencies-0-brightgreen.svg)](package.json)
+[![Platforms](https://img.shields.io/badge/runs%20on-Windows%20%7C%20macOS%20%7C%20Linux%20%7C%20Raspberry%20Pi-555.svg)](#install)
+
+[Install](#install) · [Features](#features) · [Screenshots](#screenshots) · [How it works](#how-it-works) · [API](docs/api.md) · [FAQ](#faq) · [Contributing](CONTRIBUTING.md)
+
+<img src="docs/images/preview.gif" width="760" alt="Tempolight's live preview: a room of LED strips, rings and frames lighting up in time with a song">
+
+</div>
+
+## Why Tempolight
+
+Most music-reactive LED software reacts to how loud the music is right now. Tempolight listens like a lighting
+designer: it knows where the beat is, which part of the song you're in, and what's coming next.
+
+- **It anticipates.** Songs you play are analysed in about two seconds before they start, so a build-up effect starts
+  on the right bar and the room explodes exactly on the drop. Live audio gets beat prediction, so lights land on the
+  beat instead of just after it.
+- **It fits the music.** Party, pop/rock, hip-hop, chill and ballad each get their own effects and their own energy.
+  Slow, sad songs get slow, warm light, not strobes.
+- **It never goes dark.** Quiet passages fade into a soft ambient effect; only the planned pause before a drop is
+  allowed to be a blackout.
+- **It's one room, not one strip.** Draw your room once (or pick a preset); effects sweep across walls, spin around
+  rings and ripple out from the centre, whatever your wiring.
+- **It's light.** Node.js and nothing else: no Python environment, no native audio libraries, no build step. About 7%
+  of one CPU core for 700 LEDs at 60 fps.
+
+## Features
+
+| | |
+| --- | --- |
+| 🎵 **Song analysis** | Tempo, beat grid, downbeats, bars, build-ups, drops and music style, from the whole song before it plays |
+| 🎧 **Live listening** | This computer's sound or a microphone from the browser; a sound card on a Raspberry Pi with no browser open |
+| ✨ **74 effects** | Every effect works on every layout: Warp Tunnel, Kick Shockwave, Spiral Galaxy, Laser Show, Fireworks, Thunderstorm, Aurora, Candlelight… ([full list](docs/effects.md)) |
+| 🎛️ **Live pads** | Flash, strobe, blackout, freeze, build & drop, drop now, next effect, boost, tap tempo, colour hold, with keyboard shortcuts |
+| 🏠 **Room layouts** | Presets (four walls, TV, gaming desk, bedroom, living room, matrix, club, rings), drag-and-drop editing, any LED ranges per shape, one click to write segments into WLED |
+| 🔎 **Plug and play** | Finds WLED controllers on your network (mDNS and a network scan), reads their LED counts, notices when one changes address |
+| 🕒 **Scenes & schedules** | Save a look as a scene; switch scenes, power or brightness at set times on chosen days |
+| 🔒 **PIN lock** | Guests at a party can pick effects and use the pads, but can't touch your setup |
+| 👁️ **Photosensitive-safe mode** | No more than three big flashes per second (WCAG 2.3.1) |
+| 🔌 **Integrations** | HTTP + WebSocket API, OSC (TouchOSC, Companion, lighting desks), WLED audio sync, Home Assistant via REST |
+| 📱 **Works on your phone** | Open the address it prints on any device on your Wi-Fi |
+
+## Screenshots
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/images/home-dark.png" alt="Home page: live room preview, now playing with tempo and song part, controls, scenes, devices and activity"><br><sub><b>Home</b>: live preview, now playing, controls</sub></td>
+    <td width="50%"><img src="docs/images/music.png" alt="Music page: song queue with tempo, style and drop count; live listening; timing"><br><sub><b>Music</b>: songs analysed before playing, drop markers, live listening</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/room.png" alt="Room page: preview of shapes and a table of shapes with controller, first LED, LED count and range"><br><sub><b>Room</b>: presets, drag shapes, LED ranges per controller</sub></td>
+    <td><img src="docs/images/live-pads.png" alt="Live pads page: big buttons for flash, strobe, blackout, freeze, build and drop"><br><sub><b>Live pads</b>: play the lights like an instrument</sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/effects.png" alt="Effects page: grid of effects filtered by calm, build-up and drop"><br><sub><b>Effects</b>: 74 effects, automatic or by hand</sub></td>
+    <td><img src="docs/images/scenes.png" alt="Scenes and schedules page"><br><sub><b>Scenes & schedules</b></sub></td>
+  </tr>
+  <tr>
+    <td><img src="docs/images/devices.png" alt="Devices page: controllers with status, firmware and frames sent"><br><sub><b>Devices</b>: scan, add, identify, send segments</sub></td>
+    <td><img src="docs/images/settings.png" alt="Settings page: lighting, integrations and PIN lock"><br><sub><b>Settings</b>: ambient light, safe mode, OSC, PIN lock</sub></td>
+  </tr>
+</table>
+
+<p align="center"><img src="docs/images/phone-home.png" width="240" alt="Tempolight on a phone"> &nbsp; <img src="docs/images/phone-pads.png" width="240" alt="Live pads on a phone"> &nbsp; <img src="docs/images/home-light.png" width="420" alt="Home page in the light theme"></p>
 
 ## Install
 
-**Linux, Raspberry Pi, macOS**
+You need **WLED controllers** (any ESP8266/ESP32 running [WLED](https://kno.wled.ge)) and a computer on the same
+network: Windows, macOS, Linux or a Raspberry Pi 3/4/5.
+
+> **Note:** the one-line installers download from this repository, so they work once it is public. Until then, use
+> [From source](#from-source).
+
+### Linux, Raspberry Pi, macOS
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/D4RKGEEK/tempolight/main/install/install.sh | sh
 tempolight --open
 ```
 
-On a Raspberry Pi that should run Tempolight all the time, add `--service`, so it starts at boot:
+On a Raspberry Pi that should run all the time, add `--service` to start Tempolight at boot (systemd):
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/D4RKGEEK/tempolight/main/install/install.sh | sh -s -- --service
 ```
 
-**Windows** (PowerShell)
+### Windows
+
+In PowerShell:
 
 ```powershell
 irm https://raw.githubusercontent.com/D4RKGEEK/tempolight/main/install/install.ps1 | iex
 ```
 
-This adds Tempolight to the Start menu and desktop. When Windows asks, allow it on your network.
+It installs Node.js if needed and adds Tempolight to the Start menu and desktop. When Windows asks, allow it on
+private networks so your lights and phone can reach it.
 
-**Docker**
+### Docker
 
 ```bash
-docker compose up -d        # uses host networking so it can find and reach WLED
+git clone https://github.com/D4RKGEEK/tempolight.git && cd tempolight
+docker compose up -d          # host networking, so it can find WLED and stream to it
 ```
 
-**From source** (Node.js 20 or newer)
+### From source
 
 ```bash
 git clone https://github.com/D4RKGEEK/tempolight.git
 cd tempolight
-npm start                   # opens http://localhost:8080
+npm start                     # Node.js 20+; opens http://localhost:8080. No npm install needed
 ```
 
-## First start
+## Getting started
 
-1. Tempolight looks for WLED controllers on your Wi-Fi and adds the ones it finds, each as a strip in the room.
-   Or add one by IP address, or press **Try it without lights** to get a virtual room.
-2. Open **Music** and play a song, or listen to whatever your computer is playing.
-3. That's it. The lights follow the music. Everything else is optional.
+1. **Start Tempolight.** On first start it looks for WLED controllers on your Wi-Fi and adds each one as a strip.
+   Nothing found? Add one by IP address on the Home page, or press **Try it without lights** for a virtual room.
+2. **Play music.** On **Music**, add songs from your computer (they play in the browser and are analysed first), or
+   press **Listen to this computer's sound** for Spotify, YouTube or a DJ app.
+3. **Optional: draw your room.** On **Room**, pick a layout like *One strip around four walls*, set which LEDs each
+   part uses, and press **Send segments to WLED**. Effects now move around the room the way it really is.
 
-Open the address it prints on your phone to control it from the sofa.
+More detail, hardware tips and troubleshooting: [docs/getting-started.md](docs/getting-started.md).
 
-## What's in the app
+### Headless on a Raspberry Pi
 
-| Page | What you do there |
-| --- | --- |
-| **Home** | Live preview of the room, what's playing (tempo, song part, style), quick effect and colour choice, scenes, device status, activity log |
-| **Music** | Play songs (analysed first, so the lights know where the drops are), listen to this computer's sound or a microphone, tap the beat, fix sound-to-light delay, metronome, listen on the server with no browser open |
-| **Effects** | 74 effects that work on any layout, with search and filters; automatic or fixed; music style, colours, how often to change |
-| **Live pads** | Play the lights like an instrument: flash, strobe, blackout, freeze, build & drop, drop now, next effect, boost, tap tempo, colour hold. Keyboard shortcuts |
-| **Scenes & schedules** | Save the current look as a scene; run scenes, lights on/off or brightness at set times on chosen days |
-| **Room** | Room layouts (four walls, TV, gaming desk, bedroom, living room, matrix, club, rings); drag shapes into place; set which LEDs each shape uses (for example LEDs 0–99 left wall, 100–199 back wall); identify shapes; write the segments into WLED |
-| **Devices** | Scan the network (mDNS and a network scan), add by IP, status, Wi-Fi signal, firmware, frames sent, identify, send segments |
-| **Settings** | What to show when nothing plays, idle brightness, frame rate, photosensitive-safe mode, WLED audio sync, OSC, PIN lock with guest permissions |
-
-### How it follows the music
-
-- **Songs you play in Tempolight** are analysed once before playing (about 2 seconds per song on a desktop): tempo,
-  beat grid, bars, build-ups, drops and style (party, pop/rock, hip-hop, chill, ballad). The lights can then start a
-  build-up effect on the right bar and hit the drop exactly.
-- **Live listening** (your computer's sound, a microphone, or a sound card on the server) finds kicks, snares and
-  hi-hats, the tempo and the song part as it goes, and predicts the next beat so lights land on time.
-- **Quiet music never turns the room dark**: slow songs get calm effects, and a soft ambient layer fills quiet parts.
-  When nothing plays, the ambient effect of your choice runs at a lower brightness.
-
-### Listening on a Raspberry Pi or headless PC
-
-Plug a USB sound card's input into your music source, then:
+Connect your music source to a USB sound card's input, then:
 
 ```bash
-tempolight --list-audio          # what this computer can capture from
-tempolight --audio auto          # start listening (also on the Music page)
-tempolight --audio song.mp3      # play a file through it, to test a setup (needs ffmpeg)
+tempolight --list-audio       # sound inputs this machine can capture from
+tempolight --audio auto       # listen (also switchable on the Music page)
+tempolight --audio song.mp3   # play a file through it to test the setup (needs ffmpeg)
 ```
 
-### Control from other apps
+### Command line
 
-- **HTTP API**: everything the app does, for Home Assistant, Stream Deck or scripts. See [docs/api.md](docs/api.md).
-- **OSC** (turn it on in Settings): `/tempolight/effect laser`, `/tempolight/scene Party`, `/tempolight/flash`,
-  `/tempolight/blackout 1`, `/tempolight/brightness 0.5`, `/tempolight/power 0`.
-- **WLED audio sync**: Tempolight can send WLED's sound-sync packets, so WLED's own sound-reactive effects work too.
-
-## How it is built
-
-```
-packages/
-  engine/    song analysis, live listening, director (picks effects), room layout and presets, 74 effects. No I/O
-  outputs/   DDP to WLED, WLED JSON API, network discovery (mDNS + scan), WLED audio sync
-  server/    HTTP API, WebSocket, render loop, scenes, schedules, OSC, sound capture, PIN lock, settings file
-apps/
-  web/         the web app (plain JavaScript modules, no build step)
-  playground/  the original single-page playground
-scripts/       fake WLED device, demo streamer, browser end-to-end test, docs generator
-install/       install scripts for Linux/Pi/macOS and Windows
-docs/          architecture, API, protocols, effects list
+```text
+tempolight [--port 8080] [--host 0.0.0.0] [--data ~/.tempolight] [--open] [--no-discover] [--audio <source|file>] [--list-audio]
 ```
 
-Light goes to WLED with DDP (UDP port 4048), 480 LEDs per packet, at 60 frames a second by default. Rendering 700
-LEDs with live listening uses about 7% of one desktop CPU core and 85 MB of memory. Details in
-[docs/architecture.md](docs/architecture.md).
+Settings live in one JSON file in `~/.tempolight` (or `$TEMPOLIGHT_DATA`). Back it up to keep your room and scenes.
+
+## How it works
+
+```mermaid
+flowchart LR
+  A[Song in the browser] -- beat map + playback clock --> D
+  B[System sound / mic in the browser] -- 22 kHz audio over WebSocket --> C
+  S[Sound card on the server] --> C
+  C[Live analyser<br/>kicks, snares, hats, tempo, song part, style] --> D
+  D[Director<br/>picks effects, crossfades,<br/>ambient floor, pads, safe mode] --> E[74 effects on<br/>per-LED room coordinates]
+  E --> F[Per-controller buffers] -- DDP, UDP 4048 --> W[WLED controllers]
+  E -- preview frames --> U[Web app]
+```
+
+- **Engine** (`packages/engine`, pure JavaScript, no I/O): whole-song analysis, live analysis, the director, room
+  layouts and the effects. The same code runs in the browser and on the server.
+- **Outputs** (`packages/outputs`): DDP exactly as WLED expects it, the WLED JSON API, discovery, audio sync.
+- **Server** (`packages/server`): HTTP API, WebSocket, render loop, scenes, schedules, OSC, sound capture, lock.
+- **Web app** (`apps/web`): plain JavaScript modules and CSS. No framework, no build, works offline.
+
+Read more in [docs/architecture.md](docs/architecture.md) and [docs/protocols.md](docs/protocols.md).
+
+## Integrations
+
+**HTTP API**: everything the app does. [docs/api.md](docs/api.md) has every call and a Home Assistant example.
+
+```bash
+curl -X POST http://tempolight.local:8080/api/scenes/party/apply
+curl -X PATCH http://tempolight.local:8080/api/show -H 'content-type: application/json' -d '{"effect":"tunnel"}'
+```
+
+**OSC** (enable in Settings, default UDP 9000): `/tempolight/effect laser` · `/tempolight/scene Party` ·
+`/tempolight/flash` · `/tempolight/blackout 1` · `/tempolight/brightness 0.5` · `/tempolight/power 0` · `/tempolight/next`
+
+**WLED audio sync**: Tempolight can send WLED's own sound-sync packets, so WLED's built-in sound-reactive effects run too.
+
+## FAQ
+
+<details><summary><b>How is this different from LedFx?</b></summary>
+
+LedFx is a great project and the inspiration for this one. Tempolight takes a different approach: it analyses songs
+ahead of time (beat grid, build-ups, drops, style), treats all your LEDs as one room with real shapes and positions,
+chooses effects by song part and style, and runs on Node.js alone with no Python or native dependencies. It's MIT
+licensed and contains no LedFx code.
+</details>
+
+<details><summary><b>Do I need to flash anything special to my ESP32?</b></summary>
+
+No. Stock WLED works (use a recent release). Tempolight streams with DDP, which WLED supports out of the box. Keep
+*Receive UDP realtime* turned on in WLED's Sync settings (it is by default).
+</details>
+
+<details><summary><b>Can it hear Spotify / YouTube / Apple Music?</b></summary>
+
+Yes. On the Music page press **Listen to this computer's sound** and share your screen or the tab with audio
+(Chrome or Edge on Windows share all system sound). On macOS, sharing a browser tab works; for all system sound use a
+loopback device such as BlackHole with server capture. Songs you add to Tempolight itself get the best timing.
+</details>
+
+<details><summary><b>The lights are a little behind the music.</b></summary>
+
+Move **Light timing** on the Music page. Bluetooth speakers usually need +150 to +250 ms. Keep **Predict beats**
+on for live listening.
+</details>
+
+<details><summary><b>It doesn't find my controllers.</b></summary>
+
+Make sure they're on the same network and subnet as the computer, then press **Scan network** on Devices, or add
+them by IP address. Guest Wi-Fi and some mesh systems block discovery; adding by IP always works. In Docker, use host
+networking.
+</details>
+
+<details><summary><b>How many LEDs can it drive?</b></summary>
+
+Thousands. The limit is usually Wi-Fi: each controller gets one DDP frame per refresh, 480 LEDs per packet. For big
+installs use wired Ethernet controllers or lower the frame rate in Settings.
+</details>
+
+<details><summary><b>Is it safe for people with photosensitive epilepsy?</b></summary>
+
+Turn on **Photosensitive-safe mode** in Settings: it limits big brightness jumps to three per second. Calm music
+styles already avoid strobing.
+</details>
 
 ## Development
 
 ```bash
-npm test                         # 27 tests: engine, analysis, live listening, outputs, server, lock, schedules, OSC, capture
-npm run fake-wled                # a pretend WLED controller on 127.0.0.1:18080 for working without hardware
-npm run test:browser             # clicks through every page in a real browser (needs Playwright)
-npm run docs                     # regenerate docs/effects.md
+npm test                  # 27 tests: analysis, live listening, effects, DDP, discovery, server API, lock, schedules, OSC, capture
+npm run serve             # run without opening a browser
+npm run fake-wled         # a pretend WLED controller (127.0.0.1:18080) to develop without hardware
+npm run test:browser      # clicks through every page in a real browser (needs Playwright)
+npm run docs              # regenerate docs/effects.md
 ```
 
-New effects are the easiest way in: see [CONTRIBUTING.md](CONTRIBUTING.md).
+New effects are the easiest way to contribute: one object in `packages/engine/src/effects.js`. See
+[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Roadmap
 
-See [docs/roadmap.md](docs/roadmap.md). Next up: Home Assistant (MQTT discovery), phone-camera LED mapping, a show
-editor, E1.31/Art-Net output and Hue.
+Next: Home Assistant (MQTT discovery), sunrise/sunset schedules, per-zone effects, phone-camera LED mapping, a show
+editor, E1.31/Art-Net output and Philips Hue. Full list in [docs/roadmap.md](docs/roadmap.md). Ideas welcome in
+[issues](https://github.com/D4RKGEEK/tempolight/issues).
+
+## Acknowledgements
+
+[WLED](https://github.com/wled/WLED) makes cheap LED controllers wonderful, and [LedFx](https://github.com/LedFx/LedFx)
+showed what music-reactive WLED can be.
 
 ## Licence
 
-MIT. Tempolight talks to WLED over its public network protocols and contains no LedFx code.
+[MIT](LICENSE) © 2026 D4RKGEEK and Tempolight contributors.

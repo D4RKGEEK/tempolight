@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tempolight: music-reactive lighting for WLED, a LedFx alternative</title>
+<meta name="description" content="Tempolight is free, open-source music-reactive lighting for WLED. It finds the beat, build-ups and drops, has 74 effects for any LED layout, and runs on Windows, macOS, Linux and Raspberry Pi with no dependencies.">
+<meta property="og:title" content="Tempolight: music-reactive lighting for WLED">
+<meta property="og:description" content="Lights that know the beat, the build-up and the drop. Free and open source, a modern LedFx alternative.">
+<meta property="og:image" content="https://d4rkgeek.github.io/tempolight/images/home-dark.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="images/logo.svg" type="image/svg+xml">
+<script type="application/ld+json">{"@context":"https://schema.org","@type":"SoftwareApplication","name":"Tempolight","applicationCategory":"MultimediaApplication","operatingSystem":"Windows, macOS, Linux, Raspberry Pi","license":"https://opensource.org/licenses/MIT","offers":{"@type":"Offer","price":"0"},"codeRepository":"https://github.com/D4RKGEEK/tempolight","description":"Music-reactive lighting for WLED that understands the song: beats, build-ups, drops and mood."}</script>
+<style>
+:root { --bg: #0e1014; --panel: #161a20; --line: #262b34; --text: #e8ebf0; --muted: #9aa3b2; --accent: #f5a524; --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, Menlo, Consolas, monospace; }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 var(--sans); }
+a { color: var(--accent); }
+.wrap { max-width: 1080px; margin: 0 auto; padding: 0 16px; }
+header { display: flex; align-items: center; gap: 12px; padding: 18px 0; }
+header img { width: 34px; height: 34px; }
+header b { font-size: 18px; }
+header nav { margin-left: auto; display: flex; gap: 18px; font-size: 15px; }
+header nav a { color: var(--muted); text-decoration: none; }
+header nav a:hover { color: var(--text); }
+.hero { text-align: center; padding: 48px 0 28px; }
+.hero h1 { font-size: clamp(32px, 6vw, 54px); line-height: 1.1; margin: 0 0 14px; letter-spacing: -0.02em; }
+.hero h1 span { color: var(--accent); }
+.hero p { color: var(--muted); font-size: 19px; max-width: 680px; margin: 0 auto 26px; }
+.cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+.btn { display: inline-block; padding: 11px 20px; border-radius: 8px; border: 1px solid var(--line); color: var(--text); text-decoration: none; font-weight: 600; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #1c1406; }
+.gif { display: block; width: 100%; max-width: 820px; margin: 36px auto 0; border-radius: 12px; border: 1px solid var(--line); }
+section { padding: 48px 0; border-top: 1px solid var(--line); }
+h2 { font-size: 28px; margin: 0 0 22px; letter-spacing: -0.01em; }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px; }
+.card h3 { margin: 0 0 6px; font-size: 17px; }
+.card p { margin: 0; color: var(--muted); font-size: 15px; }
+pre { background: #0a0c10; border: 1px solid var(--line); border-radius: 8px; padding: 14px; overflow-x: auto; font: 14px/1.5 var(--mono); margin: 8px 0 18px; }
+.tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+.shots { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.shots img { width: 100%; border-radius: 8px; border: 1px solid var(--line); }
+.shots figcaption { color: var(--muted); font-size: 14px; margin-top: 4px; }
+figure { margin: 0; }
+footer { padding: 30px 0 50px; color: var(--muted); font-size: 14px; border-top: 1px solid var(--line); }
+@media (max-width: 800px) { .grid, .tabs, .shots { grid-template-columns: minmax(0, 1fr); } header nav { display: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><img src="images/logo.svg" alt=""><b>Tempolight</b>
+    <nav><a href="#features">Features</a><a href="#install">Install</a><a href="#screenshots">Screenshots</a><a href="https://github.com/D4RKGEEK/tempolight">GitHub</a></nav></header>
+
+  <div class="hero">
+    <h1>Lights that know <span>the drop</span> is coming</h1>
+    <p>Tempolight is free, open-source music-reactive lighting for WLED. It finds the beat, the build-ups and the drops, and turns every LED in your room into one light show.</p>
+    <div class="cta"><a class="btn primary" href="#install">Install for free</a><a class="btn" href="https://github.com/D4RKGEEK/tempolight">View on GitHub</a></div>
+    <img class="gif" src="images/preview.gif" alt="A room of LED strips, rings and frames lighting up in time with a song">
+  </div>
+
+  <section id="features">
+    <h2>A smarter alternative to LedFx</h2>
+    <div class="grid">
+      <div class="card"><h3>Understands the song</h3><p>Tempo, beat grid, bars, build-ups and drops, analysed before the song plays, so the room hits the drop exactly.</p></div>
+      <div class="card"><h3>Listens live, too</h3><p>Spotify, YouTube or a DJ app through your computer's sound, a microphone, or a sound card on a Raspberry Pi.</p></div>
+      <div class="card"><h3>Fits the mood</h3><p>Party, pop/rock, hip-hop, chill and ballads each get their own effects. Quiet songs never turn the room dark.</p></div>
+      <div class="card"><h3>74 effects, any layout</h3><p>Strips, rings, TV frames, poles, hexagon panels and matrices, all one canvas. Effects travel across the room.</p></div>
+      <div class="card"><h3>Live pads</h3><p>Flash, strobe, blackout, build &amp; drop and more from your phone or keyboard. Play the lights like an instrument.</p></div>
+      <div class="card"><h3>Plug and play</h3><p>Finds WLED controllers by itself. Scenes, schedules, a PIN lock for parties, OSC and an HTTP API.</p></div>
+    </div>
+  </section>
+
+  <section id="install">
+    <h2>Install in one line</h2>
+    <div class="tabs">
+      <div><b>Linux, Raspberry Pi, macOS</b><pre>curl -fsSL https://raw.githubusercontent.com/D4RKGEEK/tempolight/main/install/install.sh | sh
+tempolight --open</pre>
+        <b>Raspberry Pi, start at boot</b><pre>curl -fsSL https://raw.githubusercontent.com/D4RKGEEK/tempolight/main/install/install.sh | sh -s -- --service</pre></div>
+      <div><b>Windows (PowerShell)</b><pre>irm https://raw.githubusercontent.com/D4RKGEEK/tempolight/main/install/install.ps1 | iex</pre>
+        <b>Docker or from source</b><pre>git clone https://github.com/D4RKGEEK/tempolight.git
+cd tempolight
+npm start            # or: docker compose up -d</pre></div>
+    </div>
+    <p style="color:var(--muted)">Needs only Node.js 20+ (the installers set it up). No Python, no native libraries, no build step. Works with stock WLED on ESP8266 and ESP32.</p>
+  </section>
+
+  <section id="screenshots">
+    <h2>Screenshots</h2>
+    <div class="shots">
+      <figure><img src="images/home-dark.png" alt="Home page with live room preview" loading="lazy"><figcaption>Home: live preview and now playing</figcaption></figure>
+      <figure><img src="images/music.png" alt="Music page with analysed songs" loading="lazy"><figcaption>Music: songs analysed before they play</figcaption></figure>
+      <figure><img src="images/room.png" alt="Room editor" loading="lazy"><figcaption>Room: presets and LED ranges</figcaption></figure>
+      <figure><img src="images/live-pads.png" alt="Live pads" loading="lazy"><figcaption>Live pads</figcaption></figure>
+    </div>
+  </section>
+
+  <footer>Tempolight is MIT licensed. Made for <a href="https://kno.wled.ge">WLED</a>, inspired by <a href="https://github.com/LedFx/LedFx">LedFx</a>. <a href="https://github.com/D4RKGEEK/tempolight">Source on GitHub</a> · <a href="https://github.com/D4RKGEEK/tempolight/issues">Report an issue</a></footer>
+</div>
+</body>
+</html>

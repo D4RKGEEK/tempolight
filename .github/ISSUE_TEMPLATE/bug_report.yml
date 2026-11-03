@@ -1,0 +1,41 @@
+name: Bug report
+description: Something doesn't work as expected
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Tempolight version
+      description: Shown next to the logo in the app (for example v0.2.0).
+    validations:
+      required: true
+  - type: dropdown
+    id: os
+    attributes:
+      label: Running on
+      options: [Windows, macOS, Linux, Raspberry Pi, Docker, Other]
+    validations:
+      required: true
+  - type: dropdown
+    id: source
+    attributes:
+      label: Music source
+      options: [Songs added in Tempolight, "This computer's sound", Microphone, Server sound card, Metronome, Not about music]
+  - type: input
+    id: wled
+    attributes:
+      label: WLED version and board
+      placeholder: "0.15.0, ESP32, 300 LEDs"
+  - type: textarea
+    id: log
+    attributes:
+      label: Activity log or terminal output
+      description: Copy from the Activity panel on Home, or the terminal where Tempolight runs.
+      render: text

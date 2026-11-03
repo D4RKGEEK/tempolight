@@ -1,0 +1,20 @@
+name: Feature or effect idea
+description: Suggest a feature, an integration or a new effect
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like?
+      description: Describe it from the point of view of someone using the lights.
+    validations:
+      required: true
+  - type: textarea
+    id: why
+    attributes:
+      label: Why does it matter to you?
+  - type: textarea
+    id: setup
+    attributes:
+      label: Your setup (optional)
+      placeholder: "Bedroom, 2 controllers, 4-wall strip and a ring"
