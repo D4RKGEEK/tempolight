@@ -4,3 +4,4 @@ tempolight.config.json
 .DS_Store
 *.f32
 *.wav
+data/

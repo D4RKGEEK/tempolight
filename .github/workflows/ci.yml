@@ -7,6 +7,7 @@ jobs:
   test:
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         node: [20, 22]
@@ -18,7 +19,20 @@ jobs:
       - run: npm test
         env:
           CI: "true"
-      - name: Dry-run every effect for 2 seconds
-        if: matrix.os == 'ubuntu-latest'
+      - name: Server starts and answers
         shell: bash
-        run: timeout 2 node scripts/demo.js --dry --leds 600 --effect laser || [ $? -eq 124 ]
+        run: |
+          node packages/server/src/index.js --port 18080 --data "$RUNNER_TEMP/tl" --no-discover &
+          for i in $(seq 1 20); do curl -fs http://127.0.0.1:18080/api/health && break; sleep 0.5; done
+          curl -fs http://127.0.0.1:18080/ | grep -q Tempolight
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - run: npm i -g playwright@1 && npx playwright install --with-deps chromium
+      - run: NODE_PATH=$(npm root -g) node scripts/e2e-browser.js

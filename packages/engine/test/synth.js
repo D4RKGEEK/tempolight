@@ -25,3 +25,18 @@ export function edm(sr = 22050) {
   let m = 0; for (let i = 0; i < n; i++) m = Math.max(m, Math.abs(x[i])); for (let i = 0; i < n; i++) x[i] /= m;
   return { x, sr, bpm, dropStart: 8 * bar, bar };
 }
+
+/** ballad(): 70 BPM, piano-like notes and a soft pad, no drums; a quiet verse then a louder chorus. */
+export function ballad(sr = 22050) {
+  const bpm = 70, beat = 60 / bpm, bars = 12, n = Math.floor((bars * 4 * beat + 1) * sr), x = new Float32Array(n), r = rng(3);
+  const put = (t, fn, dur) => { const i0 = Math.floor(t * sr); for (let k = 0; k < dur * sr && i0 + k < n; k++) x[i0 + k] += fn(k / sr); };
+  const chords = [[220, 277.2, 329.6], [185, 220, 277.2], [146.8, 185, 220], [164.8, 207.7, 246.9]];
+  for (let b = 0; b < bars; b++) {
+    const t0 = b * 4 * beat, ch = chords[b % 4], g = b < 6 ? 0.35 : 1;
+    put(t0, t => ch.reduce((s, f) => s + Math.sin(2 * Math.PI * f / 2 * t), 0) * 0.04 * g * Math.min(1, t / 0.8), 4 * beat);
+    for (let q = 0; q < 8; q++) { const f = ch[(q + (r() > 0 ? 1 : 0)) % 3] * (q % 4 === 3 ? 2 : 1);
+      put(t0 + q * beat / 2, t => (Math.sin(2 * Math.PI * f * t) + 0.3 * Math.sin(4 * Math.PI * f * t)) * Math.exp(-t * 2.5) * 0.12 * g, beat * 1.5); }
+  }
+  let m = 0; for (let i = 0; i < n; i++) m = Math.max(m, Math.abs(x[i])); for (let i = 0; i < n; i++) x[i] /= m;
+  return { x, sr, bpm };
+}

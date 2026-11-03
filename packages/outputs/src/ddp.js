@@ -36,7 +36,7 @@ export function ddpPackets(rgb, seq = 0) {
 
 /** A sender bound to one WLED controller. */
 export class DDPSender {
-  constructor(host, port = DDP_PORT) { this.host = host; this.port = port; this.seq = 1; this.sock = dgram.createSocket("udp4"); }
-  send(rgb) { const seq = this.seq; this.seq = (this.seq % 15) + 1; for (const p of ddpPackets(rgb, seq)) this.sock.send(p, this.port, this.host); }
-  close() { this.sock.close(); }
+  constructor(host, port = DDP_PORT) { this.host = host; this.port = port; this.seq = 1; this.sent = 0; this.errors = 0; this.sock = dgram.createSocket("udp4"); this.sock.on("error", () => { this.errors++; }); }
+  send(rgb) { const seq = this.seq; this.seq = (this.seq % 15) + 1; this.sent++; for (const p of ddpPackets(rgb, seq)) this.sock.send(p, this.port, this.host, e => { if (e) this.errors++; }); }
+  close() { try { this.sock.close(); } catch {} }
 }

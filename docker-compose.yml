@@ -1,0 +1,14 @@
+# docker compose up -d   then open http://<this machine>:8080
+services:
+  tempolight:
+    build: .
+    container_name: tempolight
+    network_mode: host        # needed to find WLED (mDNS) and send UDP to it
+    volumes:
+      - tempolight:/data
+    # to listen to a USB sound card on the host (Raspberry Pi), uncomment:
+    # devices:
+    #   - /dev/snd:/dev/snd
+    restart: unless-stopped
+volumes:
+  tempolight:

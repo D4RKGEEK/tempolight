@@ -1,22 +1,23 @@
 # Roadmap
 
-Four phases, each closed by a test it must pass.
+## Done in v0.2
 
-| Phase | Goal | Main work | Gate |
-| --- | --- | --- | --- |
-| 1 | Replace LedFx for one room | Live audio capture, file pre-analysis with cache, WLED discovery, Home/Devices/Rooms/Effects/Music pages, Windows/Mac/Linux/Pi builds | Looks better than LedFx on the same songs, side by side |
-| 2 | Everyday use | Scenes and schedules, Home Assistant, MQTT, OSC, MIDI, open API, tap-to-sync delay, Hue and OpenRGB output | A month in real homes with no restarts |
-| 3 | Parties and mapping | Phone camera mapping, live pad page, show editor with auto-generated shows, now-playing from music services, screen sync | A new user is set up in 5 minutes |
-| 4 | Ecosystem | Effect gallery and sharing, effect builder, plugin API, DJ software links, vocal split, DMX | Community effects outnumber built-in ones |
+- Web app: Home, Music, Effects, Live pads, Scenes & schedules, Room, Devices, Settings
+- Live listening from the browser (system sound, microphone) and on the server (PulseAudio, ALSA, ffmpeg)
+- Songs analysed in the browser before playing, with transport controls and drop markers
+- Director: style-aware automatic effects, crossfades, never-dark ambient floor, drop flash, photosensitive-safe mode
+- 74 effects (12 new: Warp Tunnel, Spiral Galaxy, Thunderstorm, Colour Chord, Bass Quake, Rising Embers, Beat Tiles,
+  Double Helix, Drop Countdown, Solar Flare, Zigzag Beams, Welding Sparks)
+- Live pads with keyboard shortcuts, including Build & drop
+- Scenes, day/time schedules, PIN lock with guest permissions
+- WLED discovery (mDNS + network scan), identify, segment sync, health, address change recovery, virtual devices
+- OSC input, WLED audio sync output, HTTP + WebSocket API
+- Installers for Linux/Pi/macOS (with systemd service) and Windows, Docker image
 
-## First 30 days
+## Next
 
-**Week 1: foundation** (done in v0.1): repo, engine package, test songs and analysis tests.
-
-**Week 2: real lights**: DDP to one ESP32 at 60 fps, then three; WLED info and segments; network discovery.
-
-**Week 3: real music**: system-sound capture on Windows and Linux; live analysis with the render loop; measure
-sound-to-light delay; pre-analysis of local files with a cache.
-
-**Week 4: usable app**: API and WebSocket; Home, Devices and Rooms pages; Raspberry Pi 4 test; Windows build;
-a side-by-side video against LedFx.
+| Phase | Goal | Main work |
+| --- | --- | --- |
+| 3 | Everyday home use | Home Assistant via MQTT discovery, sunrise/sunset schedules, per-zone effects, Hue and OpenRGB output, E1.31/Art-Net output |
+| 4 | Parties and mapping | Phone-camera LED mapping, show editor with auto-generated shows, now-playing from music services, screen colour sync |
+| 5 | Ecosystem | Effect gallery and sharing, effect builder, plugin API, DJ software links (Ableton Link, Rekordbox), DMX |

@@ -1,70 +1,63 @@
 #!/usr/bin/env node
-// @tempolight/server: serves the web UI, exposes a small JSON API, and runs the render loop that streams
-// effects to WLED controllers. Node built-ins only. Audio capture is not wired in yet: until it is,
-// the loop follows a steady metronome (see ROADMAP in the README).
-import http from "node:http";
-import { readFile, stat } from "node:fs/promises";
-import { existsSync, readFileSync } from "node:fs";
+// Tempolight server. Start it, open the address it prints, done.
+//   tempolight [--port 8080] [--host 0.0.0.0] [--data ~/.tempolight] [--open] [--no-discover] [--audio <source|file>]
+import os from "node:os";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { buildLayout, exampleRoom, segmentRanges, createEffects, metronomeView, buildSignals, toRGB8 } from "../../engine/src/index.js";
-import { DDPSender } from "../../outputs/src/index.js";
+import { existsSync, readFileSync } from "node:fs";
+import { spawn } from "node:child_process";
+import { createApp, ROOT } from "./app.js";
+import { localIPv4 } from "../../outputs/src/index.js";
+import { listSources, fileSource } from "./capture.js";
 
-const here = path.dirname(fileURLToPath(import.meta.url));
-const root = path.resolve(here, "../../..");
-const configPath = process.env.TEMPOLIGHT_CONFIG || path.join(root, "tempolight.config.json");
-const config = existsSync(configPath) ? JSON.parse(readFileSync(configPath, "utf8")) : {};
-const PORT = Number(process.env.PORT || config.port || 8080);
-const FPS = Number(config.fps || 60);
+const argv = process.argv.slice(2);
+const flag = k => argv.includes("--" + k);
+const opt = (k, d) => { const i = argv.indexOf("--" + k); return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : d; };
 
-// ---- room, effects, devices
-const shapes = config.room || exampleRoom();
-const layout = buildLayout(shapes);
-const fx = createEffects(layout);
-const ranges = segmentRanges(shapes);
-const devices = (config.devices || []).map(d => ({ ...d, sender: new DDPSender(d.host, d.port), size: Math.max(0, ...ranges.filter(r => r.dev === d.name).map(r => r.end + 1)) }));
-const state = { effect: config.effect || "laser", bpm: Number(config.bpm || 128), brightness: Number(config.brightness ?? 0.8), palette: "neon", running: true, frames: 0, startedAt: Date.now() };
-const col = new Float32Array(layout.N * 3), rgb = new Uint8Array(layout.N * 3);
+if (flag("help") || flag("h")) {
+  console.log(`Tempolight: music-reactive lighting for WLED
 
-function renderFrame(t) {
-  const V = metronomeView(t, state.bpm);
-  const S = buildSignals(V, t, { pal: fx.palettes[state.palette] || fx.palettes.neon, fixed: state.palette !== "auto" });
-  fx.render(state.effect, S, col);
-  toRGB8(col, rgb, state.brightness);
-  // copy each shape's LEDs into its controller's buffer at its segment range
-  for (const d of devices) {
-    const buf = d.buf || (d.buf = new Uint8Array(d.size * 3));
-    shapes.forEach((s, si) => { if (s.dev !== d.name) return; const r = ranges[si], a = layout.chainStart[si];
-      buf.set(rgb.subarray(a * 3, (a + s.count) * 3), r.start * 3); });
-    d.sender.send(buf);
-  }
-  state.frames++;
+  tempolight [options]
+
+  --port <n>        web UI port (default 8080, or $PORT)
+  --host <ip>       listen address (default 0.0.0.0: reachable from your phone on the same Wi-Fi)
+  --data <dir>      where settings are saved (default ~/.tempolight, or $TEMPOLIGHT_DATA)
+  --open            open the web UI in your browser
+  --no-discover     don't look for WLED controllers on first start
+  --audio <source>  listen on this computer: "auto", a source id (see --list-audio), or a music file to play through
+  --list-audio      show the audio sources this computer can capture from
+`);
+  process.exit(0);
 }
-const t0 = performance.now();
-setInterval(() => { if (state.running) renderFrame((performance.now() - t0) / 1000); }, 1000 / FPS);
+if (flag("list-audio")) { const s = listSources(); console.log(s.length ? s.map(x => `  ${x.id.padEnd(16)} ${x.label}`).join("\n") : "  No capture tools found. Install ffmpeg, or use a browser as the audio source."); process.exit(0); }
 
-// ---- HTTP: static web UI + JSON API
-const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".mp3": "audio/mpeg", ".json": "application/json", ".svg": "image/svg+xml" };
-const STATIC = { "/": "apps/playground/index.html", "/demo.mp3": "apps/playground/demo.mp3", "/console": "apps/mockups/console.html" };
-const json = (res, code, body) => { res.writeHead(code, { "content-type": "application/json" }); res.end(JSON.stringify(body)); };
+const [maj] = process.versions.node.split(".").map(Number);
+if (maj < 20) { console.error(`Tempolight needs Node.js 20 or newer (this is ${process.versions.node}). Get it from https://nodejs.org`); process.exit(1); }
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, "http://x");
-  try {
-    if (url.pathname === "/api/status") return json(res, 200, { ...state, leds: layout.N, devices: devices.map(d => ({ name: d.name, host: d.host, leds: d.size })), uptime: (Date.now() - state.startedAt) / 1000 });
-    if (url.pathname === "/api/effects") return json(res, 200, fx.list);
-    if (url.pathname === "/api/state" && req.method === "POST") {
-      let body = ""; for await (const c of req) body += c; const b = JSON.parse(body || "{}");
-      if (b.effect && !fx.list.some(e => e.id === b.effect)) return json(res, 400, { error: `Unknown effect "${b.effect}". GET /api/effects lists them.` });
-      for (const k of ["effect", "bpm", "brightness", "palette", "running"]) if (k in b) state[k] = b[k];
-      return json(res, 200, state);
-    }
-    const file = STATIC[url.pathname];
-    if (file) { const p = path.join(root, file); await stat(p); res.writeHead(200, { "content-type": MIME[path.extname(p)] || "application/octet-stream" }); return res.end(await readFile(p)); }
-    json(res, 404, { error: "Not found" });
-  } catch (e) { json(res, 500, { error: String(e.message || e) }); }
-});
-server.listen(PORT, () => {
-  console.log(`Tempolight running on http://localhost:${PORT}  (playground at /, dashboard mock-up at /console)`);
-  console.log(devices.length ? `Streaming ${layout.N} LEDs to ${devices.map(d => `${d.name} (${d.host})`).join(", ")}` : "No devices configured: copy tempolight.config.example.json to tempolight.config.json to stream to WLED.");
-});
+const dataDir = path.resolve(opt("data", process.env.TEMPOLIGHT_DATA || path.join(os.homedir(), ".tempolight")));
+const port = Number(opt("port", process.env.PORT || 8080)), host = opt("host", process.env.HOST || "0.0.0.0");
+const app = await createApp({ dataDir, discover: !flag("no-discover") });
+
+const audio = opt("audio");
+if (audio) {
+  const cap = app.store.data.settings.capture;
+  if (existsSync(audio)) { cap.command = fileSource(path.resolve(audio)).cmd.map(w => (/\s/.test(w) ? `"${w}"` : w)).join(" "); cap.enabled = true; }
+  else { cap.source = audio; cap.command = ""; cap.enabled = true; }
+  app.store.save(); app.runtime.startCaptureSource();
+}
+
+let bound;
+try { bound = await app.listen(port, host); }
+catch (e) {
+  if (e.code === "EADDRINUSE") { console.error(`Port ${port} is already in use. Is Tempolight already running? Or start it on another port: --port ${port + 1}`); process.exit(1); }
+  throw e;
+}
+const lan = localIPv4().map(a => `http://${a.address}:${bound}`);
+console.log(`\n  Tempolight ${JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8")).version} is running\n`);
+console.log(`  On this computer:  http://localhost:${bound}`);
+for (const u of lan) console.log(`  On your phone:     ${u}`);
+console.log(`  Settings are saved in ${dataDir}\n`);
+
+if (flag("open")) { const u = `http://localhost:${bound}`; const cmd = process.platform === "win32" ? ["cmd", ["/c", "start", "", u]] : process.platform === "darwin" ? ["open", [u]] : ["xdg-open", [u]]; try { spawn(cmd[0], cmd[1], { stdio: "ignore", detached: true }).unref(); } catch {} }
+
+let closing = false;
+for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, async () => { if (closing) process.exit(0); closing = true; console.log("\n  Stopping…"); await app.close(); process.exit(0); });

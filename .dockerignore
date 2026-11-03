@@ -1,0 +1,5 @@
+.git
+node_modules
+*.wav
+*.f32
+data

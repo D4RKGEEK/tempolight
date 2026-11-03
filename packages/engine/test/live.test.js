@@ -1,0 +1,53 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { LiveAnalyser, createDirector, buildLayout, exampleRoom, createEffects, metronomeView } from "../src/index.js";
+import { edm, ballad } from "./synth.js";
+
+function listen(song, chunk = 512) {
+  const A = new LiveAnalyser(song.sr), states = [];
+  for (let i = 0; i < song.x.length; i += chunk) { A.push(song.x.subarray(i, i + chunk)); states.push([A.t, A.view().state]); }
+  return { A, states, frac: (a, b, s) => { const w = states.filter(([t]) => t >= a && t < b); return w.filter(x => x[1] === s).length / Math.max(1, w.length); } };
+}
+
+test("live listening finds the tempo, the drop and the style of an EDM track", () => {
+  const { A, frac } = listen(edm(22050));
+  assert.ok(Math.abs(A.bpm - 128) < 2, `bpm ${A.bpm}`);
+  assert.equal(A.style, "party");
+  assert.ok(frac(18, 29, "drop") > 0.8, "drop section is heard as a drop");
+  assert.equal(frac(0, 7, "drop"), 0, "the intro is not a drop");
+});
+
+test("live listening at 48 kHz (browser and sound cards) gives the same tempo", () => {
+  const s = edm(48000), { A } = listen(s, 1024);
+  assert.ok(Math.abs(A.bpm - 128) < 2, `bpm ${A.bpm}`);
+});
+
+test("a slow ballad is never treated as silence and gets a calm style", () => {
+  const s = ballad(22050), { A, frac } = listen(s);
+  assert.ok(["emotional", "chill"].includes(A.style), `style ${A.style}`);
+  assert.ok(frac(2, s.x.length / s.sr - 1, "silent") < 0.05, "quiet music keeps the lights on");
+});
+
+test("director: quiet music never goes dark, idle shows the ambient effect, and auto mode follows song parts", () => {
+  const L = buildLayout(exampleRoom()), fx = createEffects(L), D = createDirector(L, fx);
+  const mean = c => c.reduce((a, b) => a + b, 0) / c.length;
+  assert.ok(mean(D.frame(null, 10)) > 0.02, "idle: ambient effect is on");
+  const s = ballad(22050), A = new LiveAnalyser(s.sr);
+  let minLum = 9;
+  for (let i = 0; i < s.x.length; i += 512) { A.push(s.x.subarray(i, i + 512)); if (A.t > 3) minLum = Math.min(minLum, mean(D.frame(A.view(), A.t, A.extras()))); }
+  assert.ok(minLum > 0.02, `ballad never goes dark (min ${minLum.toFixed(3)})`);
+  const D2 = createDirector(L, fx); D2.settings.style = "party";
+  for (let t = 0; t < 4; t += 1 / 60) D2.frame({ ...metronomeView(t, 128), state: "drop" }, t);
+  assert.ok(fx.pools.drop.includes(D2.current), `drop effect chosen (${D2.current})`);
+  D2.settings.mode = "manual"; D2.settings.effect = "galaxy"; D2.frame(metronomeView(5, 128), 5);
+  assert.equal(D2.current, "galaxy");
+});
+
+test("director: blackout, flash and photosensitivity limit", () => {
+  const L = buildLayout(exampleRoom()), fx = createEffects(L), D = createDirector(L, fx);
+  D.state.overlay.blackout = true; assert.equal(Math.max(...D.frame(null, 1)), 0); D.state.overlay.blackout = false;
+  D.settings.mode = "manual"; D.settings.effect = "strobe"; D.settings.safe = true;
+  let jumps = 0, prev = 0;
+  for (let t = 0; t < 4; t += 1 / 60) { const c = D.frame(metronomeView(t, 175), t); const m = c.reduce((a, b) => a + b, 0) / c.length; if (m > prev * 1.8 + 0.12) jumps++; prev = m; }
+  assert.ok(jumps <= 13, `at most ~3 big flashes a second in safe mode (got ${jumps} in 4 s)`);
+});

@@ -1,0 +1,258 @@
+// The runtime: picks the music source, runs the director every frame, and streams each controller its LEDs.
+// Sources, best first: a song playing in the browser (analysed ahead of time), live audio (from a browser or this
+// computer's sound card), the metronome, and finally the idle/ambient effect when nothing is playing.
+import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, toRGB8, LiveAnalyser } from "../../engine/src/index.js";
+import { DDPSender, AudioSyncSender, getInfo, setState, setSegments, ipOf, discoverWled } from "../../outputs/src/index.js";
+import { startCapture, listSources, splitCommand, RATE } from "./capture.js";
+
+export function createRuntime(store, { logger = console } = {}) {
+  const data = () => store.data;
+  const log = [], listeners = new Set();
+  function note(msg, level = "info") { const e = { t: Date.now(), level, msg }; log.push(e); if (log.length > 200) log.shift(); for (const f of listeners) f(e); if (logger) logger.log(`[tempolight] ${msg}`); }
+
+  let L, fx, D, ranges, outs = new Map();
+  const health = new Map(); // device id -> {online, rssi, version, ledsReported, lastSeen, error}
+  const rt = {
+    frames: 0, fps: 0, startedAt: Date.now(), source: "idle", sourceLabel: "Nothing playing",
+    live: null,      // {an, kind, label, lastPush, clientId}
+    capture: null,   // {proc, sourceId, label, error}
+    song: null,      // {name, pre, pos, playing, rate, at, clientId}
+    forced: null,    // {kind:"build"|"drop", t0, dur}
+    taps: [], view: null, powerOffAt: 0,
+  };
+
+  function rebuild() {
+    const shapes = data().room.shapes;
+    const keep = D ? { ...D.settings } : null;
+    L = buildLayout(shapes.map(s => ({ ...s })));
+    fx = createEffects(L); D = createDirector(L, fx); if (keep) Object.assign(D.settings, keep);
+    ranges = segmentRanges(shapes);
+    const ids = new Set(data().devices.map(d => d.id));
+    for (const [id, o] of outs) if (!ids.has(id)) { o.sender.close(); outs.delete(id); }
+    for (const d of data().devices) {
+      const used = Math.max(0, ...ranges.filter(r => r.dev === d.id).map(r => r.end + 1));
+      const size = Math.max(used, 1), ip = ipOf(d.host), port = d.ddpPort || 4048;
+      let o = outs.get(d.id);
+      if (!o || o.ip !== ip || o.port !== port) { if (o) o.sender.close(); o = { sender: new DDPSender(ip, port), ip, port }; outs.set(d.id, o); }
+      o.size = size; o.buf = new Uint8Array(size * 3); o.used = used;
+    }
+    col8 = new Uint8Array(L.N * 3);
+    syncDirector();
+  }
+  function syncDirector() {
+    const s = data().settings, sh = data().show;
+    Object.assign(D.settings, { mode: sh.mode, effect: sh.effect, style: sh.style, palette: sh.palette, everyBeats: sh.everyBeats, speed: sh.speed,
+      ambient: s.ambient, safe: s.safe, dropFlash: s.dropFlash });
+  }
+  let col8 = new Uint8Array(0);
+
+  // ---------------------------------------------------------------- music sources
+  function pushPcm(samples, kind, label, clientId, rate = RATE) {
+    if (!rt.live || rt.live.kind !== kind || rt.live.clientId !== clientId || rt.live.rate !== rate) {
+      if (rt.live && rt.live.kind === "browser" && kind === "capture" && performance.now() - rt.live.lastPush < 1500) return; // a browser that is sending wins
+      rt.live = { an: new LiveAnalyser(rate), kind, label, clientId, rate, lastPush: 0, started: performance.now() };
+      note(`Listening to ${label}`);
+    }
+    rt.live.an.push(samples); rt.live.lastPush = performance.now();
+  }
+  function liveFresh() { return rt.live && performance.now() - rt.live.lastPush < 1500; }
+  function stopLive(clientId) { if (rt.live && (clientId == null || rt.live.clientId === clientId)) { note(`Stopped listening to ${rt.live.label}`); rt.live = null; } }
+
+  function startCaptureSource() {
+    stopCaptureSource();
+    const c = data().settings.capture; let src;
+    if (c.command) src = { id: "custom", label: "Custom capture command", cmd: splitCommand(c.command) };
+    else { const all = listSources(); src = (c.source && c.source !== "auto" && all.find(s => s.id === c.source)) || all[0]; }
+    if (!src) { rt.capture = { error: "No audio capture tool found on this computer (install ffmpeg, or use a browser as the audio source)." }; note(rt.capture.error, "warn"); return rt.capture; }
+    const cap = { sourceId: src.id, label: src.label, error: null };
+    cap.proc = startCapture(src.cmd, a => pushPcm(a, "capture", src.label, "capture"), why => {
+      if (rt.capture !== cap) return;
+      cap.error = why === "ended" ? null : why; cap.proc = null; if (why !== "ended") note(`Audio capture: ${why}`, "warn");
+      if (data().settings.capture.enabled && why !== "ended") cap.retry = setTimeout(() => { if (rt.capture === cap) startCaptureSource(); }, 5000);
+    });
+    rt.capture = cap; note(`Audio capture started: ${src.label}`);
+    return cap;
+  }
+  function stopCaptureSource() { if (rt.capture) { clearTimeout(rt.capture.retry); rt.capture.proc && rt.capture.proc.stop(); rt.capture = null; } stopLive("capture"); }
+
+  function setSong(song, clientId) {
+    const pre = song.analysis;
+    for (const k of ["kicks", "snares", "hats", "drops"]) pre[k] = Array.from(pre[k] || []);
+    pre.env = Float32Array.from(pre.env || []); pre.bars = pre.bars || [];
+    rt.song = { name: song.name || "Song", pre, pos: 0, playing: false, rate: 1, at: performance.now(), clientId };
+    note(`Song ready: ${rt.song.name} (${Math.round(pre.bpm)} BPM, ${fx.styles[pre.style]?.name || pre.style})`);
+  }
+  function songClock(c, clientId) {
+    if (!rt.song) return; if (clientId && rt.song.clientId && rt.song.clientId !== clientId) return;
+    rt.song.pos = Number(c.pos) || 0; rt.song.playing = !!c.playing; rt.song.rate = Number(c.rate) || 1; rt.song.at = performance.now();
+  }
+  function clearSong(clientId) { if (rt.song && (!clientId || rt.song.clientId === clientId)) { note(`Song stopped: ${rt.song.name}`); rt.song = null; } }
+
+  // ---------------------------------------------------------------- frame loop
+  let lastT = performance.now(), fpsN = 0, fpsT = performance.now(), lastSync = 0, timer = null, previewTick = 0;
+  const previewClients = new Set(), syncSender = { s: null };
+
+  function currentView(now) {
+    const s = data().settings, off = (s.syncOffsetMs || 0) / 1000;
+    if (rt.song && rt.song.playing && now - rt.song.at < 4000) {
+      const t = rt.song.pos + (now - rt.song.at) / 1000 * rt.song.rate + off;
+      rt.source = "song"; rt.sourceLabel = rt.song.name;
+      return { V: songView(rt.song.pre, t), t, extra: liveFresh() ? rt.live.an.extras() : {} };
+    }
+    if (liveFresh()) {
+      const an = rt.live.an, t = an.t + Math.min(0.12, (now - rt.live.lastPush) / 1000) + (s.predict ? off : 0);
+      const V = an.view(t, { predict: s.predict });
+      rt.source = rt.live.kind; rt.sourceLabel = rt.live.label;
+      if (V.state === "silent" && V.quietFor > (s.idleAfterSec ?? 8)) { rt.source = "idle"; rt.sourceLabel = `${rt.live.label} (quiet)`; return { V: null, t: now / 1000 }; }
+      return { V, t, extra: an.extras() };
+    }
+    if (s.metronome.enabled) { const t = now / 1000; rt.source = "metronome"; rt.sourceLabel = `Metronome ${Math.round(s.metronome.bpm)} BPM`; return { V: metronomeView(t, s.metronome.bpm), t }; }
+    rt.source = "idle"; rt.sourceLabel = "Nothing playing"; return { V: null, t: now / 1000 };
+  }
+
+  function applyForced(V, t, now) {
+    const f = rt.forced; if (!f || !V) return V;
+    const el = (now - f.t0) / 1000;
+    if (f.kind === "build") {
+      if (el < f.dur) return { ...V, state: "build", buildP: el / f.dur, nextDrop: t + (f.dur - el) };
+      rt.forced = { kind: "drop", t0: now, dur: 8, dropT: t }; return { ...V, state: "drop", dropT: t };
+    }
+    if (f.kind === "drop") { if (f.dropT == null) f.dropT = t; if (el < Math.max(4, f.dur)) return { ...V, state: "drop", dropT: f.dropT, level: "peak" }; rt.forced = null; }
+    return V;
+  }
+
+  function frame() {
+    const now = performance.now(), wall = now / 1000, sh = data().show, s = data().settings;
+    let { V, t, extra } = currentView(now);
+    if (rt.forced && !V) V = metronomeView(wall, s.metronome.bpm || 124), t = wall; // "build & drop" pad works even with no music
+    V = applyForced(V, t, now);
+    rt.view = V; rt.t = t;
+    const col = D.frame(V, t, extra, wall);
+    let bri = s.brightness; if (!V && sh.mode === "auto") bri *= s.idleBrightness;
+    if (!sh.power) { bri = 0; }
+    toRGB8(col, col8, bri);
+    // copy each shape's LEDs into its controller's buffer at its segment range
+    const shapes = data().room.shapes;
+    const sendNow = sh.power || now - rt.powerOffAt < 600; // after power-off, send black briefly, then go quiet
+    for (const d of data().devices) {
+      const o = outs.get(d.id); if (!o || !d.enabled) continue;
+      o.buf.fill(0);
+      shapes.forEach((sp, si) => { if (sp.dev !== d.id) return; const r = ranges[si], a = L.chainStart[si], n = Math.min(sp.type === "matrix" ? sp.cols * sp.rows : sp.count, o.size - r.start);
+        if (n > 0) o.buf.set(col8.subarray(a * 3, (a + n) * 3), r.start * 3); });
+      if (sendNow && !d.virtual) o.sender.send(o.buf);
+    }
+    // WLED audio sync, so the controllers' own sound-reactive effects can run too
+    if (s.audioSync && liveFresh() && now - lastSync > 20) { lastSync = now; sendAudioSync(); }
+    // preview for the web UI, 30 fps
+    if (++previewTick % Math.max(1, Math.round((s.fps || 60) / 30)) === 0 && previewClients.size) {
+      const msg = Buffer.allocUnsafe(1 + col8.length); msg[0] = 1; Buffer.from(col8.buffer, col8.byteOffset, col8.length).copy(msg, 1);
+      for (const c of previewClients) if (c.open && !c.busy) c.send(msg);
+    }
+    rt.frames++; fpsN++; if (now - fpsT > 1000) { rt.fps = fpsN * 1000 / (now - fpsT); fpsN = 0; fpsT = now; }
+  }
+  function sendAudioSync() {
+    const an = rt.live.an; if (!syncSender.s) syncSender.s = new AudioSyncSender();
+    const fft = new Array(16); for (let i = 0; i < 16; i++) { const a = an.bands[Math.floor(i * 1.5)], b = an.bands[Math.min(23, Math.floor(i * 1.5) + 1)]; fft[i] = Math.round(255 * Math.max(a, b)); }
+    let mi = 0; for (let i = 1; i < 24; i++) if (an.bands[i] > an.bands[mi]) mi = i;
+    syncSender.s.send({ sampleRaw: Math.min(255, an.rms * 1200), sampleSmth: Math.min(255, an.eFast * 1200), peak: an.t - (an.kicks.at(-1) ?? -9) < 0.05, fft, magnitude: an.bands[mi] * 1000, majorPeak: 40 * Math.pow(250, (mi + 0.5) / 24) });
+  }
+  function startLoop() { clearInterval(timer); timer = setInterval(() => { try { frame(); } catch (e) { note(`Render error: ${e.message}`, "error"); } }, 1000 / (data().settings.fps || 60)); }
+
+  // ---------------------------------------------------------------- devices
+  async function checkDevice(d) {
+    const h = health.get(d.id) || {}; health.set(d.id, h);
+    if (d.virtual) return Object.assign(h, { online: true, version: "virtual", ledsReported: d.leds, lastSeen: Date.now() });
+    try { const info = await getInfo(d.host, 2500); Object.assign(h, { online: true, rssi: info.rssi, signal: info.signal, version: info.version, ledsReported: info.leds, fps: info.fps, live: info.live, lastSeen: Date.now(), error: null });
+      if (!d.leds && info.leds) { d.leds = info.leds; store.save(); } }
+    catch (e) { if (h.online !== false) note(`${d.name} is not answering (${d.host})`, "warn"); Object.assign(h, { online: false, error: e.message }); }
+    return h;
+  }
+  let healthTimer = null, rediscoverAt = 0;
+  async function healthLoop() {
+    await Promise.all(data().devices.map(checkDevice));
+    // a controller that went missing may have a new address from the router: look for it by name
+    const lost = data().devices.filter(d => !d.virtual && health.get(d.id)?.online === false);
+    if (lost.length && Date.now() > rediscoverAt) { rediscoverAt = Date.now() + 5 * 60_000;
+      try { const found = await discoverWled({ scan: false, timeoutMs: 2000 });
+        for (const d of lost) { const f = found.find(x => x.name === d.name && x.host !== d.host); if (f) { note(`${d.name} moved to ${f.host}; updated`); d.host = f.host; store.save(); rebuild(); } } } catch {} }
+  }
+
+  /** Light up one device's shapes (or a single shape) for a few seconds. */
+  function identify({ device, shape } = {}) {
+    const shapes = data().room.shapes, idx = shape != null ? [Number(shape)] : shapes.map((s, i) => s.dev === device ? i : -1).filter(i => i >= 0);
+    D.identify(performance.now() / 1000, idx.length ? idx : null);
+  }
+  async function syncSegments(id) {
+    const d = data().devices.find(x => x.id === id); if (!d) throw new Error("No such device");
+    const segs = data().room.shapes.map((s, i) => ({ s, r: ranges[i] })).filter(x => x.s.dev === id).map(x => ({ start: x.r.start, end: x.r.end, name: x.s.name, rev: false }));
+    if (!segs.length) throw new Error(`${d.name} has no shapes in the room yet`);
+    await setSegments(d.host, segs); note(`Sent ${segs.length} segment${segs.length > 1 ? "s" : ""} to ${d.name}`);
+    return segs;
+  }
+  async function setPower(on) {
+    data().show.power = !!on; store.save(); if (!on) rt.powerOffAt = performance.now();
+    note(on ? "Lights on" : "Lights off");
+    await Promise.all(data().devices.filter(d => d.enabled && !d.virtual).map(d => setState(d.host, { on: !!on }, 2000).catch(() => {})));
+  }
+
+  // ---------------------------------------------------------------- live controls (pads, OSC, API)
+  function action(a) {
+    const o = D.state.overlay, wall = performance.now() / 1000, on = a.on !== undefined ? !!a.on : undefined;
+    switch (a.type) {
+      case "flash": D.flash(wall, a.color ? hexRgb(a.color) : undefined); break;
+      case "strobe": o.strobe = on ?? !o.strobe; break;
+      case "blackout": o.blackout = on ?? !o.blackout; break;
+      case "freeze": o.freeze = on ?? !o.freeze; break;
+      case "hold": o.hold = a.color ? hexRgb(a.color).map(v => v * 0.9) : null; break;
+      case "boost": o.boost = Math.max(0, Math.min(2, Number(a.value ?? (o.boost === 1 ? 1.5 : 1)))); break;
+      case "next": D.next(rt.t ?? wall); break;
+      case "drop": rt.forced = { kind: "drop", t0: performance.now(), dur: 8 }; break;
+      case "build": rt.forced = { kind: "build", t0: performance.now(), dur: Math.max(2, Number(a.seconds) || 8) }; break;
+      case "cancel": rt.forced = null; Object.assign(o, { strobe: false, blackout: false, freeze: false, hold: null, boost: 1 }); break;
+      case "tap": tap(); break;
+      case "identify": identify(a); break;
+      default: throw new Error(`Unknown action "${a.type}"`);
+    }
+    return overlayState();
+  }
+  function overlayState() { const o = D.state.overlay; return { strobe: o.strobe, blackout: o.blackout, freeze: o.freeze, hold: !!o.hold, boost: o.boost, forced: rt.forced ? rt.forced.kind : null }; }
+  function tap() {
+    const now = performance.now(); rt.taps = rt.taps.filter(x => now - x < 3000); rt.taps.push(now);
+    if (rt.taps.length < 3) return;
+    const iv = []; for (let i = 1; i < rt.taps.length; i++) iv.push(rt.taps[i] - rt.taps[i - 1]); iv.sort((a, b) => a - b);
+    const bpm = Math.max(50, Math.min(200, 60000 / iv[iv.length >> 1]));
+    const s = data().settings; s.metronome.bpm = Math.round(bpm * 10) / 10; store.save();
+    if (liveFresh()) { const an = rt.live.an; an.bpm = bpm; an.phase = (an.t - (now - rt.taps.at(-1)) / 1000) % (60 / bpm); an.phaseSet = true; note(`Beat synced by tapping: ${Math.round(bpm)} BPM`); }
+  }
+
+  function status() {
+    const V = rt.view, an = liveFresh() ? rt.live.an : null;
+    return {
+      type: "status", source: rt.source, sourceLabel: rt.sourceLabel, fps: Math.round(rt.fps), leds: L.N, effect: D.showing, effectName: fx.list.find(e => e.id === D.showing)?.name || D.showing, style: D.style,
+      styleName: fx.styles[D.style]?.name || D.style, bpm: V && V.bpm ? Math.round(V.bpm * 10) / 10 : null, part: V ? V.state : "idle",
+      beat: V && V.g.has ? V.g.beatInBar : null, level: an ? Math.round(Math.min(1, an.eFast / an.eMax) * 100) / 100 : V ? Math.round((V.loud || 0) * 100) / 100 : 0,
+      bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, power: data().show.power, brightness: data().settings.brightness,
+      song: rt.song ? { name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
+      capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null,
+      overlay: overlayState(), devices: data().devices.map(d => ({ id: d.id, ...health.get(d.id), sent: outs.get(d.id)?.sender.sent || 0, used: outs.get(d.id)?.used || 0 })),
+      uptime: Math.round((Date.now() - rt.startedAt) / 1000),
+    };
+  }
+
+  function layoutInfo() {
+    return { N: L.N, x: Array.from(L.LX, v => Math.round(v * 100) / 100), y: Array.from(L.LY, v => Math.round(v * 100) / 100), shape: Array.from(L.LF), chainStart: L.chainStart, ranges, shapes: data().room.shapes };
+  }
+
+  rebuild(); startLoop();
+  healthLoop(); healthTimer = setInterval(healthLoop, 10_000);
+  if (data().settings.capture.enabled) startCaptureSource();
+
+  return {
+    get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, rt, log, listeners, previewClients, health,
+    rebuild, syncDirector, startLoop, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
+    identify, syncSegments, setPower, action, status, layoutInfo, checkDevice, note,
+    close() { clearInterval(timer); clearInterval(healthTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
+  };
+}
+
+export function hexRgb(h) { const m = /^#?([0-9a-f]{6})$/i.exec(String(h)); if (!m) return [1, 1, 1]; const n = parseInt(m[1], 16); return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; }

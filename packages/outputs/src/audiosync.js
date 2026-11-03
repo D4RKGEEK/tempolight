@@ -22,7 +22,7 @@ export function audioSyncPacket(a) {
 }
 
 export class AudioSyncSender {
-  constructor(group = AUDIOSYNC_GROUP, port = AUDIOSYNC_PORT) { this.group = group; this.port = port; this.sock = dgram.createSocket({ type: "udp4", reuseAddr: true }); }
-  send(a) { this.sock.send(audioSyncPacket(a), this.port, this.group); }
-  close() { this.sock.close(); }
+  constructor(group = AUDIOSYNC_GROUP, port = AUDIOSYNC_PORT) { this.group = group; this.port = port; this.sock = dgram.createSocket({ type: "udp4", reuseAddr: true }); this.sock.on("error", () => {}); }
+  send(a) { this.sock.send(audioSyncPacket(a), this.port, this.group, () => {}); }
+  close() { try { this.sock.close(); } catch {} }
 }
