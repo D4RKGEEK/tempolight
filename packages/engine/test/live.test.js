@@ -81,3 +81,18 @@ test("vocal estimate: high for singing (even over drums), low for drums, a stead
   assert.ok(r.voice > 0.6, `voice ${r.voice}`); assert.ok(r.mix > 0.2, `voice over drums ${r.mix}`);
   for (const k of ["drums", "pad", "piano"]) assert.ok(r[k] < 0.12 && r[k] < r.mix / 2, `${k} ${r[k]}`);
 });
+
+test("song memory: recognise a remembered song from 12 s of live sound, and line it up with the kicks", async () => {
+  const { preAnalyseCore, memoryEntry, memoryAnalysis, recognise, refineByKicks } = await import("../src/index.js");
+  const song = edm(), e = memoryEntry("EDM", await preAnalyseCore(song.x, song.sr), "a"), b = memoryEntry("Ballad", await preAnalyseCore(ballad().x, 22050), "b");
+  assert.ok(JSON.stringify(e).length < 40000, "entries are small"); assert.equal(memoryAnalysis(e).kicks.length, e.kicks.length);
+  const a = new LiveAnalyser(22050), start = 8, x = song.x.subarray(start * 22050); let r = null;
+  for (let i = 0; i < x.length && a.t < 16; i += 512) a.push(x.subarray(i, i + 512).map(v => v * 0.5));
+  r = recognise(a.tap.q, [b, e], { bpm: a.bpm }); assert.ok(r && r.id === "a", "found the right song");
+  const truth = start + a.t; assert.ok(Math.abs(r.pos - truth) < 0.3, `rough position ${r.pos} vs ${truth}`);
+  const fine = refineByKicks(a.kicks, a.t, r.pos, e.kicks); assert.ok(Math.abs(fine.pos - truth) < 0.04, `refined ${fine.pos} vs ${truth}`);
+  // an unrelated song heard live: never matched twice in step (the runtime needs two agreeing matches)
+  const c = new LiveAnalyser(22050), bx = ballad().x; let prev = null, agree = 0;
+  for (let i = 0; i < bx.length; i += 512) { c.push(bx.subarray(i, i + 512)); if ((i / 512) % 86 === 0 && c.t > 12) { const m = recognise(c.tap.q, [e]); if (m && prev && Math.abs(m.pos - (prev.pos + c.t - prev.t)) < 0.6) agree++; prev = m ? { ...m, t: c.t } : null; } }
+  assert.equal(agree, 0, "no false recognition");
+});

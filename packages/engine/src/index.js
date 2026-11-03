@@ -5,6 +5,7 @@ export { buildLayout, exampleRoom, segmentRanges, outline, samplePath, STAGE_W, 
 export { createEffects } from "./effects.js";
 export { songView, metronomeView, buildSignals, gridAt } from "./signals.js";
 export { LiveAnalyser } from "./live.js";
+export { memoryEntry, memoryAnalysis, recognise, refineByKicks, fingerprint, FingerprintTap } from "./memory.js";
 export { createDirector, idleSignals } from "./director.js";
 export { ROOM_PRESETS, buildPreset } from "./presets.js";
 

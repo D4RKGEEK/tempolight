@@ -10,8 +10,9 @@ export const DEFAULTS = () => ({
     effectPrefs: {}, // effect id -> 1 liked, -1 banned (automatic mode)
     location: null,  // {lat, lon, name} for sunrise/sunset schedules and night mode
     night: { enabled: false, from: "23:00", to: "07:00", maxBrightness: 0.3, warm: true }, // calmer light at night
-    text: { source: "song", custom: "TEMPOLIGHT" },
-    mqtt: { enabled: false, url: "", username: "", password: "", prefix: "homeassistant", base: "tempolight" }, // Home Assistant // what Text Scroller shows on matrix panels: song, bpm, clock or custom
+    text: { source: "song", custom: "TEMPOLIGHT" }, // what Text Scroller shows on matrix panels: song, bpm, clock or custom
+    mqtt: { enabled: false, url: "", username: "", password: "", prefix: "homeassistant", base: "tempolight" }, // Home Assistant
+    songMemory: true, // remember analysed songs and recognise them when they play again while listening live
   },
   show: { power: true, mode: "auto", effect: "shock", style: "auto", palette: "auto", everyBeats: 8, speed: 1, params: {}, layer: null },
   devices: [],
@@ -23,6 +24,7 @@ export const DEFAULTS = () => ({
     { id: "focus", name: "Focus", show: { mode: "manual", effect: "aurora", palette: "ocean" }, brightness: 0.4 },
   ],
   schedules: [],
+  songs: [], // song memory: compact analyses of songs played through Tempolight (see engine/src/memory.js)
   lock: null,
 });
 

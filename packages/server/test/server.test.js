@@ -245,3 +245,22 @@ test("Govee lights: added without WLED, get the room's colour over the LAN API",
     await s.call("POST", "/api/power", { on: false }); assert.ok(await until(() => got.some(m => m.cmd === "turn" && m.data.value === 0)), "power off reaches Govee");
   } finally { await s.done(); sock.close(); }
 });
+
+test("song memory: a song played once is recognised later when heard live, and its beat map is used", async () => {
+  const s = await setup();
+  try {
+    await s.call("POST", "/api/devices", { virtual: true });
+    const song = edm(22050), pre = await preAnalyseCore(song.x, song.sr);
+    await s.call("POST", "/api/song", { name: "Synth anthem", analysis: { ...pre, env: Array.from(pre.env) } }); await s.call("DELETE", "/api/song");
+    const list = (await s.call("GET", "/api/songs")).body; assert.equal(list.length, 1); assert.equal(list[0].name, "Synth anthem");
+    const start = 5, x = song.x.subarray(start * 22050), chunk = 11025; let i = 0, found = null;
+    while (i < x.length && !found) { const pcm = new Int16Array(chunk); for (let k = 0; k < chunk; k++) pcm[k] = Math.round((x[i + k] || 0) * 0.4 * 32767);
+      s.app.runtime.pushPcm(pcm, "capture", "Line in", null, 22050); i += chunk; await sleep(25); found = s.app.runtime.status().recognised; }
+    assert.ok(found, "recognised"); assert.equal(found.name, "Synth anthem");
+    const heard = i / 22050, truth = start + s.app.runtime.rt.live.an.t;
+    assert.ok(Math.abs(found.pos - truth) < 0.15, `position ${found.pos} vs ${truth}`); assert.ok(heard < 20, `took ${heard} s`);
+    assert.match(s.app.runtime.status().sourceLabel, /Synth anthem \(recognised\)/);
+    assert.equal((await s.call("DELETE", `/api/songs/${list[0].id}`)).status, 200); assert.equal((await s.call("GET", "/api/songs")).body.length, 0);
+    assert.equal(s.app.runtime.status().recognised, null, "forgetting a song stops following it");
+  } finally { await s.done(); }
+});

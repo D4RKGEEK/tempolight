@@ -62,6 +62,8 @@ A shape: `{type: "line"|"pole"|"free"|"circle"|"rect"|"hex"|"tri"|"matrix", name
 | `POST /api/song` | `{name, analysis}`: the result of `preAnalyseCore()` from `/engine/analysis.js` |
 | `POST /api/song/clock` | `{pos: <seconds>, playing: true}` |
 | `DELETE /api/song` | |
+| `GET /api/songs` | song memory: `[{id, name, bpm, dur, style, drops, at}]` |
+| `DELETE /api/songs/:id` | admin: forget a song |
 | `GET /api/audio/sources` | sound inputs the server can capture from |
 | `PATCH /api/settings` | admin: `{capture: {enabled: true, source: "auto"\|<id>, command?}}` |
 
@@ -72,7 +74,7 @@ A shape: `{type: "line"|"pole"|"free"|"circle"|"rect"|"hex"|"tri"|"matrix", name
 | `GET /api/backup` | admin: everything except the PIN, as one JSON file |
 | `POST /api/restore` | admin: a backup file; the current PIN is kept |
 
-Settings (`PATCH /api/settings`, admin) also take `location: {lat, lon}`, `night: {enabled, from, to, maxBrightness, warm}`
+Settings (`PATCH /api/settings`, admin) also take `songMemory: true|false`, `location: {lat, lon}`, `night: {enabled, from, to, maxBrightness, warm}`
 (times like `23:00`, `sunset` or `sunrise-30`) and `text: {source: "song"|"bpm"|"clock"|"custom", custom}` for the
 Text Scroller. Schedules accept `time: "sunset+30"` or `"sunrise-15"` once a location is set.
 

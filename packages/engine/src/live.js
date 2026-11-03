@@ -2,6 +2,7 @@
 // (beat grid, kick/snare/hi-hat hits, song part, loudness, style). Pure JavaScript, no I/O: the server feeds it
 // samples from a sound card, ffmpeg or a browser, and tests feed it synthetic songs.
 import { gridAt } from "./signals.js";
+import { FingerprintTap } from "./memory.js";
 
 const NF = 1024, HOP = 256;
 const EDGES = (() => { const e = []; for (let i = 0; i <= 24; i++) e.push(40 * Math.pow(10000 / 40, i / 24)); return e; })();
@@ -18,12 +19,12 @@ export class LiveAnalyser {
     this.cosT = new Float32Array(NF / 2); this.sinT = new Float32Array(NF / 2);
     for (let i = 0; i < NF / 2; i++) { this.cosT[i] = Math.cos(-2 * Math.PI * i / NF); this.sinT[i] = Math.sin(-2 * Math.PI * i / NF); }
     this.ring = new Float32Array(NF); this.ringPos = 0; this.filled = 0; this.sinceHop = 0; this.decAcc = 0; this.decN = 0;
-    this.wave = new Float32Array(256);
+    this.wave = new Float32Array(256); this.tap = new FingerprintTap();
     this.reset();
   }
 
   reset() {
-    this.samples = 0; this.t = 0; this.hasPrev = false;
+    this.samples = 0; this.t = 0; this.hasPrev = false; if (this.tap) this.tap.reset();
     this.hist = { k: [], s: [], h: [] }; this.lowHist = []; this.votes = []; this.last = { k: -9, s: -9, h: -9 };
     this.kicks = []; this.snares = []; this.hats = []; this.onsets = []; this.pulseN = 0;
     this.bpm = 0; this.cand = 0; this.candN = 0; this.phase = 0; this.phaseSet = false; this.lastEst = -9;
@@ -70,6 +71,7 @@ export class LiveAnalyser {
     for (let i = 0; i < NF; i++) { const v = ring[(this.ringPos + i) & (NF - 1)]; re[i] = v * win[i]; im[i] = 0; rms += v * v; }
     for (let i = 0; i < 256; i++) this.wave[i] = ring[(this.ringPos + NF - 256 + i) & (NF - 1)];
     rms = Math.sqrt(rms / NF); this.rms = rms;
+    this.tap.push(this.samples / this.sr, rms); // for recognising remembered songs
     this.fft(); for (let i = 0; i < mag.length; i++) mag[i] = Math.hypot(re[i], im[i]) / NF;
     const t = this.t = this.samples / this.sr - NF / 2 / this.sr, dt = this.dtHop;
     if (!this.hasPrev) { this.prev.set(mag); this.hasPrev = true; return; }

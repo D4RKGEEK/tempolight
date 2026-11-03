@@ -2,7 +2,7 @@
 // Sources, best first: a song playing in the browser (analysed ahead of time), live audio (from a browser or this
 // computer's sound card), the metronome, and finally the idle/ambient effect when nothing is playing.
 import { inWindow } from "./sun.js";
-import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, toRGB8, LiveAnalyser } from "../../engine/src/index.js";
+import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, toRGB8, LiveAnalyser, memoryEntry, memoryAnalysis, recognise, refineByKicks } from "../../engine/src/index.js";
 // Everything that touches the network or the sound card comes in through `io` (see node-io.js), so the same runtime
 // runs on a PC or Pi and, with pretend devices, inside the browser for the online demo.
 
@@ -20,7 +20,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
   let L, fx, D, ranges, outs = new Map();
   const health = new Map(); // device id -> {online, rssi, version, ledsReported, lastSeen, error}
   const rt = {
-    frames: 0, fps: 0, startedAt: Date.now(), source: "idle", sourceLabel: "Nothing playing",
+    frames: 0, fps: 0, startedAt: Date.now(), source: "idle", sourceLabel: "Nothing playing", mem: { lock: null, cand: null },
     live: null,      // {an, kind, label, lastPush, clientId}
     capture: null,   // {proc, sourceId, label, error}
     song: null,      // {name, pre, pos, playing, rate, at, clientId}
@@ -60,7 +60,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
   function pushPcm(samples, kind, label, clientId, rate = RATE) {
     if (!rt.live || rt.live.kind !== kind || rt.live.clientId !== clientId || rt.live.rate !== rate) {
       if (rt.live && rt.live.kind === "browser" && kind === "capture" && performance.now() - rt.live.lastPush < 1500) return; // a browser that is sending wins
-      rt.live = { an: new LiveAnalyser(rate), kind, label, clientId, rate, lastPush: 0, started: performance.now() };
+      rt.live = { an: new LiveAnalyser(rate), kind, label, clientId, rate, lastPush: 0, started: performance.now() }; rt.mem.lock = null; rt.mem.cand = null; memT = 0;
       note(`Listening to ${label}`);
     }
     rt.live.an.push(samples); rt.live.lastPush = performance.now();
@@ -90,8 +90,36 @@ export function createRuntime(store, { io, logger = console } = {}) {
     for (const k of ["kicks", "snares", "hats", "drops"]) pre[k] = Array.from(pre[k] || []);
     pre.env = Float32Array.from(pre.env || []); pre.bars = pre.bars || [];
     rt.song = { name: song.name || "Song", pre, pos: 0, playing: false, rate: 1, at: performance.now(), clientId };
+    if (data().settings.songMemory && pre.dur > 20 && pre.env.length) remember(rt.song.name, pre);
     note(`Song ready: ${rt.song.name} (${Math.round(pre.bpm)} BPM, ${fx.styles[pre.style]?.name || pre.style})`);
   }
+  // ---------------------------------------------------------------- song memory
+  function remember(name, pre) {
+    const list = data().songs, old = list.findIndex(e => e.name === name && Math.abs(e.dur - pre.dur) < 1.5);
+    const e = memoryEntry(name, pre, old >= 0 ? list[old].id : "m" + Math.random().toString(36).slice(2, 10));
+    if (old >= 0) list.splice(old, 1); else note(`Remembered “${name}”: Tempolight will recognise it when it plays again`);
+    list.push(e); while (list.length > 60) list.shift(); store.save();
+  }
+  let memT = 0;
+  function songMemoryTick() { // once a second while listening live: is this a song we know?
+    const an = rt.live.an, list = data().songs, m = rt.mem;
+    if (!data().settings.songMemory || !list.length || an.t - memT < 1) return; memT = an.t;
+    const r = recognise(an.tap.q, list, { bpm: an.bpm || undefined });
+    if (m.lock) {
+      const exp = m.lock.pos0 + (an.t - m.lock.t0);
+      if (r && r.id === m.lock.id && Math.abs(r.pos - exp) < 0.8) { m.lock.miss = 0; const ref = refineByKicks(an.kicks, an.t, exp, m.lock.pre.kicks, 0.08); if (ref.hits) m.lock.pos0 += (ref.pos - exp) * 0.5; }
+      else if (++m.lock.miss >= 8 || exp > m.lock.pre.dur + 2) { note(`Song memory: lost track of “${m.lock.name}”, back to live listening`); m.lock = null; m.cand = null; }
+      return;
+    }
+    if (!r) { m.cand = null; return; }
+    if (m.cand && m.cand.id === r.id && Math.abs(r.pos - (m.cand.pos + an.t - m.cand.t)) < 0.6) { // seen twice, in step: it's this song
+      const e = list.find(x => x.id === r.id), pre = memoryAnalysis(e), ref = refineByKicks(an.kicks, an.t, r.pos, pre.kicks);
+      m.lock = { id: e.id, name: e.name, pre, pos0: ref.pos, t0: an.t, miss: 0 }; m.cand = null;
+      note(`Song memory: recognised “${e.name}” at ${Math.floor(ref.pos / 60)}:${String(Math.floor(ref.pos % 60)).padStart(2, "0")}; following its beat map`);
+    } else m.cand = { ...r, t: an.t };
+  }
+  function forget(id) { const list = data().songs, i = list.findIndex(e => e.id === id); if (i < 0) return false; list.splice(i, 1); if (rt.mem.lock && rt.mem.lock.id === id) rt.mem.lock = null; store.save(); return true; }
+
   function songClock(c, clientId) {
     if (!rt.song) return; if (clientId && rt.song.clientId && rt.song.clientId !== clientId) return;
     rt.song.pos = Number(c.pos) || 0; rt.song.playing = !!c.playing; rt.song.rate = Number(c.rate) || 1; rt.song.at = performance.now();
@@ -111,6 +139,10 @@ export function createRuntime(store, { io, logger = console } = {}) {
     }
     if (liveFresh()) {
       const an = rt.live.an, t = an.t + Math.min(0.12, (now - rt.live.lastPush) / 1000) + (s.predict ? off : 0);
+      songMemoryTick();
+      if (rt.mem.lock) { const L = rt.mem.lock, pos = L.pos0 + (t - L.t0); // a song we know: use its beat map
+        rt.source = rt.live.kind; rt.sourceLabel = `${rt.live.label}: ${L.name} (recognised)`;
+        return { V: { ...songView(L.pre, pos), live: true, vocal: an.vocal, quietFor: 0 }, t: pos, extra: an.extras() }; }
       const V = an.view(t, { predict: s.predict });
       rt.source = rt.live.kind; rt.sourceLabel = rt.live.label;
       if (V.state === "silent" && V.quietFor > (s.idleAfterSec ?? 8)) { rt.source = "idle"; rt.sourceLabel = `${rt.live.label} (quiet)`; return { V: null, t: now / 1000 }; }
@@ -262,7 +294,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
       type: "status", source: rt.source, sourceLabel: rt.sourceLabel, fps: Math.round(rt.fps), leds: L.N, effect: D.showing, effectName: fx.list.find(e => e.id === D.showing)?.name || D.showing, style: D.style,
       styleName: fx.styles[D.style]?.name || D.style, bpm: V && V.bpm ? Math.round(V.bpm * 10) / 10 : null, part: V ? V.state : "idle",
       beat: V && V.g.has ? V.g.beatInBar : null, level: an ? Math.round(Math.min(1, an.eFast / an.eMax) * 100) / 100 : V ? Math.round((V.loud || 0) * 100) / 100 : 0,
-      bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
+      bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, recognised: rt.mem.lock && liveFresh() ? { name: rt.mem.lock.name, pos: Math.round((rt.mem.lock.pos0 + rt.live.an.t - rt.mem.lock.t0) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
       song: rt.song ? { name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
       capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null,
       overlay: overlayState(), devices: data().devices.map(d => ({ id: d.id, ...health.get(d.id), sent: outs.get(d.id)?.sender.sent || 0, used: outs.get(d.id)?.used || 0, amps: Math.round((outs.get(d.id)?.amps || 0) * 100) / 100, limited: !!outs.get(d.id)?.limited })),
@@ -287,7 +319,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
   return {
     get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, rt, log, listeners, previewClients, phones, health,
     rebuild, syncDirector, startLoop, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
-    identify, syncSegments, setPower, action, status, setScreen, layoutInfo, checkDevice, note,
+    identify, syncSegments, setPower, action, status, setScreen, remember, forget, layoutInfo, checkDevice, note,
     close() { clearInterval(timer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
   };
 }

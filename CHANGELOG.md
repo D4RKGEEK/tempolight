@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Song memory: songs played through Tempolight are remembered (a compact beat map, about 10 kB each). When one plays again from anywhere else while Tempolight listens live, it is recognised in about 15 seconds from its loudness shape, lined up with the kicks to a few milliseconds, and the lights follow the stored beat map, so drops are known ahead. Status shows `recognised`.
+
 - Vocal detection while listening live: a clear tone whose pitch moves smoothly like a voice (vibrato, melody), so drums, steady pads and piano don't count. Drives Vocal Glow and shows as "Singing" on the Music page.
 
 - Govee lights over the local network (beta): found by Scan network, driven as one colour (all LAN models) or per segment with DreamView streaming (some models).

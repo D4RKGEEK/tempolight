@@ -67,6 +67,10 @@ await step("music: play a song, it is analysed and drives the lights", async () 
   const seen = new Set(); for (let i = 0; i < 10; i++) { seen.add(lum(A).toFixed(0)); await sleep(150); } ok(seen.size > 3, "lights are not changing with the music");
   ok(status().bands && status().bands.some(v => v > 0), "no spectrum from the browser audio"); await shot("04-music");
 });
+await step("music: the song is remembered in song memory", async () => {
+  await until(() => page.textContent("#m-songs").then(t => /BPM/.test(t)), 6000, "song not in the memory list");
+  ok(app.store.data.songs.length === 1, "not stored");
+});
 await step("home shows the song with transport controls", async () => { await go("home"); await until(() => page.isVisible("#h-transport:not([hidden])"), 4000, "no transport"); await page.click("#h-play"); await sleep(600);
   ok(status().song && !status().song.playing, "pause did not reach the server"); await page.click("#h-play"); await sleep(400); ok(status().song.playing, "play did not resume"); await shot("05-home"); });
 await step("live pads: blackout, flash, build & drop", async () => {

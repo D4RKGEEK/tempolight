@@ -217,6 +217,9 @@ function musicPage(el) {
       <label class="check"><input type="checkbox" id="m-pred" ${s.predict ? "checked" : ""}> Predict beats when listening live (lights land on the beat instead of just after it)</label>
       <div class="field"><label>Metronome when nothing plays</label><div class="row"><label class="check"><input type="checkbox" id="m-met" ${s.metronome.enabled ? "checked" : ""}> On</label><input type="number" id="m-bpmset" min="40" max="220" value="${s.metronome.bpm}" style="width:90px"> <span class="faint">BPM</span></div></div>
     </div>`, "span-6")}
+    ${panel("Song memory", `<span id="m-memn"></span>`, `<label class="check"><input type="checkbox" id="m-mem" ${s.songMemory ? "checked" : ""}> On</label>`, `<div class="pb stack">
+      <p class="muted">Songs you play here are remembered. When one plays again from anywhere else (Spotify, a DJ, the radio) while Tempolight listens live, it is recognised after about 15 seconds and the lights follow its full beat map: build-ups and drops are known ahead.</p>
+      <div class="tablewrap"><table><tbody id="m-songs"><tr><td class="faint">Loading…</td></tr></tbody></table></div></div>`, "span-6")}
     ${panel("Screen sync", `<span id="m-scrst">${app.screen?.state.active ? "Sharing" : "Off"}</span>`, `<button class="btn" id="m-scr" type="button">${app.screen?.state.active ? "Stop sharing" : "Share a screen…"}</button>`, `<div class="pb stack">
       <p class="muted">Share a film, a game or a music video and the room takes its colours, like a big ambilight. Turns on the Screen Sync effect; pick another effect to go back.</p>
       <span class="help" id="m-scrhelp">${navigator.mediaDevices?.getDisplayMedia ? "Works in Chrome, Edge and Firefox on a computer. Keep the shared tab or window visible." : "This browser can't share its screen. Use a computer."}</span></div>`, "span-6")}
@@ -226,6 +229,13 @@ function musicPage(el) {
       <div class="field"><label for="m-capcmd">Custom command (optional)</label><input id="m-capcmd" class="mono" placeholder='ffmpeg -f pulse -i default -ac 1 -ar 22050 -f s16le -' value="${esc(s.capture.command)}"><span class="help">Any command that writes 16-bit mono 22,050 Hz audio to its output.</span></div>
       <div id="m-capst" class="faint"></div></div>`, "span-12")}`;
   const canShare = !!navigator.mediaDevices?.getDisplayMedia;
+  const fmtT = v => `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, "0")}`;
+  async function songs() { const list = await api("GET", "/api/songs").catch(() => []), tb = $("#m-songs"); if (!tb) return;
+    $("#m-memn").textContent = list.length ? `${list.length} song${list.length > 1 ? "s" : ""} remembered` : "";
+    tb.innerHTML = list.length ? list.slice().reverse().map(e => `<tr><td>${esc(e.name)}</td><td class="num faint">${Math.round(e.bpm)} BPM</td><td class="num faint">${fmtT(e.dur)}</td><td class="num faint">${e.drops} drop${e.drops === 1 ? "" : "s"}</td><td>${lockedOut ? "" : `<button class="btn sm" data-forget="${e.id}" type="button">Forget</button>`}</td></tr>`).join("")
+      : '<tr><td class="faint">Nothing yet. Play a song on this page and it will be remembered.</td></tr>';
+    $$("[data-forget]").forEach(b => b.onclick = () => act(() => api("DELETE", `/api/songs/${b.dataset.forget}`), "Forgotten").then(songs).catch(() => {})); }
+  $("#m-mem").onchange = e => act(() => api("PATCH", "/api/settings", { songMemory: e.target.checked }), e.target.checked ? "Song memory on" : "Song memory off").then(refreshState).catch(() => {});
   if (!canShare) $("#m-scr").disabled = true;
   $("#m-scr").onclick = async () => { if (!app.screen) { const { createScreenShare } = await import("/screen.js"); app.screen = createScreenShare({ ws, onChange: sc => { if (sc.error) toast(sc.error, true); const b = $("#m-scr"), t = $("#m-scrst"); if (b) b.textContent = sc.active ? "Stop sharing" : "Share a screen…"; if (t) t.textContent = sc.active ? `Sharing ${sc.label}` : "Off"; } }); }
     if (app.screen.state.active) { app.screen.stop(); return; }
@@ -286,10 +296,10 @@ function musicPage(el) {
     $("#m-stop").hidden = !(a.mode === "system" || a.mode === "mic");
     $("#m-system").setAttribute("aria-pressed", a.mode === "system"); $("#m-mic").setAttribute("aria-pressed", a.mode === "mic");
   }
-  renderQueue();
+  renderQueue(); songs();
   const partName = { calm: "Calm", build: "Build-up", drop: "Drop", silent: "Quiet", idle: "–" };
   return {
-    onAudio: renderQueue,
+    onAudio: renderQueue, onLog(e) { if (/^Remembered|^Song memory/.test(e.msg)) songs(); },
     onStatus(m) {
       $("#m-src").textContent = m.sourceLabel; $("#m-bpm").textContent = m.bpm ? m.bpm.toFixed(0) : "–"; $("#m-part").textContent = partName[m.part] || m.part; $("#m-style").textContent = m.source === "idle" ? "–" : m.styleName; $("#m-voc").textContent = m.vocal == null ? "–" : m.vocal > 0.35 ? "Yes" : m.vocal > 0.15 ? "A little" : "No";
       const bars = $$("#m-spec i"); bars.forEach((b, i) => b.style.height = (m.bands ? Math.max(2, m.bands[i] * 100) : 2) + "%");
