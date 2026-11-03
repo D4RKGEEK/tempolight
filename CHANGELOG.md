@@ -6,6 +6,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 ## [0.2.0] - 2026-11-04
 
 ### Added
+- Realistic room preview: strips drawn as continuous diffused light with hot cores, bloom and light spilling onto the wall; redraws only when a new frame arrives.
 - Web app with Home, Music, Effects, Live pads, Scenes & schedules, Room, Devices and Settings pages; light and dark themes; phone layout.
 - Live listening: this computer's sound or a microphone from the browser, or a sound card on the server (PulseAudio, ALSA, ffmpeg).
 - Songs analysed in the browser before they play, with transport controls and drop markers.

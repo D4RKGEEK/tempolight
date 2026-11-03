@@ -2,6 +2,7 @@
 // live status the server sends 4 times a second.
 import { createAudio } from "/audio.js";
 import { roomPage } from "/room.js";
+import { createRenderer } from "/preview.js";
 
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -65,26 +66,14 @@ function chrome() {
 
 // ---------------------------------------------------------------- preview canvas: what the LEDs are showing right now
 export function createPreview(stage, { outlines = false, selected = () => -1, layout = () => app.layout, colors = null } = {}) {
-  const cv = document.createElement("canvas"); stage.appendChild(cv); const ctx = cv.getContext("2d");
-  let raf = 0, alive = true;
+  const cv = document.createElement("canvas"); stage.appendChild(cv); const R = createRenderer(cv);
+  let raf = 0, alive = true, last = [];
   function draw() {
     if (!alive) return; raf = requestAnimationFrame(draw);
-    const L = layout(), r = stage.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1);
-    if (cv.width !== Math.round(r.width * dpr)) { cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); }
-    const W = cv.width, H = cv.height, sx = W / 16, sy = H / 9;
-    ctx.globalCompositeOperation = "source-over"; ctx.fillStyle = "#0b0c10"; ctx.fillRect(0, 0, W, H);
-    if (!L || !L.N) return;
-    const f = colors ? colors() : app.frame, live = f && f.length === L.N * 3, rad = Math.max(1.5, Math.min(W / 220, 4.5 * dpr));
-    ctx.globalCompositeOperation = "lighter";
-    for (let i = 0; i < L.N; i++) {
-      const x = L.x[i] * sx, y = L.y[i] * sy; let rr = 40, g = 40, b = 48;
-      if (live) { rr = f[i * 3]; g = f[i * 3 + 1]; b = f[i * 3 + 2]; }
-      const m = Math.max(rr, g, b); if (m < 4) { ctx.fillStyle = "rgba(255,255,255,0.06)"; ctx.fillRect(x - 1, y - 1, 2, 2); continue; }
-      ctx.fillStyle = `rgba(${rr},${g},${b},0.16)`; ctx.beginPath(); ctx.arc(x, y, rad * 3.2, 0, 6.283); ctx.fill();
-      ctx.fillStyle = `rgb(${rr},${g},${b})`; ctx.beginPath(); ctx.arc(x, y, rad, 0, 6.283); ctx.fill();
-    }
-    if (outlines && selected() >= 0) { ctx.globalCompositeOperation = "source-over"; ctx.strokeStyle = "#f5a524"; ctx.lineWidth = 1.5 * dpr;
-      for (let i = 0; i < L.N; i++) if (L.shape[i] === selected()) { ctx.strokeRect(L.x[i] * sx - rad - 1, L.y[i] * sy - rad - 1, (rad + 1) * 2, (rad + 1) * 2); } }
+    const r = stage.getBoundingClientRect(), dpr = Math.min(2, devicePixelRatio || 1), L = layout(), f = colors ? colors() : app.frame, sel = outlines ? selected() : -1;
+    if (cv.width !== Math.round(r.width * dpr)) { cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); last = []; }
+    if (last[0] === L && last[1] === f && last[2] === sel) return; // only redraw when a new frame arrives (30 a second)
+    last = [L, f, sel]; R.draw(L, f, dpr, { selected: sel });
   }
   draw(); ws.send({ type: "preview", on: true });
   return { canvas: cv, destroy() { alive = false; cancelAnimationFrame(raf); } };
@@ -174,7 +163,11 @@ function homePage(el) {
         return `<tr><td>${esc(d.name)}</td><td class="mono">${esc(d.virtual ? "virtual" : d.host)}</td><td class="num">${d.leds || "?"}</td><td>${!d.enabled ? '<span class="badge">Off</span>' : h.online ? '<span class="badge live"><i></i>Online</span>' : h.online === false ? '<span class="badge err"><i></i>Offline</span>' : '<span class="badge">Checking</span>'}</td></tr>`; }).join("") || '<tr><td colspan="4" class="faint">No devices</td></tr>';
     },
     onLog(e) { const l = $("#h-log"); if (l) l.insertAdjacentHTML("afterbegin", logRow(e)); },
-    onChanged(w) { if (w.has("devices") || w.has("show") || w.has("scenes") || w.has("all")) route(); },
+    onChanged(w) {
+      if (w.has("devices") || w.has("scenes") || w.has("room") || w.has("all")) return route();
+      if (w.has("show")) { const sh = app.state.show; // update the controls in place, so the preview doesn't blink
+        for (const [id, v] of [["#h-mode", sh.mode], ["#h-effect", sh.effect], ["#h-styl", sh.style], ["#h-pal", sh.palette]]) { const e = $(id); if (e && document.activeElement !== e) e.value = v; } }
+    },
     destroy() { prev && prev.destroy(); },
   };
 }

@@ -78,7 +78,7 @@ export async function createApp(opts) {
     if (virtual) { // a pretend controller: shows in the preview, sends nothing. For trying the app without hardware.
       const dev = { id: newId("d"), name: String(name || "Virtual room").slice(0, 60), host: "virtual", ddpPort: 4048, leds: Number(leds) || 600, enabled: true, virtual: true };
       data().devices.push(dev); if (!data().room.shapes.length) data().room.shapes = buildPreset("living", [dev]); else autoPlace(dev);
-      runtime.rebuild(); runtime.note(`Added ${dev.name} (virtual, ${dev.leds} LEDs)`); changed("devices"); return dev;
+      runtime.rebuild(); runtime.checkDevice(dev); runtime.note(`Added ${dev.name} (virtual, ${dev.leds} LEDs)`); changed("devices"); return dev;
     }
     host = String(host || "").trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
     if (!host) throw new HttpError(400, "Enter the controller's IP address, for example 192.168.1.42");

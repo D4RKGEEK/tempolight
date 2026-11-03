@@ -28,14 +28,17 @@ async function shoot(theme, viewport, pages) {
   await page.goto(`${base}/#/music`); await page.waitForSelector("#m-demo");
   await page.click("#m-demo");
   for (let i = 0; i < 300 && app.runtime.status().source !== "song"; i++) await sleep(100);
-  await page.evaluate(() => { const a = window.__seek; });
-  for (const [hash, name, wait = 2500] of pages) {
-    await page.goto(`${base}/#/${hash}`); await page.waitForSelector("#page .panel"); await sleep(wait);
+  // jump into the first drop, so the pictures show the lights at full energy
+  const st = app.runtime.status(), at = (st.song.drops[0] + 3) / st.song.dur;
+  await page.waitForSelector("#m-prog"); const box = await page.locator("#m-prog").boundingBox();
+  await page.mouse.click(box.x + box.width * at, box.y + box.height / 2);
+  for (const [hash, name, wait = 1500] of pages) {
+    await page.evaluate(h => { location.hash = "#/" + h; }, hash); await page.waitForSelector("#page .panel"); await sleep(wait); // hash change keeps the song playing
     await page.screenshot({ path: path.join(out, `${name}.png`) }); console.log("docs/images/" + name + ".png");
   }
   await ctx.close();
 }
-await shoot("dark", { width: 1440, height: 900 }, [["home", "home-dark", 9000], ["music", "music"], ["effects", "effects"], ["live", "live-pads"], ["room", "room"], ["scenes", "scenes"], ["devices", "devices"], ["settings", "settings"]]);
-await shoot("light", { width: 1440, height: 900 }, [["home", "home-light", 9000]]);
-await shoot("dark", { width: 390, height: 844 }, [["home", "phone-home", 6000], ["live", "phone-pads"]]);
+await shoot("dark", { width: 1440, height: 900 }, [["home", "home-dark", 1200], ["music", "music"], ["effects", "effects"], ["live", "live-pads"], ["room", "room"], ["scenes", "scenes"], ["devices", "devices"], ["settings", "settings"]]);
+await shoot("light", { width: 1440, height: 900 }, [["home", "home-light", 1200]]);
+await shoot("dark", { width: 390, height: 844 }, [["home", "phone-home", 1200], ["live", "phone-pads"]]);
 await browser.close(); await app.close(); rmSync(dataDir, { recursive: true, force: true });
