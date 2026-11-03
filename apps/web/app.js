@@ -560,6 +560,14 @@ function settingsPage(el) {
       <div class="field"><label for="x-src">Show</label><select id="x-src">${opt("song", "What's playing", s.text.source === "song")}${opt("bpm", "The tempo", s.text.source === "bpm")}${opt("clock", "The time", s.text.source === "clock")}${opt("custom", "My own text", s.text.source === "custom")}</select></div>
       <div class="field"><label for="x-custom">My own text</label><input id="x-custom" maxlength="80" value="${esc(s.text.custom)}"></div>
     </div>`, "span-6")}
+    ${panel("Home Assistant", `<span id="m-state">${s.mqtt?.enabled ? "Connecting…" : "Off"}</span>`, "", `<div class="pb controls">
+      <label class="check"><input type="checkbox" id="m-on" ${s.mqtt?.enabled ? "checked" : ""}> Connect to Home Assistant through MQTT (it finds Tempolight by itself)</label>
+      <div class="field"><label for="m-url">MQTT broker</label><input id="m-url" placeholder="mqtt://192.168.1.10:1883" value="${esc(s.mqtt?.url || "")}"></div>
+      <div class="field"><label for="m-user">User name</label><input id="m-user" autocomplete="off" value="${esc(s.mqtt?.username || "")}"></div>
+      <div class="field"><label for="m-pass">Password</label><input id="m-pass" type="password" autocomplete="new-password" placeholder="${s.mqtt?.hasPassword ? "(saved)" : ""}"></div>
+      <span class="help">In Home Assistant, add the Mosquitto broker add-on and the MQTT integration, then use the same broker here. Tempolight appears as a light with effects, a scene picker, tempo and song-part sensors, and Flash, Drop and Next buttons.</span>
+      <div class="row"><button class="btn sm" id="m-save" type="button">Save</button></div>
+    </div>`, "span-6")}
     ${panel("Backup", "Devices, room, zones, scenes, schedules and settings in one file", "", `<div class="pb stack"><div class="row"><button class="btn" id="b-down" type="button">Download backup</button><label class="btn" for="b-file">Restore from a file…</label><input type="file" id="b-file" accept="application/json,.json" hidden></div>
       <p class="faint" style="font-size:12.5px">Use it to move to a new computer or Raspberry Pi. Restoring keeps your current PIN.</p></div>`, "span-6")}
     ${panel("Lock", st.locked ? "Locked with a PIN" : "Not locked", "", `<div class="pb stack">
@@ -591,6 +599,9 @@ function settingsPage(el) {
   $("#l-geo").onclick = () => { if (!navigator.geolocation) return toast("This browser can't share its location", true);
     $("#l-help").textContent = "Asking the browser…"; navigator.geolocation.getCurrentPosition(p => { $("#l-lat").value = p.coords.latitude.toFixed(4); $("#l-lon").value = p.coords.longitude.toFixed(4); $("#l-save").click(); },
       e => { $("#l-help").textContent = "Couldn't get the location: " + e.message + ". Type latitude and longitude instead (search the city name online)."; }, { timeout: 10000 }); };
+  const mqtt = () => { const b = { enabled: $("#m-on").checked, url: $("#m-url").value.trim(), username: $("#m-user").value.trim() }; if ($("#m-pass").value) b.password = $("#m-pass").value; return setS({ mqtt: b }); };
+  $("#m-save").onclick = mqtt; $("#m-on").onchange = mqtt;
+  const mqttLabel = m => !m || m.state === "off" ? "Off" : m.state === "connected" ? "Connected" : m.state === "error" ? `Problem: ${m.error}` : "Connecting…";
   $("#x-src").onchange = e => setS({ text: { source: e.target.value } }); $("#x-custom").onchange = e => setS({ text: { custom: e.target.value } });
   $("#b-down").onclick = async () => { const b = await act(() => api("GET", "/api/backup")).catch(() => null); if (!b) return;
     const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([JSON.stringify(b, null, 2)], { type: "application/json" })); a.download = `tempolight-backup-${new Date().toISOString().slice(0, 10)}.json`; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 5000); };
@@ -601,7 +612,7 @@ function settingsPage(el) {
   if ($("#s-unlockset")) $("#s-unlockset").onclick = async () => { await act(() => api("DELETE", "/api/lock"), "PIN removed").catch(() => {}); await refreshState(); route(); };
   if ($("#s-relock")) $("#s-relock").onclick = () => { app.token = null; store.set("token", null); ws.sock?.close(); refreshState().then(route); };
   $("#s-reset").onclick = async () => { if (confirm("Reset all devices, the room, scenes, schedules and settings?")) { await act(() => api("POST", "/api/reset"), "Reset").catch(() => {}); await refreshState(); await loadLayout(); route(); } };
-  return { onChanged(w) { if (w.has("lock")) route(); } };
+  return { onChanged(w) { if (w.has("lock")) route(); }, onStatus(m) { const e = $("#m-state"); if (e) e.textContent = mqttLabel(m.mqtt); } };
 }
 
 // ---------------------------------------------------------------- router and boot

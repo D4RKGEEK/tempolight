@@ -11,6 +11,7 @@ import { createCore, HttpError } from "./core.js";
 import { attachWebSocket } from "./ws.js";
 import { startOsc } from "./osc.js";
 import * as io from "./node-io.js";
+import { startHomeAssistant } from "./homeassistant.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(here, "../../..");
@@ -34,6 +35,7 @@ export async function createApp(opts) {
     version: pkg.version, newId, hashPin, checkPin, randomToken: () => crypto.randomBytes(16).toString("hex"),
     getInfo: io.getInfo, discoverWled: io.discoverWled, ipOf: io.ipOf, listSources: io.listSources, startOsc,
     uptime: () => process.uptime(), now: opts.now, discover: opts.discover } });
+  const ha = startHomeAssistant({ core, store, runtime, version: pkg.version });
 
   // ---------------------------------------------------------------- static files
   // /packages/ serves the engine and the server core to the browser too (the web app and the demo import them)
@@ -74,6 +76,6 @@ export async function createApp(opts) {
   return {
     server, runtime, store, core, discovery: core.discovery,
     listen(port, host) { return new Promise((res, rej) => { server.once("error", rej); server.listen(port, host, () => res(server.address().port)); }); },
-    async close() { core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
+    async close() { ha.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
   };
 }

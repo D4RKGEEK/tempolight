@@ -94,7 +94,27 @@ Add `?token=` when locked. The server sends `{type: "status", ...}` four times a
 - `{type: "clock", pos, playing}` while a song plays
 - `{type: "action", action: {type: "flash"}}` for pads, with low delay
 
-## Home Assistant example
+## Home Assistant
+
+The easy way is MQTT discovery. In Settings → Home Assistant, turn it on and enter your broker (for example the
+Mosquitto add-on: `mqtt://homeassistant.local:1883`, with a user name and password). Or with the API:
+`PATCH /api/settings {mqtt: {enabled: true, url, username, password, prefix?: "homeassistant", base?: "tempolight"}}`.
+The password is never sent back (`hasPassword` says one is saved).
+
+Tempolight then appears in Home Assistant as one device with:
+
+| Entity | Topics (with base `tempolight`) |
+| --- | --- |
+| Light: on/off, brightness, effect (or "Automatic") | `tempolight/light/set` (JSON schema), state on `tempolight/light/state` |
+| Select: scene | `tempolight/scene/set` with a scene name |
+| Sensors: tempo, song part, music source | `tempolight/status` (JSON) |
+| Buttons: Flash, Drop now, Next effect | `tempolight/action/set` with `flash`, `drop` or `next` |
+
+`tempolight/availability` is `online` or `offline` (also set by the broker if Tempolight stops suddenly).
+`GET /api/status` has `mqtt: {state: "connected"|"connecting"|"reconnecting"|"error"|"off", error}`.
+
+## Home Assistant without MQTT
+
 
 ```yaml
 rest_command:

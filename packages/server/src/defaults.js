@@ -10,7 +10,8 @@ export const DEFAULTS = () => ({
     effectPrefs: {}, // effect id -> 1 liked, -1 banned (automatic mode)
     location: null,  // {lat, lon, name} for sunrise/sunset schedules and night mode
     night: { enabled: false, from: "23:00", to: "07:00", maxBrightness: 0.3, warm: true }, // calmer light at night
-    text: { source: "song", custom: "TEMPOLIGHT" }, // what Text Scroller shows on matrix panels: song, bpm, clock or custom
+    text: { source: "song", custom: "TEMPOLIGHT" },
+    mqtt: { enabled: false, url: "", username: "", password: "", prefix: "homeassistant", base: "tempolight" }, // Home Assistant // what Text Scroller shows on matrix panels: song, bpm, clock or custom
   },
   show: { power: true, mode: "auto", effect: "shock", style: "auto", palette: "auto", everyBeats: 8, speed: 1, params: {}, layer: null },
   devices: [],

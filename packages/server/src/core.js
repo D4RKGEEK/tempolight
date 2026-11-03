@@ -31,12 +31,13 @@ export function createCore({ store, runtime, env }) {
   const effectIds = () => new Set(runtime.effects.list.map(e => e.id));
   const pub = () => {
     const d = data();
-    return { version: env.version, settings: d.settings, show: d.show, devices: d.devices, room: d.room, scenes: d.scenes,
+    return { version: env.version, settings: { ...d.settings, mqtt: { ...d.settings.mqtt, password: "", hasPassword: !!d.settings.mqtt?.password } }, show: d.show, devices: d.devices, room: d.room, scenes: d.scenes,
       schedules: d.schedules.map(s => ({ ...s, next: nextRun(s, new Date(), d.settings.location)?.toISOString() || null })), locked: locked(),
       effects: runtime.effects.list, styles: Object.fromEntries(Object.entries(runtime.effects.styles).map(([k, v]) => [k, v.name])),
       palettes: Object.keys(runtime.effects.palettes), presets: Object.values(ROOM_PRESETS), captureSources: env.listSources().map(({ id, label }) => ({ id, label })), firstRun: store.firstRun && !d.devices.length };
   };
-  const changed = (what) => { store.save(); broadcast({ type: "changed", what }); };
+  const changeListeners = new Set();
+  const changed = (what) => { store.save(); broadcast({ type: "changed", what }); for (const f of changeListeners) { try { f(what); } catch {} } };
 
   function cleanShape(s, devIds) {
     if (!s || !SHAPE_TYPES.has(s.type)) throw new HttpError(400, `Shape type must be one of: ${[...SHAPE_TYPES].join(", ")}`);
@@ -108,6 +109,9 @@ export function createCore({ store, runtime, env }) {
       for (const k of ["from", "to"]) if (b.night[k] !== undefined && !okT(b.night[k])) throw new HttpError(400, "Night mode times look like 23:00 or sunset");
       Object.assign(s.night, { enabled: b.night.enabled ?? s.night.enabled, from: b.night.from ?? s.night.from, to: b.night.to ?? s.night.to,
         maxBrightness: b.night.maxBrightness !== undefined ? num(b.night.maxBrightness, 0.02, 1) : s.night.maxBrightness, warm: b.night.warm ?? s.night.warm }); }
+    if (b.mqtt) { const m = s.mqtt; for (const k of ["url", "username", "prefix", "base"]) if (b.mqtt[k] !== undefined) m[k] = String(b.mqtt[k]).trim().slice(0, 200);
+      if (b.mqtt.password) m.password = String(b.mqtt.password).slice(0, 200); if (b.mqtt.clearPassword) m.password = ""; if (b.mqtt.enabled !== undefined) m.enabled = !!b.mqtt.enabled;
+      if (m.enabled && !m.url) throw new HttpError(400, "Enter your MQTT broker's address, for example mqtt://192.168.1.10:1883"); }
     if (b.text) { if (b.text.source !== undefined && !["song", "bpm", "clock", "custom"].includes(b.text.source)) throw new HttpError(400, "Text source is song, bpm, clock or custom");
       Object.assign(s.text, { source: b.text.source ?? s.text.source, custom: b.text.custom !== undefined ? String(b.text.custom).slice(0, 80) : s.text.custom }); }
     const after = JSON.stringify({ fps: s.fps, cap: s.capture, osc: s.osc }), prev = JSON.parse(before);
@@ -175,7 +179,7 @@ export function createCore({ store, runtime, env }) {
   route("POST", "/api/power", "brightness", async (ctx) => { const b = ctx.body; await runtime.setPower(b.on ?? !data().show.power); changed("show"); return data().show; });
   route("POST", "/api/brightness", "brightness", async (ctx) => { const b = ctx.body; applySettings({ brightness: b.value }); return { brightness: data().settings.brightness }; });
   route("POST", "/api/action", "pads", async (ctx) => runtime.action(ctx.body));
-  route("PATCH", "/api/settings", "admin", async (ctx) => { applySettings(ctx.body); return data().settings; });
+  route("PATCH", "/api/settings", "admin", async (ctx) => { applySettings(ctx.body); return pub().settings; });
 
   // devices
   route("GET", "/api/devices", null, () => data().devices.map(d => ({ ...d, health: runtime.health.get(d.id) || null })));
@@ -314,6 +318,6 @@ export function createCore({ store, runtime, env }) {
     throw new HttpError(404, `No API route ${method} ${pathname}`);
   }
 
-  return { handle, connect, broadcast, discovery, applyScene, applyShow, applySettings, addDevice, pub,
+  return { handle, connect, broadcast, discovery, onChange: f => changeListeners.add(f), applyScene, applyShow, applySettings, addDevice, pub,
     close() { clearInterval(statusTimer); sched.stop(); osc && osc.close(); for (const c of clients) c.close?.(); } };
 }

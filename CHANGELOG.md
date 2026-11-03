@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Home Assistant through MQTT discovery: Tempolight shows up as a light with effects, a scene picker, tempo and song-part sensors and Flash/Drop/Next buttons. Built-in MQTT client, no extra packages.
+
 ### Added
 - Night mode: from a time (or sunset) until a time (or sunrise), brightness is capped, colours stay warm and there are no strobes or drop flashes.
 - Sunrise and sunset schedules (for example "sunset-15"), worked out offline from your location; "Use my location" fills it in.
