@@ -35,7 +35,7 @@ if (maj < 20) { console.error(`Tempolight needs Node.js 20 or newer (this is ${p
 
 const dataDir = path.resolve(opt("data", process.env.TEMPOLIGHT_DATA || path.join(os.homedir(), ".tempolight")));
 const port = Number(opt("port", process.env.PORT || 8080)), host = opt("host", process.env.HOST || "0.0.0.0");
-const app = await createApp({ dataDir, discover: !flag("no-discover") });
+const app = await createApp({ dataDir, discover: !flag("no-discover") && !process.env.TEMPOLIGHT_NO_DISCOVER });
 
 const audio = opt("audio");
 if (audio) {

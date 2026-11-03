@@ -1,0 +1,16 @@
+# For Docker Desktop on Windows or Mac, where host networking is off by default:
+#   docker compose -f docker-compose.desktop.yml up -d      then open http://localhost:8080
+# Automatic discovery can't see your network from here, so add WLED controllers by IP on the Devices page.
+services:
+  tempolight:
+    build: .
+    container_name: tempolight
+    ports:
+      - "8080:8080"
+    environment:
+      - TEMPOLIGHT_NO_DISCOVER=1
+    volumes:
+      - tempolight:/data
+    restart: unless-stopped
+volumes:
+  tempolight:

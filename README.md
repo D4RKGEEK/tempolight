@@ -114,8 +114,12 @@ private networks so your lights and phone can reach it.
 
 ```bash
 git clone https://github.com/D4RKGEEK/tempolight.git && cd tempolight
-docker compose up -d          # host networking, so it can find WLED and stream to it
+docker compose up -d          # Linux / Raspberry Pi: host networking, so it can find WLED and stream to it
+docker compose -f docker-compose.desktop.yml up -d   # Docker Desktop on Windows or Mac
 ```
+
+Docker Desktop has host networking off by default, so use the desktop file there (or turn on *Settings → Resources →
+Network → Enable host networking*). Then add your controllers by IP on the Devices page.
 
 ### From source
 
