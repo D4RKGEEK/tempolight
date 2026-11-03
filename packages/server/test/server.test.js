@@ -231,3 +231,17 @@ test("screen sync: a shared screen's colours reach the LEDs", { skip: typeof Web
     clearInterval(timer); ws.close();
   } finally { await s.done(); await wled.close(); }
 });
+
+test("Govee lights: added without WLED, get the room's colour over the LAN API", async () => {
+  const sock = dgram.createSocket("udp4"), got = []; await new Promise(r => sock.bind(0, "127.0.0.1", r)); sock.on("message", b => got.push(JSON.parse(b.toString()).msg));
+  const s = await setup();
+  try {
+    const add = await s.call("POST", "/api/devices", { host: "127.0.0.1", kind: "govee", name: "Lamp" }); assert.equal(add.status, 200); assert.equal(add.body.kind, "govee");
+    await s.call("PATCH", `/api/devices/${add.body.id}`, { ddpPort: sock.address().port }); await s.call("PATCH", "/api/show", { effect: "solar" });
+    assert.ok(await until(() => got.some(m => m.cmd === "colorwc")), "colour commands arrive");
+    const st = (await s.call("GET", "/api/status")).body.devices.find(d => d.id === add.body.id); assert.equal(st.online, true);
+    await s.call("PATCH", `/api/devices/${add.body.id}`, { goveeMode: "segments", goveeSegments: 4 });
+    assert.ok(await until(() => got.some(m => m.cmd === "razer" && Buffer.from(m.data.pt, "base64")[5] === 4)), "segment frames arrive");
+    await s.call("POST", "/api/power", { on: false }); assert.ok(await until(() => got.some(m => m.cmd === "turn" && m.data.value === 0)), "power off reaches Govee");
+  } finally { await s.done(); sock.close(); }
+});

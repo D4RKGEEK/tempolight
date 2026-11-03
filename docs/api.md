@@ -43,12 +43,12 @@ Calls marked with a guest area (effects, scenes, pads, brightness) work without 
 | Call | Area | Body |
 | --- | --- | --- |
 | `GET /api/devices` | | |
-| `POST /api/devices` | admin | `{host: "192.168.1.42", name?, ddpPort?, force?}` (reads the LED count from WLED); `{virtual: true}` for a pretend room |
-| `PATCH /api/devices/:id` | admin | `{name?, host?, leds?, ddpPort?, enabled?, maxAmps?, mAperLed?, protocol?: "ddp"\|"e131"\|"artnet", universe?}`; `maxAmps` caps brightness to the power supply |
+| `POST /api/devices` | admin | `{host: "192.168.1.42", name?, ddpPort?, force?}` (reads the LED count from WLED); `{virtual: true}` for a pretend room; `{host, kind: "govee", goveeMode?: "color"\|"segments"}` for a Govee light (beta) |
+| `PATCH /api/devices/:id` | admin | `{name?, host?, leds?, ddpPort?, enabled?, maxAmps?, mAperLed?, protocol?: "ddp"\|"e131"\|"artnet", universe?, goveeMode?, goveeSegments?}`; `maxAmps` caps brightness to the power supply |
 | `DELETE /api/devices/:id` | admin | also removes its shapes |
 | `POST /api/devices/:id/identify` | | lights that controller's shapes |
 | `POST /api/devices/:id/segments` | admin | writes the room's LED ranges into WLED as segments |
-| `POST /api/discover` | admin | `{scan: true}` returns controllers found by mDNS and a network scan |
+| `POST /api/discover` | admin | `{scan: true}` returns WLED controllers found by mDNS and a network scan, and Govee lights (`kind: "govee"`) |
 | `GET /api/room`, `PUT /api/room` | admin | `{name, shapes: [...]}` |
 | `POST /api/room/preset` | admin | `{id: "fourwalls"}`, built for your controllers |
 

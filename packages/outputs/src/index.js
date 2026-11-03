@@ -4,3 +4,4 @@ export { getInfo, getSegments, segmentsBody, setSegments, setState, ipOf } from 
 export { discoverWled, mdnsDiscover, mdnsQuery, parseDns, devicesFromRecords, scanHosts, subnetHosts, localIPv4 } from "./discover.js";
 export { audioSyncPacket, AudioSyncSender, AUDIOSYNC_PORT, AUDIOSYNC_GROUP } from "./audiosync.js";
 export { e131Packets, artnetPackets, E131Sender, E131_PORT, ARTNET_PORT, PIXELS_PER_UNIVERSE } from "./e131.js";
+export { GoveeSender, discoverGovee, goveeRazerPacket, goveeRazerOn, GOVEE_CMD_PORT, GOVEE_LISTEN_PORT, GOVEE_SCAN_PORT } from "./govee.js";

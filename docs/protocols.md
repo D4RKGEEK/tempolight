@@ -8,6 +8,8 @@
 | mDNS | UDP 5353 | Finding controllers | WLED announces `_wled._tcp`; Tempolight also scans the local /24 for `/json/info` |
 | OSC | UDP 9000 (configurable) | Control from lighting desks, TouchOSC, Companion | Input only; addresses under `/tempolight/` |
 | E1.31 (sACN) / Art-Net | UDP 5568 / 6454 | WLED set to E1.31 or Art-Net, Falcon/FPP pixel controllers, DMX nodes | 170 pixels per universe; first universe set per device (E1.31 default 1, Art-Net 0) |
+| Govee LAN (beta) | UDP 4001 (scan, multicast 239.255.255.250), 4002 (answers), 4003 (commands) | Govee lights with "LAN Control" on | One colour: `colorwc` about 10 times a second, only when it changes. Segments: the undocumented `razer` stream (`0xBB 0x00 len 0xB0 0x01 count RGB… xor`), 25 a second, on models that support DreamView |
+| MQTT 3.1.1 | TCP 1883 | Home Assistant | Discovery under `homeassistant/`, QoS 0, retained config and state, last will on `tempolight/availability` |
 
 When a stream stops, WLED waits a few seconds and then returns to its own effect, so Tempolight can hand a room
 back to WLED's presets (for example at night) simply by stopping.

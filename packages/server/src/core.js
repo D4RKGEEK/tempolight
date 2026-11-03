@@ -59,7 +59,7 @@ export function createCore({ store, runtime, env }) {
     const y = 1 + (shapes.length % 7) * 1.1;
     shapes.push({ type: "line", name: dev.name, count: dev.leds || 60, dev: dev.id, rot: 0, start: 0, rev: false, from: null, pts: [[1.5, y], [14.5, y]] });
   }
-  async function addDevice({ host, name, ddpPort, leds, force, virtual }) {
+  async function addDevice({ host, name, ddpPort, leds, force, virtual, kind, goveeMode }) {
     if (virtual) { // a pretend controller: shows in the preview, sends nothing. For trying the app without hardware.
       const dev = { id: env.newId("d"), name: String(name || "Virtual room").slice(0, 60), host: "virtual", ddpPort: 4048, leds: Number(leds) || 600, enabled: true, virtual: true };
       data().devices.push(dev); if (!data().room.shapes.length) data().room.shapes = buildPreset("living", [dev]); else autoPlace(dev);
@@ -68,6 +68,10 @@ export function createCore({ store, runtime, env }) {
     host = String(host || "").trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
     if (!host) throw new HttpError(400, "Enter the controller's IP address, for example 192.168.1.42");
     const dup = data().devices.find(d => d.host === host); if (dup) return dup;
+    if (kind === "govee") { // Govee LAN: nothing to ask the light; it's a few "LEDs" in the room that all get the light's colour (or its segments)
+      const dev = { id: env.newId("d"), name: String(name || "Govee light").slice(0, 60), host, kind: "govee", goveeMode: goveeMode === "segments" ? "segments" : "color", leds: Math.max(1, Math.min(300, Number(leds) || 20)), ddpPort: 4003, enabled: true };
+      data().devices.push(dev); autoPlace(dev); runtime.rebuild(); runtime.checkDevice(dev); runtime.note(`Added ${dev.name} (Govee, ${host})`); changed("devices"); return dev;
+    }
     let info = null; try { info = await env.getInfo(host, 2500); } catch (e) { if (!force) throw new HttpError(400, `Couldn't reach a WLED controller at ${host} (${e.message}). Check the address, or add it anyway.`); }
     const dev = { id: env.newId("d"), name: String(name || info?.name || host).slice(0, 60), host, ddpPort: Number(ddpPort) || 4048, leds: Number(leds) || info?.leds || 0, enabled: true };
     data().devices.push(dev); autoPlace(dev); runtime.rebuild(); runtime.checkDevice(dev); runtime.note(`Added ${dev.name} (${host}, ${dev.leds || "?"} LEDs)`);
@@ -193,6 +197,8 @@ export function createCore({ store, runtime, env }) {
     if (b.leds !== undefined) d.leds = Math.max(0, Math.round(Number(b.leds))); if (b.enabled !== undefined) d.enabled = !!b.enabled;
     if (b.protocol !== undefined) { if (!["ddp", "e131", "artnet"].includes(b.protocol)) throw new HttpError(400, "Protocol is ddp, e131 or artnet"); d.protocol = b.protocol; }
     if (b.universe !== undefined) d.universe = b.universe === null || b.universe === "" ? undefined : Math.max(0, Math.min(63999, Math.round(Number(b.universe))));
+    if (b.goveeMode !== undefined && d.kind === "govee") d.goveeMode = b.goveeMode === "segments" ? "segments" : "color";
+    if (b.goveeSegments !== undefined && d.kind === "govee") d.goveeSegments = b.goveeSegments ? Math.max(1, Math.min(60, Math.round(Number(b.goveeSegments)))) : undefined;
     if (b.maxAmps !== undefined) d.maxAmps = Math.max(0, Math.min(500, Number(b.maxAmps) || 0)); if (b.mAperLed !== undefined) d.mAperLed = Math.max(5, Math.min(200, Number(b.mAperLed) || 60));
     runtime.rebuild(); changed("devices"); return d;
   });
@@ -204,9 +210,10 @@ export function createCore({ store, runtime, env }) {
   route("POST", "/api/devices/:id/segments", "admin", async (ctx, p) => ({ segments: await runtime.syncSegments(p.id) }));
   route("POST", "/api/devices/:id/check", null, async (ctx, p) => { const d = data().devices.find(x => x.id === p.id); if (!d) throw new HttpError(404, "No such device"); return runtime.checkDevice(d); });
   route("POST", "/api/discover", "admin", async (ctx) => {
-    const b = ctx.body, found = await env.discoverWled({ scan: b.scan !== false, timeoutMs: 2500, extraHosts: (b.hosts || []).map(String) });
+    const b = ctx.body, [found, govee] = await Promise.all([env.discoverWled({ scan: b.scan !== false, timeoutMs: 2500, extraHosts: (b.hosts || []).map(String) }),
+      env.discoverGovee ? env.discoverGovee({ timeoutMs: 2500 }).catch(() => []) : []]);
     const known = new Set(data().devices.map(d => env.ipOf(d.host)));
-    return found.map(f => ({ ...f, added: known.has(f.ip) }));
+    return [...found.map(f => ({ ...f, added: known.has(f.ip) })), ...govee.map(g => ({ ...g, ip: g.host, kind: "govee", leds: 0, added: known.has(g.host) }))];
   });
 
   // room

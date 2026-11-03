@@ -37,7 +37,7 @@ export async function createApp(opts) {
   const runtime = createRuntime(store, { io, logger: opts.logger === undefined ? console : opts.logger });
   const core = createCore({ store, runtime, env: {
     version: pkg.version, newId, hashPin, checkPin, randomToken: () => crypto.randomBytes(16).toString("hex"),
-    getInfo: io.getInfo, discoverWled: io.discoverWled, ipOf: io.ipOf, listSources: io.listSources, startOsc,
+    getInfo: io.getInfo, discoverWled: io.discoverWled, discoverGovee: io.discoverGovee, ipOf: io.ipOf, listSources: io.listSources, startOsc,
     uptime: () => process.uptime(), now: opts.now, discover: opts.discover,
     update: updater,
     lan: () => Object.values(os.networkInterfaces()).flat().filter(a => a && a.family === "IPv4" && !a.internal).map(a => a.address) } });
