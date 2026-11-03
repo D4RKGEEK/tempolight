@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Builds the online demo into dist/site: the web app in demo mode (the real core and runtime running in the browser,
 // with pretend WLED controllers), the landing page at /about/, and the PWA files. No dependencies.
-// Cloudflare runs this on every push (see wrangler.jsonc and docs/deploy-cloudflare.md). Try it locally:
+// Cloudflare Pages runs this on every push (see wrangler.jsonc and docs/deploy-cloudflare.md). Try it locally:
 //   node scripts/build-site.js && npx serve dist/site        (or any static file server)
 import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync, readdirSync } from "node:fs";
 import { execSync } from "node:child_process";

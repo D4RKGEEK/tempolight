@@ -4,27 +4,30 @@ The online demo is the real Tempolight app running entirely in the visitor's bro
 and effects as the home install, with three pretend WLED controllers instead of a network. Visitors can play songs,
 use the pads, edit the room, save scenes and set a PIN; everything they change stays in their own browser.
 
-Cloudflare only serves static files (a Worker with static assets), so it's free and needs no server code.
+Cloudflare Pages only serves static files, so it's free and needs no server code.
 
 ## Set up once (from a phone works too)
 
-1. Sign in to [dash.cloudflare.com](https://dash.cloudflare.com) and open **Workers & Pages**.
-2. **Create** → **Import a repository** → connect GitHub and pick `D4RKGEEK/tempolight`.
-3. Use these settings:
+1. Sign in to [dash.cloudflare.com](https://dash.cloudflare.com) → **Workers & Pages** → **Create** → **Pages** →
+   **Connect to Git**, and pick `D4RKGEEK/tempolight`.
+2. Use these build settings:
 
    | Setting | Value |
    | --- | --- |
    | Project name | `tempolight` |
    | Production branch | `main` |
+   | Framework preset | None |
    | Build command | `node scripts/build-site.js` |
-   | Deploy command | `npx wrangler deploy` |
-   | Root directory | `/` (leave empty) |
+   | Build output directory | `dist/site` |
 
-4. **Save and deploy.** The demo is live at `https://tempolight.<your-account>.workers.dev` in about a minute.
+3. **Save and deploy.** The demo is live at `https://tempolight.pages.dev` in about a minute.
 
-From then on every push to `main` rebuilds and redeploys automatically. Pull requests get their own preview link.
+Already created the project without a build command (the site shows 404)? Open the project → **Settings** →
+**Build** → **Build configuration** → **Edit**, set the build command and output directory above, then go to
+**Deployments** and press **Retry deployment** on the latest one.
 
-To use your own domain: Worker → **Settings** → **Domains & Routes** → **Add** → **Custom domain**.
+From then on every push to `main` rebuilds and redeploys automatically, and pull requests get their own preview link.
+To use your own domain: project → **Custom domains** → **Set up a custom domain**.
 
 ## Install it on an iPhone
 
@@ -40,7 +43,8 @@ always does anyway.
 ```bash
 node scripts/build-site.js          # writes dist/site
 node scripts/e2e-demo.js            # clicks through the demo in a real browser (needs Playwright)
-npx wrangler deploy                 # deploy by hand, if you're signed in to wrangler
+npx wrangler pages deploy           # deploy by hand, if you're signed in to wrangler
 ```
 
-`wrangler.jsonc` points Cloudflare at `dist/site` and serves `index.html` for unknown paths.
+`wrangler.jsonc` tells Cloudflare Pages to publish `dist/site`. Pages serves `index.html` for unknown paths, and `_headers`
+keeps the service worker uncached so updates arrive straight away.
