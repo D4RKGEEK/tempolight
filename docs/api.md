@@ -76,6 +76,13 @@ Settings (`PATCH /api/settings`, admin) also take `location: {lat, lon}`, `night
 (times like `23:00`, `sunset` or `sunrise-30`) and `text: {source: "song"|"bpm"|"clock"|"custom", custom}` for the
 Text Scroller. Schedules accept `time: "sunset+30"` or `"sunrise-15"` once a location is set.
 
+## Updates
+
+| Call | Body |
+| --- | --- |
+| `GET /api/update` | admin: `{method: "git"\|"docker"\|"manual", behind, changes: [...], canUpdate, message}` (fetches from GitHub) |
+| `POST /api/update` | admin: pulls the new version and restarts Tempolight (installs made with git or the installer) |
+
 ## Lock
 
 | Call | Body |

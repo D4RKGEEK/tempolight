@@ -13,6 +13,7 @@ import { attachWebSocket } from "./ws.js";
 import { startOsc } from "./osc.js";
 import * as io from "./node-io.js";
 import { startHomeAssistant } from "./homeassistant.js";
+import { createUpdater } from "./update.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(here, "../../..");
@@ -31,11 +32,14 @@ async function readBody(req) {
  */
 export async function createApp(opts) {
   const store = createStore(opts.dataDir);
+  let closeApp = async () => {};
+  const updater = opts.updater || createUpdater(ROOT, { exit: async code => { try { await closeApp(); } catch {} process.exit(code); } });
   const runtime = createRuntime(store, { io, logger: opts.logger === undefined ? console : opts.logger });
   const core = createCore({ store, runtime, env: {
     version: pkg.version, newId, hashPin, checkPin, randomToken: () => crypto.randomBytes(16).toString("hex"),
     getInfo: io.getInfo, discoverWled: io.discoverWled, ipOf: io.ipOf, listSources: io.listSources, startOsc,
     uptime: () => process.uptime(), now: opts.now, discover: opts.discover,
+    update: updater,
     lan: () => Object.values(os.networkInterfaces()).flat().filter(a => a && a.family === "IPv4" && !a.internal).map(a => a.address) } });
   const ha = startHomeAssistant({ core, store, runtime, version: pkg.version });
 
@@ -75,9 +79,11 @@ export async function createApp(opts) {
     c.onclose = () => h.close();
   });
 
-  return {
+  closeApp = () => api.close();
+  const api = {
     server, runtime, store, core, discovery: core.discovery,
     listen(port, host) { return new Promise((res, rej) => { server.once("error", rej); server.listen(port, host, () => res(server.address().port)); }); },
     async close() { ha.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
   };
+  return api;
 }

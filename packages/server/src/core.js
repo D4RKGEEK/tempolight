@@ -154,6 +154,8 @@ export function createCore({ store, runtime, env }) {
   route("GET", "/api/health", null, () => ({ ok: true, version: env.version, uptime: env.uptime(), fps: Math.round(runtime.rt.fps), leds: runtime.layout.N }));
   route("GET", "/api/effects", null, () => runtime.effects.list);
   route("GET", "/api/layout", null, () => runtime.layoutInfo());
+  route("GET", "/api/update", "admin", () => env.update ? env.update.check() : { method: "demo", canUpdate: false, message: "The online demo is always the latest version." });
+  route("POST", "/api/update", "admin", async () => { if (!env.update) throw new HttpError(400, "Nothing to update in the online demo"); try { const r = await env.update.apply(); runtime.note("Updating Tempolight and restarting…"); return r; } catch (e) { throw new HttpError(400, e.message); } });
   route("GET", "/api/network", null, () => ({ addresses: env.lan ? env.lan() : [] })); // for the phone QR code
   route("GET", "/api/log", null, () => runtime.log.slice(-100));
 

@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- One-click updates: Settings → About → Check for updates shows what's new, and Update now pulls it and restarts. For installs made with the installer or git; Docker shows how to pull the new image. The installer's service now restarts with `Restart=always`.
+
 - Screen sync: share a screen or window on the Music page and the new Screen Sync effect spreads its colours over the room, like a room-sized ambilight.
 
 - Phones as lights: guests scan a QR code on the Live pads page, tap Start, and their screen becomes another light. Each phone shows its own part of the room, so a crowd moves with the show. Works in the online demo too (another tab).

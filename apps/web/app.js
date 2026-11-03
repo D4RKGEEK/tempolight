@@ -598,7 +598,8 @@ function settingsPage(el) {
     </div>`, "span-6")}
     ${panel("About", "", "", `<div class="pb stack"><p>Tempolight ${esc(st.version)}, MIT licence. <a href="https://github.com/D4RKGEEK/tempolight" target="_blank" rel="noopener">Source and docs</a>.</p>
       <p class="muted">The old single-page playground is at <a href="/playground">/playground</a>.</p>
-      <div class="row"><button class="btn danger" id="s-reset" type="button">Reset everything</button></div></div>`, "span-6")}`;
+      <div class="row"><button class="btn" id="s-upd" type="button">${DEMO ? "Always up to date" : "Check for updates"}</button><button class="btn primary" id="s-updgo" type="button" hidden>Update now</button><button class="btn danger" id="s-reset" type="button">Reset everything</button></div>
+      <div id="s-updmsg" class="faint" style="font-size:13px" aria-live="polite"></div></div>`, "span-6")}`;
   if (!admin) {
     $$("#page input:not(#u-pin), #page select, #page button:not(#u-go)").forEach(x => x.disabled = true);
     const go = async () => { const r = await act(() => api("POST", "/api/unlock", { pin: $("#u-pin").value })); app.token = r.token; store.set("token", r.token); ws.sock?.close(); await refreshState(); route(); };
@@ -632,6 +633,11 @@ function settingsPage(el) {
   if ($("#s-lock")) $("#s-lock").onclick = async () => { const r = await act(() => api("POST", "/api/lock", { pin: $("#s-pin").value }), "Locked. You stay unlocked on this device.").catch(() => null); if (r) { app.token = r.token; store.set("token", r.token); await refreshState(); route(); } };
   if ($("#s-unlockset")) $("#s-unlockset").onclick = async () => { await act(() => api("DELETE", "/api/lock"), "PIN removed").catch(() => {}); await refreshState(); route(); };
   if ($("#s-relock")) $("#s-relock").onclick = () => { app.token = null; store.set("token", null); ws.sock?.close(); refreshState().then(route); };
+  if (DEMO) $("#s-upd").disabled = true;
+  $("#s-upd").onclick = async () => { const m = $("#s-updmsg"); m.textContent = "Checking…"; const r = await act(() => api("GET", "/api/update")).catch(() => null); if (!r) { m.textContent = ""; return; }
+    m.innerHTML = esc(r.message) + (r.changes?.length ? `<ul style="margin:6px 0 0 18px">${r.changes.map(c => `<li>${esc(c)}</li>`).join("")}</ul>` : ""); $("#s-updgo").hidden = !r.canUpdate; };
+  $("#s-updgo").onclick = async () => { const r = await act(() => api("POST", "/api/update")).catch(() => null); if (!r) return; $("#s-updmsg").textContent = r.message; $("#s-updgo").hidden = true;
+    const t0 = Date.now(), wait = async () => { await new Promise(x => setTimeout(x, 1500)); try { await api("GET", "/api/health"); if (Date.now() - t0 > 4000) return location.reload(); } catch {} if (Date.now() - t0 < 90000) wait(); }; wait(); };
   $("#s-reset").onclick = async () => { if (confirm("Reset all devices, the room, scenes, schedules and settings?")) { await act(() => api("POST", "/api/reset"), "Reset").catch(() => {}); await refreshState(); await loadLayout(); route(); } };
   return { onChanged(w) { if (w.has("lock")) route(); }, onStatus(m) { const e = $("#m-state"); if (e) e.textContent = mqttLabel(m.mqtt); } };
 }

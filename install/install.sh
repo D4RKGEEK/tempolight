@@ -63,7 +63,7 @@ Wants=network-online.target
 User=$(id -un)
 Environment=TEMPOLIGHT_DATA=$HOME/.tempolight
 ExecStart=$(command -v node) $DEST/packages/server/src/index.js --port 8080
-Restart=on-failure
+Restart=always
 RestartSec=3
 Nice=-5
 

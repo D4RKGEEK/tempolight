@@ -46,7 +46,7 @@ if (audio) {
 }
 
 let bound;
-try { bound = await app.listen(port, host); }
+try { for (let tries = 0; ; tries++) { try { bound = await app.listen(port, host); break; } catch (e) { if (e.code !== "EADDRINUSE" || !process.env.TEMPOLIGHT_RESTART_WAIT || tries > 40) throw e; await new Promise(r => setTimeout(r, 250)); } } } // after an update, the old copy may still be closing
 catch (e) {
   if (e.code === "EADDRINUSE") { console.error(`Port ${port} is already in use. Is Tempolight already running? Or start it on another port: --port ${port + 1}`); process.exit(1); }
   throw e;
