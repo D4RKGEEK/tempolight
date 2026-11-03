@@ -72,3 +72,12 @@ test("director: banned effects never play, effect settings and zones apply", () 
   D.settings.zones = [{ id: "ceiling", mode: "follow", brightness: 0.5 }]; assert.ok(Math.abs(sum(D.frame(null, 3), ceil) / full - 0.5) < 0.02, "zone brightness");
   D.settings.zones = [{ id: "tv", mode: "effect", effect: "candle" }]; D.frame(null, 3); assert.ok(sum(D.frame(null, 3), tv) > 0, "zone runs its own effect");
 });
+
+test("vocal estimate: high for singing (even over drums), low for drums, a steady pad or piano", async () => {
+  const { voice, pad } = await import("./synth.js");
+  const avg = x => { const a = new LiveAnalyser(22050), v = []; for (let i = 0; i < x.length; i += 512) { a.push(x.subarray(i, i + 512)); if (a.t > 2) v.push(a.vocal); } return v.reduce((p, c) => p + c, 0) / v.length; };
+  const e = edm(), drop = e.x.subarray(Math.floor(e.dropStart * e.sr), Math.floor((e.dropStart + 8) * e.sr)), sung = voice(22050, 8).x, mix = drop.map((d, i) => d * 0.6 + (sung[i] || 0) * 0.8);
+  const r = { voice: avg(sung), mix: avg(mix), drums: avg(drop), pad: avg(pad(22050, 8).x), piano: avg(ballad().x.subarray(0, 22050 * 8)) };
+  assert.ok(r.voice > 0.6, `voice ${r.voice}`); assert.ok(r.mix > 0.2, `voice over drums ${r.mix}`);
+  for (const k of ["drums", "pad", "piano"]) assert.ok(r[k] < 0.12 && r[k] < r.mix / 2, `${k} ${r[k]}`);
+});

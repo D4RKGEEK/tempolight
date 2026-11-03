@@ -40,3 +40,19 @@ export function ballad(sr = 22050) {
   let m = 0; for (let i = 0; i < n; i++) m = Math.max(m, Math.abs(x[i])); for (let i = 0; i < n; i++) x[i] /= m;
   return { x, sr, bpm };
 }
+
+/** voice(): a sung vowel ("ah") with a wandering melody and vibrato: harmonics shaped by formants at 700, 1,200 and 2,600 Hz. */
+export function voice(sr = 22050, seconds = 8, gain = 1) {
+  const n = Math.floor(seconds * sr), x = new Float32Array(n), notes = [220, 247, 262, 247, 196, 220, 294, 262], r = rng(11); let ph = 0;
+  const formant = f => [[700, 130, 1], [1200, 160, 0.5], [2600, 200, 0.25]].reduce((s, [c, bw, a]) => s + a / (1 + ((f - c) / bw) ** 2), 0);
+  for (let i = 0; i < n; i++) { const t = i / sr, k = Math.min(notes.length - 1, Math.floor(t / (seconds / notes.length))), f0 = notes[k] * (1 + 0.025 * Math.sin(2 * Math.PI * 5.5 * t));
+    ph += 2 * Math.PI * f0 / sr; let v = 0; for (let h = 1; h * f0 < 4000; h++) v += Math.sin(h * ph) * formant(h * f0) / h ** 0.3;
+    x[i] = (v * 0.15 + r() * 0.004) * gain * Math.min(1, t * 4); }
+  return { x, sr };
+}
+/** pad(): a steady synth chord, the same notes for the whole time. */
+export function pad(sr = 22050, seconds = 8) {
+  const n = Math.floor(seconds * sr), x = new Float32Array(n);
+  for (let i = 0; i < n; i++) { const t = i / sr; x[i] = [220, 277.2, 329.6].reduce((s, f) => s + Math.sin(2 * Math.PI * f * t) + 0.4 * Math.sin(4 * Math.PI * f * t), 0) * 0.12 * Math.min(1, t * 2); }
+  return { x, sr };
+}

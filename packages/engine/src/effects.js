@@ -393,7 +393,7 @@ export function createEffects(layout) {
         for (let i = 0; i < N; i++) { const a = (Math.atan2(PY[i] - BB.cy, PX[i] - BB.cx) / (2 * Math.PI) + 1.25) % 1, d = ((front - a) % 1 + 1) % 1; // 0 at the front of the wave
           const crowd = d < 0.22 ? Math.sin(d / 0.22 * Math.PI) : 0; add(i, A1, 0.08 + 0.08 * S.kickE); add(i, lerp3(A1, B1, crowd), crowd * (1 + 0.6 * S.pulse)); if (crowd > 0.8) add(i, WHITE, (crowd - 0.8) * 2); } } },
     // -- follow the song
-    { id: "vocal", name: "Vocal Glow", tag: "calm", run(S) { let v = 0; for (let b = 8; b <= 15; b++) v += S.bands[b]; v /= 8; vocalLvl += (v - vocalLvl) * 0.12;
+    { id: "vocal", name: "Vocal Glow", tag: "calm", run(S) { let v = 0; for (let b = 8; b <= 15; b++) v += S.bands[b]; v /= 8; if (S.vocal != null) v = 0.25 * v + 0.9 * S.vocal; vocalLvl += (v - vocalLvl) * 0.12;
         const warm = S.fixed ? S.pal[0] : [1, 0.55, 0.32], soft = S.fixed ? S.pal[1] : [1, 0.3, 0.45], lv = 0.12 + 0.9 * vocalLvl;
         for (let i = 0; i < N; i++) { const m = 0.5 + 0.5 * Math.sin(2 * Math.PI * (LU[i] * 0.8 - S.t * 0.05) + LH[i] * 2); add(i, warm, lv * (0.6 + 0.4 * m)); add(i, soft, lv * 0.3 * (1 - m)); } } },
     { id: "chorus", name: "Chorus Bloom", tag: "drop", run(S) { chorusSlow += (S.loud - chorusSlow) * 0.004; chorusFast += (S.loud - chorusFast) * 0.05;

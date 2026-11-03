@@ -29,7 +29,7 @@ export class LiveAnalyser {
     this.bpm = 0; this.cand = 0; this.candN = 0; this.phase = 0; this.phaseSet = false; this.lastEst = -9;
     this.eFast = 0; this.eSlow = 0; this.eMax = 1e-4; this.rms = 0;
     this.bass = 0; this.bassMax = 1e-4; this.mid = 0; this.high = 0; this.highMax = 1e-4;
-    this.bands = new Float32Array(24); this.bandMax = new Float32Array(24).fill(1e-4);
+    this.bands = new Float32Array(24); this.bandMax = new Float32Array(24).fill(1e-4); this.vocal = 0; this.vocalRaw = 0; this.pitchHist = [];
     this.state = "silent"; this.cand2 = "silent"; this.candT = 0; this.stateT = 0; this.buildStart = 0; this.dropT = -9; this.barOff = 0;
     this.domS = null; this.domHist = []; this.domHistT = -9;
     this.styleStats = { env: [], envT: -9, drops: [] }; this.style = null; this.styleCand = null; this.lastStyleT = -9; this.styleLock = null;
@@ -101,9 +101,31 @@ export class LiveAnalyser {
       const v = this.bandMag(EDGES[b], EDGES[b + 1]); this.bandMax[b] = Math.max(this.bandMax[b] * Math.pow(0.9, dt), v, 1e-5);
       const nv = loudEnough ? Math.min(1, v / this.bandMax[b]) : 0; this.bands[b] += (nv - this.bands[b]) * (nv > this.bands[b] ? 0.7 : 0.25);
     }
+    this.vocalHop(loudEnough, dt);
     if (t - this.lastEst > 0.5) { this.lastEst = t; this.estimateTempo(t); }
     this.sections(t, dt);
     if (t - this.lastStyleT > 2) { this.lastStyleT = t; this.estimateStyle(t); }
+  }
+
+  // Is someone singing? A voice is a clear tone in the 150-1000 Hz range whose pitch wanders (vibrato, melody),
+  // with its harmonics and formants filling 300-3,500 Hz. Drums are noisy (no tone); a steady synth pad has a tone that
+  // doesn't move. So: tonality in the vocal band, times how much that band carries, times pitch movement.
+  vocalHop(loud, dt) {
+    const m = this.mag, a = Math.max(1, Math.floor(250 / this.binHz)), b = Math.min(m.length - 2, Math.ceil(3500 / this.binHz));
+    let sum = 0, logSum = 0, peaks = 0, n = 0;
+    for (let i = a; i <= b; i++) { const v = m[i] + 1e-9; sum += v; logSum += Math.log(v); n++; if (m[i] > m[i - 1] && m[i] >= m[i + 1] && m[i] > 3 * (m[i - 2] + m[i + 2] + 1e-9) / 2) peaks += m[i]; }
+    const flat = Math.exp(logSum / n) / (sum / n), tonal = Math.max(0, Math.min(1, 1 - flat * 1.6)), peakShare = peaks / sum;
+    const share = this.bandMag(250, 3500) / Math.max(1e-7, this.bandMag(40, 250) * 0.5 + this.bandMag(250, 3500) + this.bandMag(3500, 10000));
+    // pitch: the strongest peak in 150-1000 Hz, to a fraction of a bin (parabolic fit), tracked for half a second
+    const pa = Math.max(2, Math.floor(150 / this.binHz)), pb = Math.ceil(1000 / this.binHz); let pi = pa; for (let i = pa; i <= pb; i++) if (m[i] > m[pi]) pi = i;
+    const y0 = Math.log(m[pi - 1] + 1e-9), y1 = Math.log(m[pi] + 1e-9), y2 = Math.log(m[pi + 1] + 1e-9), off = Math.max(-0.5, Math.min(0.5, 0.5 * (y0 - y2) / (y0 - 2 * y1 + y2 || 1e-9)));
+    const ph = this.pitchHist; ph.push(m[pi] > 1e-5 ? Math.log2((pi + off) * this.binHz) : 0); if (ph.length > Math.round(0.5 / dt)) ph.shift();
+    // a singer's pitch moves smoothly (vibrato, slides); two notes of a chord fighting for the top spot jump back and forth
+    let d1 = 0, d2 = 0, prevD = null;
+    for (let i = 1; i < ph.length; i++) { const d = ph[i] - ph[i - 1]; if (!ph[i] || !ph[i - 1] || Math.abs(d) > 0.06) { prevD = null; continue; } d1 += Math.abs(d); if (prevD != null) d2 += Math.abs(d - prevD); prevD = d; }
+    const wander = Math.min(1, d1 / 0.08) * Math.max(0, Math.min(1, (1.1 - d2 / Math.max(1e-6, d1)) / 0.6));
+    const raw = loud ? Math.min(1, peakShare * 2.5) * Math.min(1, share * 1.6) * wander * (0.5 + 0.5 * tonal) : 0;
+    this.vocalRaw = raw; this.vocal += (Math.min(1, raw * 2.2) - this.vocal) * (1 - Math.exp(-dt / 0.25));
   }
 
   estimateTempo(t) {
@@ -193,7 +215,7 @@ export class LiveAnalyser {
     const V = { g, bpm: this.bpm, style: this.style || "party", loud, level: loud < 0.4 ? "low" : loud < 0.75 ? "mid" : "peak",
       state: this.state, buildP: this.state === "build" ? Math.min(1, (t - this.buildStart) / 7) : 0, dropT: this.dropT, nextDrop: null,
       kick, snare: this.snares.length ? this.snares[this.snares.length - 1] : -9, hat: this.hats.length ? this.hats[this.hats.length - 1] : -9,
-      pulses, snares, pulseN: this.pulseN, quietFor: this.state === "silent" ? t - this.stateT : 0, live: true };
+      pulses, snares, pulseN: this.pulseN, vocal: this.vocal, quietFor: this.state === "silent" ? t - this.stateT : 0, live: true };
     if (o.predict && g.has && t - kick < 2) { V.kick = g.beatT; V.pulses = [g.beatT, g.beatT - g.P]; V.pulseN = g.idx; }
     return V;
   }

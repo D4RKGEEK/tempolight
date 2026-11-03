@@ -54,7 +54,7 @@ export function buildSignals(V, t, opts) {
     hat: V.hat, snare: V.snare, snares: V.snares, pulseT, pulses, pulseN: kickRecent ? V.pulseN : g.idx,
     pulse: Math.exp(-(t - pulseT) / 0.2) * punch, kickE: Math.exp(-(t - V.kick) / 0.25) * punch,
     snareE: Math.exp(-(t - V.snare) / 0.15) * punch, hatE: Math.exp(-(t - V.hat) / 0.12) * punch,
-    bassL: opts.bassL ?? (V.state === "drop" ? 0.9 : 0.3), bands: opts.bands || new Float32Array(24),
+    bassL: opts.bassL ?? (V.state === "drop" ? 0.9 : 0.3), bands: opts.bands || new Float32Array(24), vocal: V.vocal ?? null, // null: no live estimate (Vocal Glow uses the mid bands)
     buildP: V.state === "build" ? V.buildP : ((((g.idx - g.beatInBar) / 4) % 4 + 4) % 4 + g.barPhase) / 4,
     // seconds until the next known drop (whole-song analysis or a forced build-up) and since the last one; 99 = none
     dropIn: V.nextDrop != null && V.nextDrop >= t ? V.nextDrop - t : 99, sinceDrop: V.dropT > -9 ? t - V.dropT : 99,

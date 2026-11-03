@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Vocal detection while listening live: a clear tone whose pitch moves smoothly like a voice (vibrato, melody), so drums, steady pads and piano don't count. Drives Vocal Glow and shows as "Singing" on the Music page.
+
 - Govee lights over the local network (beta): found by Scan network, driven as one colour (all LAN models) or per segment with DreamView streaming (some models).
 
 - One-click updates: Settings → About → Check for updates shows what's new, and Update now pulls it and restarts. For installs made with the installer or git; Docker shows how to pull the new image. The installer's service now restarts with `Restart=always`.

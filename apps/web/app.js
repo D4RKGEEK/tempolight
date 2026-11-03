@@ -208,7 +208,7 @@ function musicPage(el) {
       <p class="faint" style="font-size:12.5px">Your browser will ask what to share. For computer sound in Chrome or Edge, choose the screen or tab and turn on “Share audio”. Audio stays on your network.</p>
       <div class="callout err" id="m-err" hidden></div></div>`, "span-4")}
     ${panel("What Tempolight hears", `<span id="m-src"></span>`, "", `<div class="pb stack"><div class="spectrum" id="m-spec">${"<i></i>".repeat(24)}</div>
-      <div class="kv"><div><span>Tempo</span><b id="m-bpm">–</b></div><div><span>Part</span><b id="m-part">–</b></div><div><span>Style</span><b id="m-style">–</b></div></div>
+      <div class="kv"><div><span>Tempo</span><b id="m-bpm">–</b></div><div><span>Part</span><b id="m-part">–</b></div><div><span>Style</span><b id="m-style">–</b></div><div><span>Singing</span><b id="m-voc" title="An estimate from the sound: a clear tone whose pitch moves like a voice">–</b></div></div>
       <div class="row"><button class="btn" id="m-tap" type="button">Tap the beat</button><span class="faint" style="font-size:12.5px">Tap 4 times on the beat to fix the tempo and line up the beat.</span></div></div>`, "span-6")}
     ${panel("Timing", "", "", `<div class="pb stack">
       <div class="field"><label for="m-off">Light timing <output id="m-off-o">${s.syncOffsetMs} ms</output></label><input type="range" id="m-off" min="-300" max="300" step="5" value="${s.syncOffsetMs}">
@@ -291,7 +291,7 @@ function musicPage(el) {
   return {
     onAudio: renderQueue,
     onStatus(m) {
-      $("#m-src").textContent = m.sourceLabel; $("#m-bpm").textContent = m.bpm ? m.bpm.toFixed(0) : "–"; $("#m-part").textContent = partName[m.part] || m.part; $("#m-style").textContent = m.source === "idle" ? "–" : m.styleName;
+      $("#m-src").textContent = m.sourceLabel; $("#m-bpm").textContent = m.bpm ? m.bpm.toFixed(0) : "–"; $("#m-part").textContent = partName[m.part] || m.part; $("#m-style").textContent = m.source === "idle" ? "–" : m.styleName; $("#m-voc").textContent = m.vocal == null ? "–" : m.vocal > 0.35 ? "Yes" : m.vocal > 0.15 ? "A little" : "No";
       const bars = $$("#m-spec i"); bars.forEach((b, i) => b.style.height = (m.bands ? Math.max(2, m.bands[i] * 100) : 2) + "%");
       const lv = A.level(); $("#m-lvl").style.width = Math.round(lv * 100) + "%"; $("#m-lvl-o").textContent = A.state.stream ? (lv < 0.02 ? "very quiet: turn it up or move closer" : Math.round(lv * 100) + "%") : "not listening";
       if (A.state.song && $("#m-fill")) { const p = A.pos(); $("#m-fill").style.width = (p / A.duration * 100) + "%"; $("#m-pos").textContent = fmtTime(p); }
