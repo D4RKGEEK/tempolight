@@ -1,6 +1,6 @@
 # Effects
 
-All 74 effects work on any layout: lines, poles, rings, polygons, matrices and freehand shapes. In automatic mode
+All 93 effects work on any layout: lines, poles, rings, polygons, matrices and freehand shapes. In automatic mode
 Tempolight picks from them by music style and song part; the last column says which styles use each one.
 Generated from `packages/engine` by `npm run docs`.
 
@@ -80,3 +80,22 @@ Generated from `packages/engine` by `npm run docs`.
 | `solar` | Solar Flare | High energy | Party / EDM, Pop / Rock |
 | `zigzag` | Zigzag Beams | High energy | Party / EDM |
 | `sparks` | Welding Sparks | High energy | Party / EDM |
+| `lighthouse` | Lighthouse | High energy | Party / EDM, Pop / Rock |
+| `corner` | Corner Bounce | High energy | Party / EDM |
+| `gravity` | Gravity | High energy | Party / EDM, Hip-hop / Trap |
+| `collision` | Wave Collision | Build-up | Party / EDM |
+| `portal` | Portal | High energy | Party / EDM, Pop / Rock |
+| `stadium` | Stadium Wave | High energy | Party / EDM, Pop / Rock |
+| `vocal` | Vocal Glow | Calm, slow and emotional | Party / EDM, Pop / Rock, Chill / Lo-fi, Emotional / Ballad |
+| `chorus` | Chorus Bloom | High energy | Pop / Rock |
+| `rewind` | Drop Rewind | Build-up | Party / EDM |
+| `bassrain` | Bass Rain | High energy | Party / EDM, Hip-hop / Trap |
+| `beatcount` | Beat Counter | High energy | Party / EDM, Pop / Rock, Hip-hop / Trap |
+| `specrings` | Spectrum Rings | High energy | Party / EDM |
+| `neon` | Neon Sign | Calm, slow and emotional | Party / EDM, Chill / Lo-fi |
+| `boxbreath` | Box Breathing | Everyday (follows the clock) | picked by hand |
+| `focus` | Focus Timer | Everyday (follows the clock) | picked by hand |
+| `wakeup` | Wake-up Sunrise | Everyday (follows the clock) | picked by hand |
+| `cannons` | Colour Cannons | High energy | Party / EDM, Pop / Rock |
+| `scatter` | Strobe Scatter | High energy | Party / EDM |
+| `scope` | Oscilloscope | High energy | picked by hand |

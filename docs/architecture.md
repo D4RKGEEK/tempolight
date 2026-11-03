@@ -28,7 +28,7 @@
 - **director.js**: picks the effect from the style's pools for the current part (or a fixed effect), crossfades,
   keeps quiet music lit with the ambient effect, flashes on drops, applies live-pad overlays and the photosensitivity
   limiter (at most 3 big brightness jumps per second).
-- **effects.js**: 74 effects. Each reads per-LED coordinates and a signals object and adds linear RGB light.
+- **effects.js**: 93 effects. Each reads per-LED coordinates and a signals object and adds linear RGB light.
 - **layout.js / presets.js**: shapes on a 16 × 9 wall view become per-LED coordinates (room position, position along
   the shape, angle and distance from its centre, position along the wiring); presets are fitted to your controllers.
 - **signals.js**: builds the signals object (beat phase, kick/snare/hat envelopes, loudness, build-up progress).

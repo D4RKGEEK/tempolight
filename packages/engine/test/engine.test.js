@@ -14,8 +14,8 @@ test("example room builds 710 LEDs with sane coordinates", () => {
   }
 });
 
-test("all 74 effects render finite colours on every LED", () => {
-  assert.equal(fx.list.length, 74);
+test("all 93 effects render finite colours on every LED", () => {
+  assert.equal(fx.list.length, 93);
   const col = new Float32Array(layout.N * 3);
   for (const e of fx.list) {
     for (const t of [0.05, 3.3, 7.77, 15.01]) {
@@ -54,4 +54,22 @@ test("analysis finds tempo, the drop and the style in a synthetic EDM track", as
   assert.ok(Math.abs(r.bpm - song.bpm) < 1.5, `bpm ${r.bpm}`);
   assert.ok(r.drops.some(d => Math.abs(d - song.dropStart) < song.bar / 2), `drops at ${r.drops.map(d => d.toFixed(2))}, expected near ${song.dropStart.toFixed(2)}`);
   assert.equal(r.style, "party");
+});
+
+test("v0.3 effects react the way they should", async () => {
+  const { metronomeView, buildSignals } = await import("../src/index.js");
+  const L = buildLayout(exampleRoom()), F = createEffects(L), out = new Float32Array(L.N * 3);
+  const sig = (t, extra = {}) => ({ ...buildSignals(metronomeView(t, 120), t, { pal: F.palettes.neon, fixed: true }), ...extra });
+  const mean = (id, S) => { F.render(id, S, out); return out.reduce((a, b) => a + b, 0) / out.length; };
+  const frame = (id, S) => { F.render(id, S, out); return Float32Array.from(out); };
+  // Lighthouse: the beam is somewhere else half a bar later
+  const a = frame("lighthouse", sig(10)), b = frame("lighthouse", sig(11));
+  let diff = 0; for (let i = 0; i < a.length; i++) diff += Math.abs(a[i] - b[i]); assert.ok(diff / a.length > 0.02, "lighthouse beam moves");
+  // Drop Rewind: the moment after a drop is much brighter than the pull-in before it
+  assert.ok(mean("rewind", sig(5, { sinceDrop: 0.05, dropIn: 99 })) > mean("rewind", sig(5, { sinceDrop: 99, dropIn: 1 })), "drop explodes");
+  // Box Breathing: full after breathing in (6 s), nearly empty after breathing out (14 s)
+  assert.ok(mean("boxbreath", sig(6)) > 2 * mean("boxbreath", sig(14)), "box breathing fills and empties");
+  // Spectrum Rings follow the spectrum
+  const loud = new Float32Array(24).fill(0.9), quiet = new Float32Array(24).fill(0.05);
+  assert.ok(mean("specrings", sig(3, { bands: loud })) > 3 * mean("specrings", sig(3, { bands: quiet })), "spectrum rings react");
 });

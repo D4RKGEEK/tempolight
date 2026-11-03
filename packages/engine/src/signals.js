@@ -56,5 +56,7 @@ export function buildSignals(V, t, opts) {
     snareE: Math.exp(-(t - V.snare) / 0.15) * punch, hatE: Math.exp(-(t - V.hat) / 0.12) * punch,
     bassL: opts.bassL ?? (V.state === "drop" ? 0.9 : 0.3), bands: opts.bands || new Float32Array(24),
     buildP: V.state === "build" ? V.buildP : ((((g.idx - g.beatInBar) / 4) % 4 + 4) % 4 + g.barPhase) / 4,
+    // seconds until the next known drop (whole-song analysis or a forced build-up) and since the last one; 99 = none
+    dropIn: V.nextDrop != null && V.nextDrop >= t ? V.nextDrop - t : 99, sinceDrop: V.dropT > -9 ? t - V.dropT : 99,
   };
 }

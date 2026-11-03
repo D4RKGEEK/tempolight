@@ -91,7 +91,7 @@ export const ago = t => { const s = (Date.now() - t) / 1000; return s < 60 ? `${
 export const panel = (title, sub, act, body, cls = "span-12") => `<section class="panel ${cls}"><header><h2>${title}</h2>${sub ? `<span class="sub">${sub}</span>` : ""}${act ? `<div class="act">${act}</div>` : ""}</header>${body}</section>`;
 export const opt = (v, label, sel) => `<option value="${esc(v)}"${sel ? " selected" : ""}>${esc(label)}</option>`;
 const STYLE_NAMES = () => ({ auto: "Automatic (from the music)", ...app.state.styles });
-const tagName = { calm: "Calm", build: "Build-up", drop: "Drop", any: "Any", "LedFx-like": "Classic" };
+const tagName = { calm: "Calm", build: "Build-up", drop: "Drop", home: "Everyday", any: "Any", "LedFx-like": "Classic" };
 function logRow(e) { const d = new Date(e.t); return `<div><time>${d.toTimeString().slice(0, 8)}</time><span class="${e.level}">${e.level === "info" ? "info" : e.level}</span><span>${esc(e.msg)}</span></div>`; }
 function lockScreen(el, why = "This page") {
   el.innerHTML = panel("Locked", "", "", `<div class="lockbox pb"><p>${esc(why)} is locked with a PIN. Enter it to make changes.</p><input id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="8" aria-label="PIN"><button class="btn primary" id="unlock" type="button">Unlock</button></div>`);
@@ -263,7 +263,7 @@ function musicPage(el) {
 function effectsPage(el) {
   const st = app.state; let tag = "all", q = "";
   el.innerHTML = `${panel("Effects", `${st.effects.length} effects, all of them work on any layout`, `<button class="btn" id="e-auto" type="button">Back to automatic</button>`, `<div class="pb stack">
-      <div class="row"><input id="e-q" placeholder="Search effects" style="max-width:260px"><div class="chips" id="e-tags">${["all", "calm", "build", "drop", "LedFx-like"].map(t => `<button class="chip" data-tag="${t}" aria-pressed="${t === "all"}" type="button">${t === "all" ? "All" : tagName[t]}</button>`).join("")}</div></div>
+      <div class="row"><input id="e-q" placeholder="Search effects" style="max-width:260px"><div class="chips" id="e-tags">${["all", "calm", "build", "drop", "home", "LedFx-like"].map(t => `<button class="chip" data-tag="${t}" aria-pressed="${t === "all"}" type="button">${t === "all" ? "All" : tagName[t]}</button>`).join("")}</div></div>
       <div class="grid-fx" id="e-grid"></div></div>`, "span-8")}
     ${panel("Preview", `<span id="e-now"></span>`, "", `<div class="stage" id="e-stage"></div>`, "span-4")}
     ${panel("How effects are chosen", "", "", `<div class="pb controls">

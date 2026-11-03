@@ -45,7 +45,7 @@ designer: it knows where the beat is, which part of the song you're in, and what
 | --- | --- |
 | 🎵 **Song analysis** | Tempo, beat grid, downbeats, bars, build-ups, drops and music style, from the whole song before it plays |
 | 🎧 **Live listening** | This computer's sound or a microphone from the browser; a sound card on a Raspberry Pi with no browser open |
-| ✨ **74 effects** | Every effect works on every layout: Warp Tunnel, Kick Shockwave, Spiral Galaxy, Laser Show, Fireworks, Thunderstorm, Aurora, Candlelight… ([full list](docs/effects.md)) |
+| ✨ **93 effects** | Every effect works on every layout: Warp Tunnel, Kick Shockwave, Spiral Galaxy, Laser Show, Fireworks, Thunderstorm, Aurora, Candlelight… ([full list](docs/effects.md)) |
 | 🎛️ **Live pads** | Flash, strobe, blackout, freeze, build & drop, drop now, next effect, boost, tap tempo, colour hold, with keyboard shortcuts |
 | 🏠 **Room layouts** | Presets (four walls, TV, gaming desk, bedroom, living room, matrix, club, rings), drag-and-drop editing, any LED ranges per shape, one click to write segments into WLED |
 | 🔎 **Plug and play** | Finds WLED controllers on your network (mDNS and a network scan), reads their LED counts, notices when one changes address |
@@ -68,7 +68,7 @@ designer: it knows where the beat is, which part of the song you're in, and what
     <td><img src="docs/images/live-pads.png" alt="Live pads page: big buttons for flash, strobe, blackout, freeze, build and drop"><br><sub><b>Live pads</b>: play the lights like an instrument</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/images/effects.png" alt="Effects page: grid of effects filtered by calm, build-up and drop"><br><sub><b>Effects</b>: 74 effects, automatic or by hand</sub></td>
+    <td><img src="docs/images/effects.png" alt="Effects page: grid of effects filtered by calm, build-up and drop"><br><sub><b>Effects</b>: 93 effects, automatic or by hand</sub></td>
     <td><img src="docs/images/scenes.png" alt="Scenes and schedules page"><br><sub><b>Scenes & schedules</b></sub></td>
   </tr>
   <tr>
@@ -178,7 +178,7 @@ flowchart LR
   B[System sound / mic in the browser] -- 22 kHz audio over WebSocket --> C
   S[Sound card on the server] --> C
   C[Live analyser<br/>kicks, snares, hats, tempo, song part, style] --> D
-  D[Director<br/>picks effects, crossfades,<br/>ambient floor, pads, safe mode] --> E[74 effects on<br/>per-LED room coordinates]
+  D[Director<br/>picks effects, crossfades,<br/>ambient floor, pads, safe mode] --> E[93 effects on<br/>per-LED room coordinates]
   E --> F[Per-controller buffers] -- DDP, UDP 4048 --> W[WLED controllers]
   E -- preview frames --> U[Web app]
 ```

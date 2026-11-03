@@ -3,7 +3,7 @@
 import { writeFileSync } from "node:fs";
 import { buildLayout, exampleRoom, createEffects } from "../packages/engine/src/index.js";
 const fx = createEffects(buildLayout(exampleRoom()));
-const tag = { calm: "Calm, slow and emotional", build: "Build-up", drop: "High energy", "LedFx-like": "Classic spectrum", any: "Anything" };
+const tag = { calm: "Calm, slow and emotional", build: "Build-up", drop: "High energy", home: "Everyday (follows the clock)", "LedFx-like": "Classic spectrum", any: "Anything" };
 const used = id => Object.values(fx.styles).filter(s => Object.values(s.pools).some(p => p.includes(id))).map(s => s.name);
 const rows = fx.list.map(e => `| \`${e.id}\` | ${e.name} | ${tag[e.tag] || e.tag} | ${used(e.id).join(", ") || "picked by hand"} |`);
 writeFileSync(new URL("../docs/effects.md", import.meta.url), `# Effects

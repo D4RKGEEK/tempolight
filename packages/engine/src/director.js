@@ -10,7 +10,7 @@ export function idleSignals(t, pal, fixed) {
   const P = 1.2, x = t / P, idx = Math.floor(x), ph = x - idx;
   return { t, g: { has: true, P, phase: ph, idx, beatInBar: idx % 4, env: Math.exp(-ph * P / 0.3), barPhase: (idx % 4 + ph) / 4, beatT: idx * P },
     pal, fixed, punch: 0.2, loud: 0.35, wave: null, hat: -9, snare: -9, snares: [], pulseT: -9, pulses: [], pulseN: idx,
-    pulse: 0, kickE: 0, snareE: 0, hatE: 0, bassL: 0, bands: new Float32Array(24), buildP: 0 };
+    pulse: 0, kickE: 0, snareE: 0, hatE: 0, bassL: 0, bands: new Float32Array(24), buildP: 0, dropIn: 99, sinceDrop: 99 };
 }
 
 /**

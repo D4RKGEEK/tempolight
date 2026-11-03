@@ -1,4 +1,4 @@
-// Effects library: 74 effects that work on any LED layout.
+// Effects library: 93 effects that work on any LED layout.
 // Extracted from the playground (apps/playground). Each effect reads per-LED arrays from the layout
 // and a signals object S (see signals.js) and writes linear RGB into COL.
 /* eslint-disable */
@@ -10,7 +10,7 @@ export function createEffects(layout) {
   const WHITE = [1, 0.97, 0.94];
   const PALSETS = { neon: ["#ff2bd6", "#16e0ff"], sunset: ["#ff5e3a", "#ffb648"], ocean: ["#0a6cff", "#00e5d0"], fire: ["#ff3d00", "#ffc400"],
     ice: ["#7cc8ff", "#e8f6ff"], forest: ["#19c37d", "#c6ff3d"], mono: ["#ffe2b8", "#fff4e6"] };
-  let melodyHue = 0, chordHue = 0; // smoothed hues for Melody Colour and Colour Chord
+  let melodyHue = 0, chordHue = 0, vocalLvl = 0, chorusSlow = 0.5, chorusFast = 0.5; // smoothed state for Melody Colour, Colour Chord, Vocal Glow, Chorus Bloom
   const G = (x, w) => Math.exp(-(x / w) * (x / w));
   const wrapd = (a, b) => { const d = Math.abs(a - b) % 1; return Math.min(d, 1 - d); };
   function rainbow(x) { x = ((x % 1) + 1) % 1; return [Math.min(1, Math.max(0, Math.abs(x * 6 - 3) - 1)), Math.min(1, Math.max(0, 2 - Math.abs(x * 6 - 2))), Math.min(1, Math.max(0, 2 - Math.abs(x * 6 - 4)))]; }
@@ -351,22 +351,116 @@ export function createEffects(layout) {
   ];
   FX2.push(...FX3);
 
+
+  // ---- v0.3 effects
+  // Portal's light source is the TV: the biggest rectangle in the room (or else the biggest shape)
+  const portalSrc = (() => { let best = 0, bc = -1; shapes.forEach((sh, i) => { const sc = (sh.type === "rect" ? 1e6 : 0) + (sh.count || 0); if (sc > bc) { bc = sc; best = i; } });
+    let x = 0, y = 0, n = 0; for (let i = 0; i < N; i++) if (LF[i] === best) { x += PX[i]; y += PY[i]; n++; } return { shape: best, x: n ? x / n : RW / 2, y: n ? y / n : 0.5 }; })();
+  const easeOut = x => 1 - (1 - x) * (1 - x);
+  // the box the LEDs actually fill: corners and centre come from the real room, not the whole wall view
+  const BB = (() => { let x0 = 9, x1 = -9, y0 = 9, y1 = -9; for (let i = 0; i < N; i++) { x0 = Math.min(x0, PX[i]); x1 = Math.max(x1, PX[i]); y0 = Math.min(y0, PY[i]); y1 = Math.max(y1, PY[i]); }
+    if (!N) { x0 = 0; x1 = RW; y0 = 0; y1 = 1; } return { x0, x1, y0, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, r: Math.max(0.1, Math.hypot(x1 - x0, y1 - y0) / 2) }; })();
+  // corners snap to the LED nearest each corner of that box, so a ball "landing in a corner" lands on real lights
+  const CORNERS = [[BB.x0, BB.y0], [BB.x1, BB.y0], [BB.x1, BB.y1], [BB.x0, BB.y1]].map(([x, y]) => { let bi = -1, bd = 1e9;
+    for (let i = 0; i < N; i++) { const d = Math.hypot(PX[i] - x, PY[i] - y); if (d < bd) { bd = d; bi = i; } } return bi < 0 ? [x, y] : [PX[bi], PY[bi]]; });
+  const FX4 = [
+    // -- use the room's real layout
+    { id: "lighthouse", name: "Lighthouse", tag: "drop", run(S) { const [A1, B1] = S.pal, ang = S.g.barPhase * 2 * Math.PI - Math.PI / 2, w = 0.3 + 0.12 * S.pulse;
+        for (let i = 0; i < N; i++) { const a = Math.atan2(PY[i] - BB.cy, PX[i] - BB.cx); let d = Math.abs(a - ang) % (2 * Math.PI); d = Math.min(d, 2 * Math.PI - d);
+          const r = (Math.hypot(PX[i] - BB.cx, PY[i] - BB.cy) / BB.r * 0.7), beam = G(d, w) * (0.6 + 1.2 * S.pulse) * Math.min(1, r * 3 + 0.3), back = G(Math.PI - d, w * 1.5) * 0.25;
+          add(i, A1, 0.05 + back); add(i, B1, beam); if (beam > 0.6) add(i, WHITE, (beam - 0.6) * 0.8); } } },
+    { id: "corner", name: "Corner Bounce", tag: "drop", run(S) { const k = ((S.pulseN % 4) + 4) % 4, from = CORNERS[(k + 3) % 4], to = CORNERS[k], dt = S.t - S.pulseT;
+        const p = easeOut(Math.max(0, Math.min(1, dt / ((S.g.P || 0.5) * 0.45)))), x = from[0] + (to[0] - from[0]) * p, y = from[1] + (to[1] - from[1]) * p, [A1, B1] = S.pal;
+        for (let i = 0; i < N; i++) add(i, A1, 0.04);
+        splat(x, y, 0.22, B1, 1.8); splat(x, y, 0.06, WHITE, 0.4 + 0.8 * S.pulse);
+        if (p >= 1) splat(to[0], to[1], 0.12 + 0.3 * dt, A1, Math.max(0, 1 - dt * 2)); } },
+    { id: "gravity", name: "Gravity", tag: "drop", run(S) { const [A1, B1] = S.pal;
+        const o = st(S, "gravity", () => ({ p: Array.from({ length: 48 }, (_, k) => ({ x: rnd() * RW, y: rnd(), vy: 0, c: k % 2 })), last: -9 }));
+        const kick = S.pulseT !== o.last && S.t - S.pulseT < 0.06; if (kick) o.last = S.pulseT;
+        for (const q of o.p) { q.vy -= 2.2 * o.dt; q.y += q.vy * o.dt; if (q.y < 0.03) { q.y = 0.03; q.vy = -q.vy * 0.35; } if (q.y > 1) { q.y = 1; q.vy = 0; }
+          if (kick && q.y < 0.25) q.vy = 1.1 + rnd() * 0.9 * (0.5 + S.punch); }
+        for (let i = 0; i < N; i++) add(i, A1, 0.03 + 0.4 * S.kickE * Math.max(0, 0.3 - PY[i]));
+        for (const q of o.p) splat(q.x, q.y, 0.05, q.c ? A1 : B1, 1.2); } },
+    { id: "collision", name: "Wave Collision", tag: "build", run(S) { const [A1, B1] = S.pal, half = (S.g.barPhase * 2) % 1, f = easeOut(half) * (BB.x1 - BB.x0) / 2, meet = half > 0.85 ? (half - 0.85) / 0.15 : 0;
+        for (let i = 0; i < N; i++) { const x = PX[i], r = Math.hypot(x - RW / 2, PY[i] - 0.5);
+          add(i, A1, G(x - BB.x0 - f, 0.06) * (0.8 + S.buildP)); add(i, B1, G(BB.x1 - x - f, 0.06) * (0.8 + S.buildP));
+          if (meet > 0) add(i, WHITE, G(r - meet * 0.6, 0.08) * (1 - meet) * 2); add(i, WHITE, S.snareE * 0.25 * G(r, 0.3)); add(i, A1, 0.03); } } },
+    { id: "portal", name: "Portal", tag: "drop", run(S) { const { shape, x: cx, y: cy } = portalSrc, [A1, B1] = S.pal, P = S.g.P || 0.5, dt = S.t - S.pulseT;
+        for (let i = 0; i < N; i++) { if (LF[i] === shape) { add(i, rainbow(LS[i] + S.t * 0.4), 0.5 + 1.2 * S.pulse); continue; }
+          const r = Math.hypot(PX[i] - cx, PY[i] - cy), flow = ((r * 3 - S.t / P * 0.5) % 1 + 1) % 1;
+          add(i, flow < 0.5 ? A1 : B1, G(flow - 0.25, 0.12) * Math.exp(-r * 0.9) * (0.4 + S.pulse)); add(i, WHITE, G(r - dt * 1.5, 0.07) * Math.max(0, 1 - dt / 0.6)); add(i, A1, 0.03); } } },
+    { id: "stadium", name: "Stadium Wave", tag: "drop", run(S) { const front = S.g.barPhase, [A1, B1] = S.pal;
+        for (let i = 0; i < N; i++) { const a = (Math.atan2(PY[i] - BB.cy, PX[i] - BB.cx) / (2 * Math.PI) + 1.25) % 1, d = ((front - a) % 1 + 1) % 1; // 0 at the front of the wave
+          const crowd = d < 0.22 ? Math.sin(d / 0.22 * Math.PI) : 0; add(i, A1, 0.08 + 0.08 * S.kickE); add(i, lerp3(A1, B1, crowd), crowd * (1 + 0.6 * S.pulse)); if (crowd > 0.8) add(i, WHITE, (crowd - 0.8) * 2); } } },
+    // -- follow the song
+    { id: "vocal", name: "Vocal Glow", tag: "calm", run(S) { let v = 0; for (let b = 8; b <= 15; b++) v += S.bands[b]; v /= 8; vocalLvl += (v - vocalLvl) * 0.12;
+        const warm = S.fixed ? S.pal[0] : [1, 0.55, 0.32], soft = S.fixed ? S.pal[1] : [1, 0.3, 0.45], lv = 0.12 + 0.9 * vocalLvl;
+        for (let i = 0; i < N; i++) { const m = 0.5 + 0.5 * Math.sin(2 * Math.PI * (LU[i] * 0.8 - S.t * 0.05) + LH[i] * 2); add(i, warm, lv * (0.6 + 0.4 * m)); add(i, soft, lv * 0.3 * (1 - m)); } } },
+    { id: "chorus", name: "Chorus Bloom", tag: "drop", run(S) { chorusSlow += (S.loud - chorusSlow) * 0.004; chorusFast += (S.loud - chorusFast) * 0.05;
+        const bloom = Math.max(0, Math.min(1, (chorusFast - chorusSlow) * 4 + (S.loud > 0.75 ? 0.4 : 0))), spread = 0.08 + 0.6 * bloom;
+        for (let i = 0; i < N; i++) { add(i, rainbow(S.t * 0.03 + LU[i] * spread + LF[i] * 0.05 * bloom), 0.12 + 0.5 * bloom + 0.4 * S.pulse * bloom); add(i, WHITE, S.hatE * 0.15 * bloom); } } },
+    { id: "rewind", name: "Drop Rewind", tag: "build", run(S) { const [A1, B1] = S.pal, din = S.dropIn ?? 99, since = S.sinceDrop ?? 99;
+        for (let i = 0; i < N; i++) { const r = (Math.hypot(PX[i] - BB.cx, PY[i] - BB.cy) / BB.r * 0.7);
+          if (since >= 0 && since < 0.9) { add(i, WHITE, G(r - since * 1.6, 0.06 + since * 0.1) * (1 - since / 0.9) * 2.2); add(i, B1, 0.3 * (1 - since / 0.9)); continue; }
+          const pull = din < 2 ? 1 - din / 2 : S.buildP * 0.6, ph = ((r * 4 + S.t * (0.6 + 3 * pull)) % 1 + 1) % 1; // rings rush inwards, faster as the drop nears
+          add(i, ph < 0.5 ? A1 : B1, G(ph - 0.5, 0.1) * (0.25 + 0.9 * pull) * (1 - Math.min(1, r) * pull) + 0.02); } } },
+    { id: "bassrain", name: "Bass Rain", tag: "drop", run(S) { const [A1, B1] = S.pal, o = st(S, "bassrain", () => ({ d: [], last: -9 }));
+        if (S.pulseT !== o.last && S.t - S.pulseT < 0.06) { o.last = S.pulseT; const n = 6 + Math.round(10 * (S.bassL || 0.5)); for (let k = 0; k < n; k++) o.d.push({ x: rnd() * RW, y: 1.02, v: 0.5 + rnd() * 0.6, c: rnd() < 0.5 }); }
+        for (const q of o.d) { q.v += 1.5 * o.dt; q.y -= q.v * o.dt; } o.d = o.d.filter(q => q.y > -0.05).slice(-90);
+        for (let i = 0; i < N; i++) add(i, A1, 0.03 + 1.5 * S.kickE * Math.max(0, 0.15 - PY[i]));
+        for (const q of o.d) { splat(q.x, q.y, 0.035, q.c ? A1 : B1, 1.3); splat(q.x, q.y + 0.06, 0.03, q.c ? A1 : B1, 0.5); } } },
+    { id: "beatcount", name: "Beat Counter", tag: "drop", run(S) { const [A1, B1] = S.pal, b = S.g.beatInBar, nS = shapes.length, e = Math.exp(-S.g.phase * (S.g.P || 0.5) / 0.25);
+        for (let i = 0; i < N; i++) { const slot = nS >= 4 ? LF[i] % 4 : Math.min(3, Math.floor(LS[i] * 4));
+          if (b === 0) add(i, WHITE, 0.2 + 1.2 * e); else if (slot <= b) add(i, slot === b ? B1 : A1, slot === b ? 0.4 + 1.1 * e : 0.35); else add(i, A1, 0.04); } } },
+    { id: "specrings", name: "Spectrum Rings", tag: "drop", run(S) {
+        for (let i = 0; i < N; i++) { const pos = LL[i] ? Math.abs(LA[i] - 0.5) * 2 : LS[i], b = S.bands[Math.min(23, Math.floor(pos * 23.99))];
+          add(i, rainbow(pos * 0.7 + LF[i] * 0.11 + S.t * 0.03), 0.04 + b * b * 1.3); if (b > 0.85) add(i, WHITE, (b - 0.85) * 3); } } },
+    { id: "neon", name: "Neon Sign", tag: "calm", run(S) { const nS = Math.max(1, shapes.length), bar = Math.floor((S.g.idx - S.g.beatInBar) / 4);
+        for (let i = 0; i < N; i++) { const s = LF[i], flick = hash(Math.floor(S.t * 18) + s * 7.7) < 0.03 ? 0.15 : 1, buzz = 0.92 + 0.08 * Math.sin(S.t * 2 * Math.PI * 1.7 + s);
+          const on = nS < 3 || hash(s * 1.7 + bar * 0.37) > 0.25; add(i, rainbow(hash(s * 3.1) * 0.9 + 0.75), (on ? 0.75 : 0.05) * flick * buzz * (0.8 + 0.3 * S.pulse)); if (on) add(i, WHITE, 0.08 * flick); } } },
+    // -- everyday (pick these by hand: they follow the clock, not the music)
+    { id: "boxbreath", name: "Box Breathing", tag: "home", run(S) { const c = ((S.t % 16) + 16) % 16, ph = Math.floor(c / 4), k = (c % 4) / 4; // breathe in, hold, out, hold: 4 s each
+        const level = ph === 0 ? k : ph === 1 ? 1 : ph === 2 ? 1 - k : 0, ease = 0.5 - 0.5 * Math.cos(level * Math.PI), a = S.fixed ? S.pal[0] : hex("#4fb3ff"), b = S.fixed ? S.pal[1] : hex("#8a7dff");
+        for (let i = 0; i < N; i++) { const fill = PY[i] < ease * 1.05 ? 1 : G(PY[i] - ease, 0.08); add(i, lerp3(a, b, PY[i]), 0.06 + 0.55 * fill * (0.4 + 0.6 * ease)); } } },
+    { id: "focus", name: "Focus Timer", tag: "home", run(S) { const o = st(S, "focus", () => ({ el: 0 })); o.el += o.dt; // 25 minutes of work, then a 5-minute break
+        const cyc = o.el % 1800, work = cyc < 1500, p = work ? cyc / 1500 : (cyc - 1500) / 300, warm = [1, 0.78, 0.55], green = [0.2, 1, 0.55];
+        for (let i = 0; i < N; i++) {
+          if (work) { add(i, warm, LG[i] < p ? 0.32 : 0.05); add(i, WHITE, G(LG[i] - p, 0.004) * 0.9); if (cyc > 1490) add(i, warm, 0.3 * (0.5 + 0.5 * Math.sin(o.el * 6))); }
+          else add(i, green, 0.1 + 0.25 * (0.5 + 0.5 * Math.sin(o.el * 2 * Math.PI / 8))); } } },
+    { id: "wakeup", name: "Wake-up Sunrise", tag: "home", run(S) { const o = st(S, "wakeup", () => ({ el: 0 })); o.el += o.dt; const p = Math.min(1, 0.05 + o.el / 1200); // 20 minutes, from a faint glow
+        const c = p < 0.4 ? lerp3([0.35, 0.02, 0], [1, 0.25, 0.02], p / 0.4) : p < 0.8 ? lerp3([1, 0.25, 0.02], [1, 0.65, 0.3], (p - 0.4) / 0.4) : lerp3([1, 0.65, 0.3], [1, 0.92, 0.8], (p - 0.8) / 0.2);
+        const h = 0.15 + p * 1.1; for (let i = 0; i < N; i++) add(i, c, (0.02 + 0.98 * p) * Math.min(1, Math.max(0.15, (h - PY[i]) * 1.5 + 0.3))); } },
+    // -- party
+    { id: "cannons", name: "Colour Cannons", tag: "drop", run(S) {
+        for (let i = 0; i < N; i++) add(i, S.pal[0], 0.04);
+        for (const e of S.pulses) { const dt = S.t - e; if (dt < 0 || dt > 0.8) continue; const k = Math.round(e * 10), c0 = CORNERS[((k % 4) + 4) % 4], p = easeOut(Math.min(1, dt / 0.5));
+          const tx = BB.cx + (hash(k) - 0.5) * 0.6, ty = BB.cy + (hash(k + 1) - 0.5) * 0.4, x = c0[0] + (tx - c0[0]) * p, y = c0[1] + (ty - c0[1]) * p;
+          splat(x, y, 0.1 + 0.25 * p, rainbow(hash(k + 5)), 2 * (1 - dt / 0.8)); splat(c0[0], c0[1], 0.15, WHITE, Math.exp(-dt / 0.08) * 1.5); } } },
+    { id: "scatter", name: "Strobe Scatter", tag: "drop", run(S) { const step = Math.floor(S.g.phase * 2) + S.g.idx * 2, on = (S.g.phase * 2) % 1 < 0.35, nS = Math.max(1, shapes.length), [A1, B1] = S.pal;
+        for (let i = 0; i < N; i++) { const seg = nS >= 3 ? LF[i] : Math.floor(LS[i] * 6); add(i, A1, 0.04);
+          if (on && hash(seg * 13.1 + step) < 0.35) add(i, hash(seg + step * 0.7) < 0.5 ? WHITE : B1, 1.4 * S.punch); } } },
+    { id: "scope", name: "Oscilloscope", tag: "drop", run(S) { const w = S.wave, L = w ? w.length : 0, col = S.fixed ? S.pal[0] : hex("#39ff8a");
+        for (let i = 0; i < N; i++) { const u = PX[i] / RW, v = L ? w[Math.min(L - 1, Math.floor(u * (L - 1)))] * 2.5 : Math.sin(u * 12 + S.t * 3) * 0.3 * (0.3 + S.pulse);
+          const y = 0.5 + Math.max(-0.48, Math.min(0.48, v)); add(i, col, G(PY[i] - y, 0.035) * 1.4 + 0.02); add(i, WHITE, G(PY[i] - y, 0.012) * 0.5); } } },
+  ];
+  FX2.push(...FX4);
+
   FX.push(...FX2);
   const FXI = Object.fromEntries(FX.map((f, i) => [f.id, i]));
-  const POOLS = { calm: ["northern", "galaxy", "aurora", "embers", "colorchord", "fireflies", "stars", "lavablobs", "ocean", "hypno", "lava", "twinkle", "plasma", "flow"],
-    build: ["fill", "countdown", "pillars", "helix", "comets", "storm", "vortex", "riser", "tstrobe", "implode", "mrain", "spiral", "scanner"],
-    drop: ["laser", "tunnel", "shock", "hyper", "quake", "solar", "spin", "cannon", "ping", "nova", "confetti", "disco", "rgbsplit", "strobe", "snake", "fireworks", "roomeq", "wipe", "glitch",
-           "kaleido2", "sparks", "meteor", "tiles", "ripple", "zigzag", "chase", "curtain", "split", "pong", "eq", "balls", "rings", "burst", "strobechase", "mirror", "lightning", "fire", "kaleido"] };
+  const POOLS = { calm: ["northern", "galaxy", "vocal", "aurora", "embers", "neon", "colorchord", "fireflies", "stars", "lavablobs", "ocean", "hypno", "lava", "twinkle", "plasma", "flow"],
+    build: ["fill", "rewind", "countdown", "pillars", "collision", "helix", "comets", "storm", "vortex", "riser", "tstrobe", "implode", "mrain", "spiral", "scanner"],
+    drop: ["laser", "lighthouse", "tunnel", "shock", "cannons", "hyper", "quake", "portal", "solar", "corner", "stadium", "bassrain", "spin", "cannon", "ping", "nova", "confetti", "disco", "rgbsplit", "strobe", "snake", "fireworks", "roomeq", "wipe", "glitch",
+           "kaleido2", "sparks", "gravity", "meteor", "tiles", "beatcount", "ripple", "zigzag", "specrings", "scatter", "chase", "curtain", "split", "pong", "eq", "balls", "rings", "burst", "strobechase", "mirror", "lightning", "fire", "kaleido"] };
   // each music style listens for different things and uses its own effect pools
   const STYLES = {
     party: { name: "Party / EDM", mode: "sections", pools: POOLS, punch: 1, xfade: 0.3, every: 1, floor: 0.06 },
-    poprock: { name: "Pop / Rock", mode: "levels", pools: { low: ["flow", "northern", "melody", "breath", "aurora"], mid: ["laser", "ping", "snake", "chase", "curtain", "mirror", "rgbsplit", "rings", "wipe", "meteor"],
-      peak: ["nova", "tunnel", "shock", "cannon", "fireworks", "solar", "disco", "hyper", "confetti", "kaleido2", "spin", "fire"] }, punch: 0.85, xfade: 0.4, every: 1, floor: 0.07 },
-    hiphop: { name: "Hip-hop / Trap", mode: "levels", pools: { low: ["lava", "lavablobs", "plasma", "heart", "embers"], mid: ["quake", "roomeq", "shock", "tiles", "glitch", "rgbsplit", "ripple", "eq", "rings", "split"],
+    poprock: { name: "Pop / Rock", mode: "levels", pools: { low: ["flow", "vocal", "northern", "melody", "breath", "aurora"], mid: ["laser", "stadium", "lighthouse", "beatcount", "ping", "snake", "chase", "curtain", "mirror", "rgbsplit", "rings", "wipe", "meteor"],
+      peak: ["nova", "chorus", "tunnel", "shock", "cannons", "cannon", "fireworks", "solar", "portal", "disco", "hyper", "confetti", "kaleido2", "spin", "fire"] }, punch: 0.85, xfade: 0.4, every: 1, floor: 0.07 },
+    hiphop: { name: "Hip-hop / Trap", mode: "levels", pools: { low: ["lava", "lavablobs", "plasma", "heart", "embers"], mid: ["quake", "bassrain", "roomeq", "shock", "tiles", "beatcount", "gravity", "glitch", "rgbsplit", "ripple", "eq", "rings", "split"],
       peak: ["cannon", "nova", "laser", "fire", "glitch", "confetti", "ping", "meteor", "lightning"] }, punch: 1, xfade: 0.3, every: 1, floor: 0.07 },
-    chill: { name: "Chill / Lo-fi", mode: "levels", pools: { low: ["fireflies", "rainglass", "ocean", "aurora", "twinkle", "embers"], mid: ["galaxy", "colorchord", "lavablobs", "hypno", "flow", "plasma", "melody", "northern"],
+    chill: { name: "Chill / Lo-fi", mode: "levels", pools: { low: ["fireflies", "rainglass", "ocean", "aurora", "twinkle", "embers"], mid: ["galaxy", "neon", "vocal", "colorchord", "lavablobs", "hypno", "flow", "plasma", "melody", "northern"],
       peak: ["northern", "swell", "breath", "lava"] }, punch: 0.35, xfade: 1.2, every: 2, floor: 0.1 },
-    emotional: { name: "Emotional / Ballad", mode: "levels", pools: { low: ["candle", "fireflies", "rainglass", "swell", "breath"], mid: ["swell", "northern", "melody", "colorchord", "lavablobs", "ocean"],
+    emotional: { name: "Emotional / Ballad", mode: "levels", pools: { low: ["candle", "vocal", "fireflies", "rainglass", "swell", "breath"], mid: ["swell", "vocal", "northern", "melody", "colorchord", "lavablobs", "ocean"],
       peak: ["sunrise", "northern", "swell", "aurora"] }, punch: 0.1, xfade: 2.0, every: 2, floor: 0.12 },
   };
 
