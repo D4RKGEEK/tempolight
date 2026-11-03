@@ -450,6 +450,22 @@ export function createEffects(layout) {
   shapes.forEach((sh, si) => { if (sh.type !== "matrix") return; const x0 = sh.cx - sh.w / 2, y0 = sh.cy - sh.h / 2, dx = sh.w / Math.max(1, sh.cols - 1), dy = sh.h / Math.max(1, sh.rows - 1);
     for (let i = 0; i < N; i++) if (LF[i] === si) { MC[i] = Math.round((LX[i] - x0) / dx); MR[i] = Math.round((LY[i] - y0) / dy); MCOLS[i] = sh.cols; } });
   const hasMatrix = MC.some(v => v >= 0);
+  // ---- screen sync: colours from a shared screen (a film, a game, a music video), mapped over the room like a big ambilight
+  const SCR = new Float32Array(N * 3);
+  FX2.push({ id: "screen", name: "Screen Sync", tag: "home", run(S) {
+    const sc = S.screen;
+    if (!sc) { for (let i = 0; i < N; i++) add(i, S.pal[i % 2], 0.08 + 0.06 * Math.sin(S.t * 1.5 + LS[i] * 6)); return; } // nothing shared yet
+    const { w, h, px } = sc;
+    for (let i = 0; i < N; i++) {
+      const u = (PX[i] - BB.x0) / Math.max(1e-3, BB.x1 - BB.x0), v = 1 - (PY[i] - BB.y0) / Math.max(1e-3, BB.y1 - BB.y0);
+      const cx = Math.min(w - 1, Math.max(0, Math.round(u * (w - 1)))), cy = Math.min(h - 1, Math.max(0, Math.round(v * (h - 1)))); let r = 0, g = 0, b = 0, n = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const x = cx + dx, y = cy + dy; if (x < 0 || y < 0 || x >= w || y >= h) continue; const q = (y * w + x) * 3; r += px[q]; g += px[q + 1]; b += px[q + 2]; n++; }
+      r /= n * 255; g /= n * 255; b /= n * 255;
+      const m = (r + g + b) / 3, sat = 1.25; r = Math.max(0, m + (r - m) * sat); g = Math.max(0, m + (g - m) * sat); b = Math.max(0, m + (b - m) * sat); // a little richer than the screen
+      const j = i * 3; SCR[j] += (r - SCR[j]) * 0.35; SCR[j + 1] += (g - SCR[j + 1]) * 0.35; SCR[j + 2] += (b - SCR[j + 2]) * 0.35; // smooth, so it doesn't flicker
+      COL[j] += SCR[j]; COL[j + 1] += SCR[j + 1]; COL[j + 2] += SCR[j + 2];
+    }
+  } });
   FX2.push({ id: "text", name: "Text Scroller", tag: "home", run(S) {
     const txt = String(S.text || "TEMPOLIGHT").toUpperCase(), cols = []; for (const ch of txt) { const g = FONT[ch] || FONT["?"]; cols.push(...g, 0); } cols.push(0, 0, 0, 0, 0, 0);
     const off = Math.floor(S.t * 8), [A1, B1] = S.pal;

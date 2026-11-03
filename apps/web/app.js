@@ -217,12 +217,19 @@ function musicPage(el) {
       <label class="check"><input type="checkbox" id="m-pred" ${s.predict ? "checked" : ""}> Predict beats when listening live (lights land on the beat instead of just after it)</label>
       <div class="field"><label>Metronome when nothing plays</label><div class="row"><label class="check"><input type="checkbox" id="m-met" ${s.metronome.enabled ? "checked" : ""}> On</label><input type="number" id="m-bpmset" min="40" max="220" value="${s.metronome.bpm}" style="width:90px"> <span class="faint">BPM</span></div></div>
     </div>`, "span-6")}
+    ${panel("Screen sync", `<span id="m-scrst">${app.screen?.state.active ? "Sharing" : "Off"}</span>`, `<button class="btn" id="m-scr" type="button">${app.screen?.state.active ? "Stop sharing" : "Share a screen…"}</button>`, `<div class="pb stack">
+      <p class="muted">Share a film, a game or a music video and the room takes its colours, like a big ambilight. Turns on the Screen Sync effect; pick another effect to go back.</p>
+      <span class="help" id="m-scrhelp">${navigator.mediaDevices?.getDisplayMedia ? "Works in Chrome, Edge and Firefox on a computer. Keep the shared tab or window visible." : "This browser can't share its screen. Use a computer."}</span></div>`, "span-6")}
     ${DEMO ? "" : panel("Listen on the server", "For a Raspberry Pi or PC next to the speakers, with no browser open", `<button class="btn" id="m-cap" type="button"></button>`, `<div class="pb stack">
       <div class="field"><label for="m-capsrc">Sound input</label><select id="m-capsrc">${opt("auto", "Automatic", s.capture.source === "auto")}${st.captureSources.map(c => opt(c.id, c.label, c.id === s.capture.source)).join("")}</select>
       ${st.captureSources.length ? "" : '<span class="help">No capture tool found on the server. Install ffmpeg (or PulseAudio/ALSA tools on Linux), or enter a command below.</span>'}</div>
       <div class="field"><label for="m-capcmd">Custom command (optional)</label><input id="m-capcmd" class="mono" placeholder='ffmpeg -f pulse -i default -ac 1 -ar 22050 -f s16le -' value="${esc(s.capture.command)}"><span class="help">Any command that writes 16-bit mono 22,050 Hz audio to its output.</span></div>
       <div id="m-capst" class="faint"></div></div>`, "span-12")}`;
   const canShare = !!navigator.mediaDevices?.getDisplayMedia;
+  if (!canShare) $("#m-scr").disabled = true;
+  $("#m-scr").onclick = async () => { if (!app.screen) { const { createScreenShare } = await import("/screen.js"); app.screen = createScreenShare({ ws, onChange: sc => { if (sc.error) toast(sc.error, true); const b = $("#m-scr"), t = $("#m-scrst"); if (b) b.textContent = sc.active ? "Stop sharing" : "Share a screen…"; if (t) t.textContent = sc.active ? `Sharing ${sc.label}` : "Off"; } }); }
+    if (app.screen.state.active) { app.screen.stop(); return; }
+    if (await app.screen.start()) act(() => api("PATCH", "/api/show", { effect: "screen" }), "Screen Sync is on").catch(() => {}); };
   if (!canShare) $("#m-system").hidden = true; // phones can't share system sound: use songs or the microphone
 
   const lockedOut = !unlocked();

@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Screen sync: share a screen or window on the Music page and the new Screen Sync effect spreads its colours over the room, like a room-sized ambilight.
+
 - Phones as lights: guests scan a QR code on the Live pads page, tap Start, and their screen becomes another light. Each phone shows its own part of the room, so a crowd moves with the show. Works in the online demo too (another tab).
 
 - Home Assistant through MQTT discovery: Tempolight shows up as a light with effects, a scene picker, tempo and song-part sensors and Flash/Drop/Next buttons. Built-in MQTT client, no extra packages.

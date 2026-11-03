@@ -216,3 +216,18 @@ test("phones as lights: each phone gets the colour of its part of the room", { s
     b.close();
   } finally { await s.done(); }
 });
+
+test("screen sync: a shared screen's colours reach the LEDs", { skip: typeof WebSocket === "undefined" && "this Node.js has no WebSocket client (Node 22+)" }, async () => {
+  const wled = await startFakeWled({ leds: 60 }), s = await setup();
+  try {
+    const add = await s.call("POST", "/api/devices", { host: wled.host }); await s.call("PATCH", `/api/devices/${add.body.id}`, { ddpPort: wled.ddpPort });
+    await s.call("POST", "/api/room/preset", { id: "fourwalls" }); await s.call("PATCH", "/api/show", { effect: "screen" });
+    const ws = new WebSocket(`ws://127.0.0.1:${s.port}/ws`); await new Promise(r => ws.onopen = r);
+    const red = Buffer.alloc(8 * 4 * 3); for (let i = 0; i < red.length; i += 3) red[i] = 255;
+    const timer = setInterval(() => ws.send(JSON.stringify({ type: "screen", w: 8, h: 4, px: red.toString("base64"), label: "Test" })), 50);
+    const rgb = () => { const f = wled.lastFrame; let r = 0, g = 0, b = 0; for (let i = 0; i < f.length; i += 3) { r += f[i]; g += f[i + 1]; b += f[i + 2]; } return [r, g, b]; };
+    assert.ok(await until(() => { const [r, g, b] = rgb(); return r > 1000 && r > 5 * (g + b); }), "the room turns the screen's red");
+    assert.equal((await s.call("GET", "/api/status")).body.screen, "Test");
+    clearInterval(timer); ws.close();
+  } finally { await s.done(); await wled.close(); }
+});

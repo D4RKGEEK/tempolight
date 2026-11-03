@@ -27,7 +27,7 @@ const port = await app.listen(0, "127.0.0.1"), base = `http://127.0.0.1:${port}`
 const status = () => app.runtime.status();
 const lum = d => { let s = 0; for (const v of d.lastFrame) s += v; return s / d.lastFrame.length; };
 
-const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] });
+const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--auto-accept-this-tab-capture", "--auto-select-desktop-capture-source=Entire screen", "--enable-usermedia-screen-capturing"] });
 const ctx = await browser.newContext({ viewport: { width: 1400, height: 950 }, permissions: ["microphone"] });
 const page = await ctx.newPage(); const errors = [];
 page.on("pageerror", e => errors.push(e.message)); page.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
@@ -108,6 +108,12 @@ await step("devices: power limit", async () => {
 });
 await step("music: input picker, level meter and timing fix are there", async () => {
   await go("music"); ok(await page.isVisible("#m-input") && await page.isVisible("#m-cal") && (await page.$("#m-lvl")) !== null, "controls missing");
+});
+await step("screen sync: share a screen and the Screen Sync effect turns on", async () => {
+  await go("music"); await page.click("#m-scr"); await until(() => status().screen, 6000, "no screen frames arrive");
+  ok(app.store.data.show.effect === "screen", "effect not switched"); await until(() => page.textContent("#m-scr").then(t => /Stop/.test(t)), 2000, "button not updated");
+  await page.click("#m-scr"); await sleep(3500); ok(!status().screen, "sharing did not stop");
+  await app.core.handle("PATCH", "/api/show", { body: { mode: "auto" } });
 });
 await step("scenes: save, apply; schedules: add and run now", async () => {
   await go("scenes"); await page.click("#sc-save"); await until(() => app.store.data.scenes.some(s => s.name === "Test scene"), 3000, "scene not saved");

@@ -45,7 +45,7 @@ designer: it knows where the beat is, which part of the song you're in, and what
 | --- | --- |
 | 🎵 **Song analysis** | Tempo, beat grid, downbeats, bars, build-ups, drops and music style, from the whole song before it plays |
 | 🎧 **Live listening** | This computer's sound or a microphone from the browser; a sound card on a Raspberry Pi with no browser open |
-| ✨ **93 effects** | Every effect works on every layout: Warp Tunnel, Kick Shockwave, Spiral Galaxy, Laser Show, Fireworks, Thunderstorm, Aurora, Candlelight… ([full list](docs/effects.md)) |
+| ✨ **95 effects** | Every effect works on every layout: Warp Tunnel, Kick Shockwave, Spiral Galaxy, Laser Show, Fireworks, Thunderstorm, Aurora, Candlelight… ([full list](docs/effects.md)) |
 | ❤️ **Make it yours** | Like or ban effects, tune each one (speed, intensity, colour, mirror), add an accent layer, and split the room into zones with their own effect or brightness |
 | ⏱️ **One-tap timing fix** | Plays clicks, listens with the microphone and sets the light delay for your speakers, Bluetooth included |
 | 🔌 **Power limit** | Tell it your power supply's amps and the strip never draws more |
@@ -73,7 +73,7 @@ designer: it knows where the beat is, which part of the song you're in, and what
     <td><img src="docs/images/live-pads.png" alt="Live pads page: big buttons for flash, strobe, blackout, freeze, build and drop"><br><sub><b>Live pads</b>: play the lights like an instrument</sub></td>
   </tr>
   <tr>
-    <td><img src="docs/images/effects.png" alt="Effects page: grid of effects filtered by calm, build-up and drop"><br><sub><b>Effects</b>: 93 effects, automatic or by hand</sub></td>
+    <td><img src="docs/images/effects.png" alt="Effects page: grid of effects filtered by calm, build-up and drop"><br><sub><b>Effects</b>: 95 effects, automatic or by hand</sub></td>
     <td><img src="docs/images/scenes.png" alt="Scenes and schedules page"><br><sub><b>Scenes & schedules</b></sub></td>
   </tr>
   <tr>
@@ -183,7 +183,7 @@ flowchart LR
   B[System sound / mic in the browser] -- 22 kHz audio over WebSocket --> C
   S[Sound card on the server] --> C
   C[Live analyser<br/>kicks, snares, hats, tempo, song part, style] --> D
-  D[Director<br/>picks effects, crossfades,<br/>ambient floor, pads, safe mode] --> E[93 effects on<br/>per-LED room coordinates]
+  D[Director<br/>picks effects, crossfades,<br/>ambient floor, pads, safe mode] --> E[95 effects on<br/>per-LED room coordinates]
   E --> F[Per-controller buffers] -- DDP, UDP 4048 --> W[WLED controllers]
   E -- preview frames --> U[Web app]
 ```

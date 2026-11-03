@@ -93,6 +93,7 @@ Add `?token=` when locked. The server sends `{type: "status", ...}` four times a
 - `{type: "audio-start", rate: 22050, label}` then binary messages of 16-bit little-endian mono samples to be a live audio source; `{type: "audio-stop"}`
 - `{type: "clock", pos, playing}` while a song plays
 - `{type: "action", action: {type: "flash"}}` for pads, with low delay
+- `{type: "screen", w, h, px, label}` to feed the Screen Sync effect: `px` is base64 of `w × h` RGB bytes (up to 4,096 pixels), a few times a second
 - `{type: "phone", on: true}` to be a phone light: binary messages, byte 0 = 2, then R, G, B and the phone's place in
   the line-up (30 a second). `GET /api/network` lists this computer's addresses for the QR code; `status.phones` counts them
 

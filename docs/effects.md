@@ -1,6 +1,6 @@
 # Effects
 
-All 94 effects work on any layout: lines, poles, rings, polygons, matrices and freehand shapes. In automatic mode
+All 95 effects work on any layout: lines, poles, rings, polygons, matrices and freehand shapes. In automatic mode
 Tempolight picks from them by music style and song part; the last column says which styles use each one.
 Generated from `packages/engine` by `npm run docs`.
 
@@ -99,4 +99,5 @@ Generated from `packages/engine` by `npm run docs`.
 | `cannons` | Colour Cannons | High energy | Party / EDM, Pop / Rock |
 | `scatter` | Strobe Scatter | High energy | Party / EDM |
 | `scope` | Oscilloscope | High energy | picked by hand |
+| `screen` | Screen Sync | Everyday (follows the clock) | picked by hand |
 | `text` | Text Scroller | Everyday (follows the clock) | picked by hand |

@@ -14,8 +14,8 @@ test("example room builds 710 LEDs with sane coordinates", () => {
   }
 });
 
-test("all 94 effects render finite colours on every LED", () => {
-  assert.equal(fx.list.length, 94);
+test("all 95 effects render finite colours on every LED", () => {
+  assert.equal(fx.list.length, 95);
   const col = new Float32Array(layout.N * 3);
   for (const e of fx.list) {
     for (const t of [0.05, 3.3, 7.77, 15.01]) {

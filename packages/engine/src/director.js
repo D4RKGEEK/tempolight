@@ -156,14 +156,14 @@ export function createDirector(layout, fx) {
     COL.fill(0);
     if (st.overlay.freeze) { COL.set(PREV); overlays(wall); return COL; }
     if (!V) {
-      if (settings.mode !== "auto" && ids.has(settings.effect)) { renderFx(settings.effect, Object.assign(idleSignals(t * settings.speed, palette(), settings.palette !== "auto"), { text: extra.text || "" }), COL); st.cur = settings.effect; st.showing = st.cur; }
+      if (settings.mode !== "auto" && ids.has(settings.effect)) { renderFx(settings.effect, Object.assign(idleSignals(t * settings.speed, palette(), settings.palette !== "auto"), { text: extra.text || "", screen: extra.screen || null }), COL); st.cur = settings.effect; st.showing = st.cur; }
       else { renderAmbient(t, COL); st.showing = settings.ambient; }
       st.lastState = "idle"; applyLayer(null, t); applyZones(null, t);
     } else {
       const ST = style(V); st.styleName = settings.style !== "auto" ? settings.style : V.style || "party";
       choose(t, V);
       const S = buildSignals(st.styleName === V.style ? V : { ...V, style: st.styleName }, t, { pal: palette(), fixed: settings.palette !== "auto", ...extra });
-      S.text = extra.text || "";
+      S.text = extra.text || ""; S.screen = extra.screen || null;
       renderFx(st.cur, S, COL);
       if (st.prev && t - st.xfadeT < ST.xfade) {
         const k = (t - st.xfadeT) / ST.xfade; PREV.set(COL); renderFx(st.prev, S, COL);
