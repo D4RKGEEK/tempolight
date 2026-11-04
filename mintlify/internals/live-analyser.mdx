@@ -11,9 +11,10 @@ using only the past. The runtime makes one per live source (`runtime.pushPcm()`)
 WebSocket, or the server's sound card through `capture.js`. It has no I/O; tests push synthetic songs into it.
 
 ```js
-const an = new LiveAnalyser(22050); // any rate from 16 to 96 kHz: above 32 kHz it averages 2 samples, above 64 kHz 4
+const an = new LiveAnalyser(22050); // any rate from 16 to 96 kHz: above 32 kHz it keeps 1 sample in 2, above 64 kHz 1 in 4
 an.push(int16OrFloat32Chunk);       // as often as samples arrive
-const V = an.view(an.t, { predict: true });
+const V = an.view(an.sampleT, { predict: true }); // sampleT (= now): the newest sample's time
+an.conf;                            // 0-1: how sure the beat grid is
 const extra = an.extras();          // {bands, wave, bassL} for buildSignals()
 ```
 
@@ -21,38 +22,64 @@ const extra = an.extras();          // {bands, wave, bassL} for buildSignals()
 
 ```mermaid
 flowchart TD
-  P["push(chunk): Int16 or Float32"] --> DEC["decimate to 16-32 kHz"]
+  P["push(chunk): Int16 or Float32"] --> DEC["low-pass and decimate to 16-32 kHz"]
   DEC --> CT["ChromaTap.push: 4096-point FFT every 100 ms"]
   DEC --> RING["1024-sample ring buffer"]
   RING -- "every 256 samples" --> HOP["hop(): Hann window, FFT, magnitudes"]
   HOP --> FP["FingerprintTap.push(t, rms): 10 loudness values a second"]
+  HOP --> ODF["onset strength in 3 band groups"]
+  ODF --> BT["BeatTracker.push(): tempo, phase, bar (beat.js)"]
   HOP --> DRUM["kick, snare, hat detection with gates"]
+  DRUM -- "kick times" --> BT
   HOP --> ENV["energy followers, bass, high, 24 log bands"]
   HOP --> VOC["vocalHop(): every hop, every 2nd in lite"]
   HOP --> SEC["sections(): candidate part + vote"]
-  HOP -- "every 0.5 s" --> TEM["estimateTempo()"]
   HOP -- "every 2 s" --> STY["estimateStyle()"]
   HOP -- "every 2 s" --> MOO["estimateMood(): key and mood"]
 ```
 
 The analyser's clock `an.t` is samples received divided by the (decimated) rate, minus half an FFT window (the
-centre of the newest frame). It only moves when samples arrive; the runtime adds up to 120 ms of extrapolation between
-chunks (see [timing model](/architecture#timing-model)).
+centre of the newest frame, about 23 ms back). Kicks, snares and hats are stamped on it. `an.sampleT` (also `an.now`)
+is the time of the newest sample on the same clock. The beat grid is in plain audio time, so draw it at `sampleT`:
+drawn at `an.t` it shows every beat 23 ms late. The runtime reads `sampleT` and adds up to 120 ms of extrapolation
+between chunks (see [timing model](/architecture#timing-model)).
+
+Above 32 kHz the samples pass a low-pass filter first (a 43-tap half-band filter for 2x, 79 taps for 4x), so cymbals
+above the new Nyquist frequency don't fold down into the hi-hat band.
+
+## Onset strength
+
+Each hop measures 24 log-spaced bands (40 Hz-10 kHz) and compresses them: `log(1 + 3000 * level)`. The onset strength
+of a band is how much it rose against the loudest of itself and its two neighbours two hops ago (SuperFlux style: a
+vibrato or a slide doesn't count). Rises are summed in three groups: kick (40-160 Hz), body (160-1,250 Hz) and
+snare/hat (1.25-10 kHz). The beat tracker gets the three groups and their weighted sum.
 
 ## Drum detection with gates
 
-Each hop computes positive spectral flux in three bands and feeds an adaptive detector: a hit when the flux is above
-`mean + k * sd` of the last 70 hops (~0.8 s), above 1.4 x the mean, and the band's refractory time has passed (kick
-200 ms, snare 140 ms, hat 70 ms). Plain flux would let bass notes, piano and guitar attacks pass for drums, so each
-also has to pass gates:
+**Kicks** come from the kick group's onset strength. A kick candidate:
+
+- rises above 4 x the background between hits (a follower that falls fast and rises slowly), above 35% of the median
+  of the last 8 kicks' peaks, and above 0.15;
+- rises mostly below 126 Hz, more than 0.8 x the body group, and more than 1.3 x the snare/hat group (a snare alone
+  is noise that rises in every band), unless it is a strong one (0.6 x the median peak: a kick with a snare on it);
+- carries real low energy (5% of the recent maximum: a pluck's click rises a lot in log terms in a quiet low band);
+- comes 200 ms after the last candidate. The detector re-arms when the rise falls to half its peak.
+
+There is no "the low level must jump" test any more: under a sidechained or sustained bass the level hardly moves,
+but its log rise still shows. A bass note or a noisy snare also rises down low, so a candidate is only a kick once
+its pitch falls: within 5 hops (~58 ms) the energy below 80 Hz, against 80-160 Hz, must grow to 3 x its share at the
+onset or just before it, and to 1.4 x its share at the onset. The kick keeps its onset time, so it is reported up to
+58 ms after it starts. `kickStrength` (0-1) is its peak against the median of the last 8 kicks.
+
+**Snares and hi-hats** use positive spectral flux and an adaptive detector: a hit when the flux is above
+`mean + k * sd` of the last 70 hops (~0.8 s), above 1.4 x the mean, and the refractory time has passed:
 
 | Hit | Flux band | Extra conditions |
 | --- | --- | --- |
-| Kick | 40-110 Hz, k 1.6 | RMS above 0.0015; the kick band's flux **per bin** is more than 4 x the high bands' per bin (hats and noise don't leak in); the 40-110 Hz level is 1.35 x its average over the last ~120 ms (a sustained bass note doesn't jump); and beats the 150-320 Hz flux per bin (snare body) |
-| Snare | 180-320 Hz x 0.6 + 1.8-5 kHz x 0.4, k 1.8 | loud enough; 1.8-5 kHz carries more than 5% of the 100-2,000 Hz level (real noise up high) |
-| Hi-hat | 7-10.5 kHz, k 1.4 | loud enough; 7-10.5 kHz carries more than 1.5% of the 100-2,000 Hz level |
+| Snare | 180-320 Hz x 0.6 + 1.8-5 kHz x 0.4, k 1.8, 140 ms | loud enough; 1.8-5 kHz carries more than 5% of the 100-2,000 Hz level (real noise up high) |
+| Hi-hat | 7-10.5 kHz, k 1.4, 70 ms | loud enough; 7-10.5 kHz carries more than 1.5% of the 100-2,000 Hz level |
 
-Kicks, snares and hats are kept for 30 s; `onsets` (`[t, weight]`, kick 1, snare 0.5) for 10 s.
+Kicks, snares and hats are kept for 30 s.
 
 ## Levels and spectrum
 
@@ -62,17 +89,53 @@ Kicks, snares and hats are kept for 30 s; `onsets` (`[t, weight]`, kick 1, snare
   attack, slower release). Effects read them as `S.bands`; WLED audio sync sends 16 of them.
 - `wave`: the last 256 samples, for the Waveform effect.
 
-## Tempo
+## Beat tracking
 
-`estimateTempo()` twice a second: from the kicks of the last 10 s when there are at least 6, else from all onsets.
-The same pairwise histogram as the whole-song analysis (60-180 BPM, Gaussian σ 0.8, weighted), with a prior around
-122 BPM, or 78 BPM when the style is `emotional` or `chill` (slow songs prefer the slow reading). A new tempo within
-3 BPM eases in (70/30); a different one must win 3 times in a row. The phase is the circular mean of the last 6 s of
-onsets (newer ones weigh more, τ 3 s), followed at 35% a step. A tap (`action {type: "tap"}`, three taps or more)
-sets `bpm` and `phase` directly.
+`BeatTracker` in [`packages/engine/src/beat.js`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/engine/src/beat.js) takes one frame per hop: the onset
+strengths, the band levels and the kicks. It allocates nothing per frame. The style never feeds it.
 
-`grid(t)` is `gridAt({P: 60/bpm, off: phase, barOff}, t)` once there is a tempo, else `{has: false}`. `barOff` is set
-at each detected drop (the drop lands on beat 1).
+**Tempo.** Every 0.25 s (every 0.5 s once locked for 6 s) it autocorrelates the last 8 s of each group's onset curve,
+each normalised by its own energy, and sums them. Each tempo from 50 to 200 BPM gets the autocorrelation at its beat
+and half of it at two beats, times a fixed preference: a log-normal around 120 BPM (σ 1.1 octaves). The scores are
+averaged with the last estimate. Then:
+
+- A near tie with a tempo 3/2, 2/3, 4/3 or 3/4 as fast: the one with a kick or snare on more of its beats wins
+  (syncopated kicks make those look periodic too).
+- The first tempo is taken after 1.3 s of sound. For 6 s after that, a better one takes over after 2 estimates.
+- Later, a new tempo must score 10% more than the current one and win 3 times in a row; twice, half, 3/2 or 2/3 as
+  fast must win 10 times (5 s). The margin is waived for 3/2-type changes that put drums on more beats.
+- Half as fast is refused while nearly every beat still has a hit and the slower tempo is further from 120 BPM (a
+  half-time drop over steady hats, dubstep).
+
+**Phase and fine tempo.** Every 4 frames a comb sums the onset curve at the beat period over the last 4.5 s (older
+beats weigh less, τ 2.5 s). It tries the period and up to 4% either side, and fits a parabola to find the best period
+and phase. When kicks fall on at least 6 of the last 8 beats (four on the floor), the kicks set the phase instead:
+under a sidechain pump the swell after each kick rises more than the ducked kick and would pull the grid onto the
+off-beat.
+
+- An error under 12% of a beat moves the grid 12% of the way, and the period 6% of the way (not while the music thins
+  out into a break).
+- A bigger error is a different phase. It must beat the comb at the current phase by 30% for 0.8 s, then the grid
+  jumps there.
+
+**Breaks.** "Something is heard" means the onset curve's 2 s and 0.6 s averages are both above a quarter of its 20 s
+average. Otherwise the tempo and the phase are held and the grid runs on, so it is still in step when the drums
+return.
+
+**Bar position.** At each beat, once the next one has passed, it scores the beat: the kick group's peak, minus 0.6 x
+the body group's peak (snares fall on 2 and 4), plus 15 x the harmonic change. The harmonic change compares each band's
+floor (its quietest frame, so hits and their tails don't count) in the beat after against the beat before, over
+160 Hz-5 kHz: chords change on beat 1. Scores add up per beat of the bar and decay 3% a beat. A new beat 1 must lead
+by 0.5 for 4 beats. (A detected drop no longer moves beat 1: a late-detected drop put it on the wrong beat.)
+
+**Grid.** The tracker keeps the latest beat's time and number, so the beat count stays continuous while the tempo
+moves. `grid(t)` is `gridAt({P, off, barOff}, t)` once there is a tempo, else `{has: false}`.
+
+**Confidence.** `an.conf` (0-1) follows the comb's peak (how much the best phase stands out) times how much has been
+heard lately. It falls in a break or when the beats are unclear. `view()` has it as `V.conf`.
+
+**Taps.** A tap tempo (`action {type: "tap"}`) sets `an.bpm` and then `an.phase`; that moves the grid there, and the
+tracker carries on from it.
 
 ## Song parts: candidate and vote
 
@@ -81,21 +144,24 @@ at each detected drop (the drop lands on beat 1).
 | Candidate | When |
 | --- | --- |
 | `silent` | `loud < 0.06` or `eFast < 0.0015` |
-| `drop` | the bass dominance (log bass/mid, smoothed 0.4 s) is 0.5 above its 30th percentile of the last 30 s, a kick in the last 0.9 s, `loud > 0.45`, at least 2 kicks in 1.2 s |
+| `drop` | the bass dominance (log bass/mid, smoothed 0.4 s) is 0.5 above its 30th percentile of the last 30 s, a kick in the last 0.9 s, `loud > 0.45`, at least 2 kicks in 1.2 s, and (with a sure grid, `conf > 0.4`) the last kick on a beat. Or, at once: during a build-up, a strong kick on beat 1 with the bass coming up (unsmoothed dominance 0.3 up) and `loud > 0.35`. Or: already a drop, kicks still coming on the beat and `loud > 0.35` |
 | `build` | no bass drop, and either 2.5+ snares a second while loud, or the fast energy rising above the slow one while the highs are up |
 | `calm` | otherwise |
 
 The state changes only when the candidate holds for 70% of a window: 0.12 s for a drop, 0.2 s for silence, 0.6 s for
-the rest, so drops and silence switch fast and a flickering cue can't freeze the state. A drop after a build-up or
-silence (or after more than 4 s in another state) records `dropT`. `buildP` in the view is the build's age over 7 s,
-capped at 1 (live listening can't know when the drop comes). `quietFor` is how long it has been silent; the runtime
+the rest, so drops and silence switch fast and a flickering cue can't freeze the state. A drop on beat 1 after a
+build-up switches at once. After a change the vote starts afresh, so the state can't bounce straight back. A drop
+after a build-up or silence (or after more than 4 s in another state) records `dropT`. `buildP` in the view is the build's age over 7 s, capped at 1. `nextDrop` is a guess during a build-up with a
+sure grid (`conf > 0.5`): build-ups run 4, 8 or 16 bars from the bar line nearest their start, so the next of those
+bar lines; null otherwise. `quietFor` is how long it has been silent; the runtime
 goes idle after `settings.idleAfterSec` (default 8 s).
 
 ## Style
 
 `estimateStyle()` every 2 s over the last 30 s (after the first 8 s): the same rules as the whole-song analysis
-(hat and snare rates, kicks on beats, dynamic range of the energy, tempo, drops in the last 3 minutes). A new style
-must come out twice in a row. `features` keeps the inputs, for the mood.
+(hat and snare rates, kicks on beats, dynamic range of the energy, tempo, drops in the last 3 minutes). It is chosen
+once per song: the first style must come out twice in a row, a change after that 5 times in a row (10 s). After 6 s
+of silence (a new song) it chooses afresh. `features` keeps the inputs, for the mood.
 
 ## Vocal detection
 
@@ -132,14 +198,20 @@ See [song memory](/internals/song-memory).
 
 ## The view
 
-`view(t, {predict})` returns the `songView()` shape with live values: `g` from the tempo, `state`, `buildP`,
-`dropT`, `nextDrop: null`, the last kick/snare/hat, `pulses`, `vocal`, `quietFor`, `live: true`, the key and mood.
-`level` is `low` under 0.4 loudness, `mid` under 0.75, else `peak`. With `predict` (on by default, `settings.predict`)
-and a locked grid with a kick in the last 2 s, the kick is placed on the grid's beat (`g.beatT`), so a beat-driven
-effect lands on time rather than one analysis delay late.
+`view(t, {predict})` (t defaults to `sampleT`) returns the `songView()` shape with live values: `g` from the beat
+tracker, `conf`, `state`, `buildP`, `dropT`, `nextDrop` (see above), the last kick/snare/hat, `kickStrength`, `pulses`, `vocal`,
+`quietFor`, `live: true`, the key and mood.
+
+`level` comes from the loudness smoothed over ~1 s (it swings with every beat): `low` under 0.4, `mid` under 0.75,
+else `peak`, with 0.05 of hysteresis either side, and held for at least 1 s.
+
+With `predict` (on by default, `settings.predict`), a locked grid, `conf` above 0.3 and a kick in the last 2 s, the
+kick is placed on the grid's beat (`g.beatT`), so a beat-driven effect lands on time rather than one analysis delay
+late. When the tracker is unsure, the kicks heard drive the lights instead.
 
 ## Tests
 
 `packages/engine/test/live.test.js` pushes synthetic songs through it and checks the tempo, the drop and the style of
-an EDM track (also at 48 kHz), that a slow ballad is never treated as silence, and the vocal estimate (high for singing
-over drums, low for drums, a steady pad or piano); `memory.test.js` and `tonal.test.js` cover the taps. See [testing](/internals/testing).
+an EDM track (also at 48 kHz), that a break holds the beat grid, that a slow ballad is never treated as silence, and the vocal estimate (high for singing
+over drums, low for drums, a steady pad or piano); `memory.test.js` and `tonal.test.js` cover the taps.
+`beat.test.js` runs the beat-tracking evaluation (`npm run eval:beat`) against its saved baseline. See [testing](/internals/testing).

@@ -111,3 +111,17 @@ test("song memory live: a drumless ballad heard from the middle is recognised an
   const here = matchAt(a.tap.q, e, start + a.t, 0.2, a.memoryQuery()); assert.ok(here && here.score > 0.6 && Math.abs(here.pos - start - a.t) < 0.3, `still there (${here?.score})`);
   const V = a.view(); assert.equal(`${V.key} ${V.mode}`, "F# minor"); assert.ok(V.mood && V.mood.valence < 0.6 && V.mood.energy < 0.4, `calm, not happy (mood ${JSON.stringify(V.mood)})`);
 });
+
+test("live beat tracking: the grid holds through a break and comes back in step, finds beat 1, and draws on the newest sample's clock", async () => {
+  const { makeSong, SPECS } = await import("./beat-songs.js");
+  const s = makeSong(SPECS.find(x => x.name.startsWith("break"))), A = new LiveAnalyser(s.sr), B = s.truth.beats, D = s.truth.downbeats;
+  const near = (arr, t) => arr.reduce((b, x) => Math.abs(x - t) < Math.abs(b - t) ? x : b, -99);
+  const check = at => { const g = A.grid(A.sampleT); assert.ok(g.has, `a grid at ${at}`); const e = g.beatT - near(B, g.beatT); assert.ok(Math.abs(e) < 0.04, `beat within 40 ms at ${at} (${Math.round(e * 1000)} ms)`); return g; };
+  const until = t => { for (let i = Math.round(A.samples); i < s.x.length && A.sampleT < t; i += 512) A.push(s.x.subarray(i, i + 512)); };
+  until(20); check("20 s"); assert.ok(Math.abs(A.bpm - 126) < 1, `tempo ${A.bpm}`); assert.ok(A.conf > 0.5, `sure of it (${A.conf})`);
+  assert.ok(Math.abs(A.sampleT - A.t - 512 / s.sr) < 1e-9, "sampleT is the newest sample, half a window after t");
+  until(36); check("the end of the break (bars 12-20 have no drums)"); assert.ok(Math.abs(A.bpm - 126) < 1, `tempo held through the break (${A.bpm})`);
+  assert.ok(A.conf < 0.5, `less sure in the break (${A.conf})`);
+  until(42); const g = check("6 s after the drums return");
+  const t1 = g.beatT - g.beatInBar * g.P; assert.ok(Math.abs(t1 - near(D, t1)) < 0.04, "beat 1 is on a downbeat (the chord changes there)");
+});

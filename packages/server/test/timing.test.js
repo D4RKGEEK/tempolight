@@ -90,7 +90,7 @@ test("light timing: listening live without beat prediction holds nothing back", 
     await call("PATCH", "/api/settings", { predict: true });
     for (let k = 0; k < 5; k++) { app.runtime.pushPcm(noise, "browser", "Test", "c1", 22050, 30); await sleep(100); }
     const on = app.runtime.status(); assert.equal(on.timing.mode, "ahead"); assert.equal(on.timing.lookaheadMs, 150);
-    assert.equal(on.timing.audioMs, 30 + ANALYSIS_MS, "the sound's way in is made up for too");
+    assert.equal(on.timing.audioMs, 30, "the sound's way in is made up for too (the analyser has a newest-sample clock, sampleT, so no analysis delay on top)");
     assert.ok(on.devices.every(d => Math.abs(d.timing.shownMs) <= 1), `lined up: ${on.devices.map(d => d.timing.shownMs)}`);
   } finally { await app.close(); for (const f of fakes) f.close(); rmSync(dir, { recursive: true, force: true }); }
 });
