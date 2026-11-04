@@ -10,6 +10,11 @@ on:
   push:
     tags: ["v*"]
   workflow_dispatch:
+    inputs:
+      publish:
+        description: "Publish the release: tag v<package.json version> on this commit and release it (for when the tag can't be pushed)"
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -17,6 +22,7 @@ permissions:
 env:
   NODE_VERSION: 24 # the Node inside the executables
   IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+  PUBLISH: ${{ startsWith(github.ref, 'refs/tags/v') || inputs.publish == true }}
 
 jobs:
   check:
@@ -96,7 +102,7 @@ jobs:
 
   release:
     needs: [check, binaries]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: (startsWith(github.ref, 'refs/tags/v') || inputs.publish == true)
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -125,14 +131,16 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" release/* --clobber
+          TAG="v$VER"   # the pushed tag, or (published by hand) the tag this creates on this commit
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            gh release upload "$TAG" release/* --clobber
           else
             flags=""; [ "$PRERELEASE" = "true" ] && flags="--prerelease"
             # the notes: this version's section of CHANGELOG.md (or GitHub's generated notes when there is none)
             awk -v v="$VER" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on' CHANGELOG.md > notes.md
             if [ -s notes.md ]; then notes="--notes-file notes.md"; else notes="--generate-notes"; fi
-            gh release create "$GITHUB_REF_NAME" release/* --verify-tag --title "Tempolight $VER" $notes $flags
+            if [ "$IS_TAG" = "true" ]; then tagflag="--verify-tag"; else tagflag="--target $GITHUB_SHA"; fi
+            gh release create "$TAG" release/* $tagflag --title "Tempolight $VER" $notes $flags
           fi
       - name: Homebrew tap and Scoop bucket
         if: env.HOMEBREW_TAP_TOKEN != '' && env.PRERELEASE != 'true'
@@ -150,7 +158,7 @@ jobs:
 
   winget:
     needs: [check, release]
-    if: startsWith(github.ref, 'refs/tags/v') && needs.check.outputs.prerelease != 'true'
+    if: (startsWith(github.ref, 'refs/tags/v') || inputs.publish == true) && needs.check.outputs.prerelease != 'true'
     runs-on: windows-latest
     env:
       VER: ${{ needs.check.outputs.version }}
@@ -168,7 +176,7 @@ jobs:
 
   npm:
     needs: [check, release]
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: (startsWith(github.ref, 'refs/tags/v') || inputs.publish == true)
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -199,7 +207,7 @@ jobs:
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: docker/login-action@v3
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: (startsWith(github.ref, 'refs/tags/v') || inputs.publish == true)
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -209,13 +217,13 @@ jobs:
         with:
           images: ghcr.io/${{ github.repository_owner }}/tempolight
           tags: |
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
+            type=semver,pattern={{version}},value=v${{ needs.check.outputs.version }}
+            type=semver,pattern={{major}}.{{minor}},value=v${{ needs.check.outputs.version }}
       - uses: docker/build-push-action@v6
         with:
           context: .
           platforms: linux/amd64,linux/arm64
-          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          push: ${{ (startsWith(github.ref, 'refs/tags/v') || inputs.publish == true) }}
           tags: ${{ steps.meta.outputs.tags || 'tempolight:test' }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
