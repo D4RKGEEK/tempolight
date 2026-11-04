@@ -38,7 +38,7 @@ export function createCore({ store, runtime, env }) {
       effects: runtime.effects.list, styles: Object.fromEntries(Object.entries(runtime.effects.styles).map(([k, v]) => [k, v.name])),
       palettes: Object.keys(runtime.effects.palettes), presets: Object.values(ROOM_PRESETS), captureSources: env.listSources().map(({ id, label }) => ({ id, label })), firstRun: store.firstRun && !d.devices.length };
   };
-  const changeListeners = new Set();
+  const changeListeners = new Set(), sceneListeners = new Set();
   const changed = (what) => { store.save(); broadcast({ type: "changed", what }); for (const f of changeListeners) { try { f(what); } catch {} } };
 
   function cleanShape(s, devIds) {
@@ -118,6 +118,7 @@ export function createCore({ store, runtime, env }) {
     if (sc.brightness != null) data().settings.brightness = Number(sc.brightness);
     runtime.syncDirector(); if (wasOff) runtime.setPower(true);
     runtime.note(`Scene: ${sc.name}`); changed("show");
+    for (const f of sceneListeners) { try { f(sc); } catch {} } // integrations (Discord, Stream Deck)
   }
   function runSchedule(s) {
     const a = s.action || {};
@@ -466,6 +467,6 @@ export function createCore({ store, runtime, env }) {
     throw new HttpError(404, `No API route ${method} ${pathname}`);
   }
 
-  return { handle, connect, broadcast, discovery, route, onChange: f => changeListeners.add(f), applyScene, applyShow, applySettings, addDevice, pub, home,
+  return { handle, connect, broadcast, discovery, route, onChange: f => changeListeners.add(f), onScene: f => { sceneListeners.add(f); return () => sceneListeners.delete(f); }, applyScene, applyShow, applySettings, addDevice, pub, home,
     close() { clearInterval(statusTimer); home.close(); sched.stop(); osc && osc.close(); djlink && djlink.close(); pro.close(); for (const c of clients) c.close?.(); } };
 }

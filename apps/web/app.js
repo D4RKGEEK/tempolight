@@ -794,6 +794,7 @@ function lazyPage(load, name) {
 const roomPage = lazyPage(() => import("/room.js"), "roomPage"), mapPage = lazyPage(() => import("/mapper.js"), "mapPage");
 const PAGES = { home: ["Home", homePage], music: ["Music", musicPage], effects: ["Effects", effectsPage], live: ["Live pads", livePage], scenes: ["Scenes & schedules", scenesPage], sleep: ["Home & sleep", lazyPage(() => import("/homesleep.js"), "homeSleepPage")],
   room: ["Room", el => unlocked() ? roomPage(el) : lockScreen(el, "Room setup")], map: ["Camera mapping", el => unlocked() ? mapPage(el) : lockScreen(el, "Room setup")], devices: ["Devices", devicesPage], settings: ["Settings", settingsPage], timeline: ["Show editor", lazyPage(() => import("/timeline.js"), "timelinePage")] };
+PAGES.integrations = ["Integrations", lazyPage(() => import("/integrations.js"), "integrationsPage")]; // Stream Deck, OBS, games, Twitch, Discord
 export function route() {
   const name = (location.hash.match(/^#\/(\w+)/) || [])[1] || "home", [title, fn] = PAGES[name] || PAGES.home;
   if (app.page?.canLeave && app.page.hash !== location.hash && !app.page.canLeave()) { history.replaceState(null, "", app.page.hash); return; } // unsaved changes: stay

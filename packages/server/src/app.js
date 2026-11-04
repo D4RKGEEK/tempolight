@@ -20,6 +20,7 @@ import { startNowPlaying } from "./nowplaying.js";
 import { startLink } from "./ableton-link.js";
 import { applyEnvSettings } from "./env-settings.js";
 import { wifiClient } from "./wifi.js";
+import { startIntegrations } from "./integrations/index.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(here, "../../..");
@@ -88,12 +89,14 @@ export async function createApp(opts) {
     quit: embedded?.sea ? async () => { try { await closeApp(); } catch {} process.exit(0); } : null, // the one-file app has no terminal to stop it from
     lan: () => Object.values(os.networkInterfaces()).flat().filter(a => a && a.family === "IPv4" && !a.internal).map(a => a.address) } });
   const ha = startHomeAssistant({ core, store, runtime, version: pkg.version });
+  const integ = startIntegrations({ core, store, runtime, root: ROOT, ...opts.integrations }); // OBS, games, Twitch, Discord, Stream Deck (opts.integrations: pretend services in tests)
   const np = startNowPlaying({ core, store, runtime, dataDir: opts.dataDir, port: () => server.address()?.port || 8080, ...opts.nowPlaying }); // opts.nowPlaying: test runner/platform
 
   // ---------------------------------------------------------------- static files
   // /packages/ serves the engine and the server core to the browser too (the web app and the demo import them)
   const STATIC_DIRS = [["/engine/", path.join(ROOT, "packages/engine/src")], ["/packages/", path.join(ROOT, "packages")], ["/", path.join(ROOT, "apps/web")]];
   const ALIASES = { "/phone": "apps/web/phone.html", "/request": "apps/web/request.html", "/playground": "apps/playground/index.html", "/demo.mp3": "apps/playground/demo.mp3" };
+  ALIASES["/obs"] = "apps/web/obs.html"; // the OBS browser source (integrations)
   async function serveStatic(req, res, pathname, search = "") {
     let file = ALIASES[pathname] ? path.join(ROOT, ALIASES[pathname]) : null;
     if (!file) for (const [prefix, dir] of STATIC_DIRS) if (pathname.startsWith(prefix)) {
@@ -116,6 +119,7 @@ export async function createApp(opts) {
     const send = (code, obj) => { res.writeHead(code, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(obj)); };
     try {
       if (await np.handleHttp(req, res, url)) return; // Spotify's sign-in redirect (an HTML page)
+      if (await integ.handleHttp(req, res, url)) return; // the Stream Deck plugin's download
       if (url.pathname.startsWith("/api/")) {
         if (req.method !== "GET" && foreignOrigin(req)) return send(403, { error: "Requests from other websites aren't allowed" }); // stops cross-site requests changing things
         const body = req.method === "GET" ? {} : await readBody(req);
@@ -137,9 +141,9 @@ export async function createApp(opts) {
 
   closeApp = () => api.close();
   const api = {
-    server, runtime, store, core, discovery: core.discovery, nowPlaying: np,
+    server, runtime, store, core, discovery: core.discovery, nowPlaying: np, integrations: integ,
     listen(port, host) { return new Promise((res, rej) => { server.once("error", rej); server.listen(port, host, () => res(server.address().port)); }); },
-    async close() { ha.close(); np.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
+    async close() { ha.close(); np.close(); integ.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
   };
   return api;
 }

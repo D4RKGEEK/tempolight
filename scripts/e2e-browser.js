@@ -263,6 +263,21 @@ await step("devices: the latency meter shows a delay per controller", async () =
   await until(async () => /Very weak Wi-Fi/.test(await page.textContent("#d-lat")), 4000, "weak Wi-Fi not shown"); A.override = {};
   await go("home"); await until(async () => /Delay|warning/.test(await page.textContent("#h-lat")), 4000, "no latency badge on Home"); await shot("09b-latency");
 });
+await step("integrations: a game on, its config file, a Try button; the OBS browser source draws the lights", async () => {
+  await go("integrations"); await page.waitForSelector('[data-game="cs2"]'); ok(await page.isVisible("#sd-dl"), "no Stream Deck download");
+  await page.check('[data-game="cs2"] [data-g="enabled"]'); await until(() => app.store.data.integrations.games.cs2.enabled, 3000, "CS2 not turned on");
+  await page.waitForSelector('[data-try="cs2:flash"]:not([disabled])');
+  const dl = page.waitForEvent("download"); await page.click('[data-cfg="cs2"]'); const f = await dl; ok(f.suggestedFilename() === "gamestate_integration_tempolight.cfg", `config file is ${f.suggestedFilename()}`);
+  await page.click('[data-try="cs2:flash"]'); await until(() => app.integrations.games.state.cs2.flashed === 1, 3000, "flashbang not tried");
+  await until(() => { const f = A.lastFrame, mx = Math.max(f[0], f[1], f[2]); return mx > 5 && Math.min(f[0], f[1], f[2]) / mx > 0.6; }, 3000, "the lights didn't go white"); // (white-ish: a power limit earlier may have dimmed them)
+  await page.uncheck('[data-game="cs2"] [data-g="enabled"]'); await until(() => !app.store.data.integrations.games.cs2.enabled, 3000, "CS2 not turned off");
+  ok(/\/obs$/.test(await page.textContent("#bs-url")), "no browser source address"); await shot("09c-integrations");
+  await page.setViewportSize({ width: 390, height: 844 }); await go("integrations"); await page.waitForSelector('[data-game="cs2"]'); const w = await page.evaluate(() => document.documentElement.scrollWidth); ok(w <= 392, `integrations is ${w}px wide`); await page.setViewportSize({ width: 1400, height: 950 });
+  const o = await ctx.newPage(); o.on("pageerror", e => errors.push("obs: " + e.message)); await o.goto(`${base}/obs`); await o.waitForSelector("#stage canvas");
+  ok(await o.evaluate(() => getComputedStyle(document.body).backgroundColor) === "rgba(0, 0, 0, 0)", "the browser source isn't transparent");
+  await until(() => o.evaluate(() => { const c = document.querySelector("#stage canvas"), d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let s = 0; for (let i = 0; i < d.length; i += 4 * 97) s += d[i] + d[i + 1] + d[i + 2]; return s > 0; }), 6000, "the browser source draws nothing");
+  await o.close();
+});
 await step("setup wizard on a fresh start, phone-sized: lights, room, timing, test song, PIN, done", async () => {
   const dir2 = mkdtempSync(path.join(os.tmpdir(), "tempolight-e2e-wz-")), app2 = await createApp({ dataDir: dir2, discover: false, logger: null });
   const base2 = `http://127.0.0.1:${await app2.listen(0, "127.0.0.1")}`, c2 = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ["microphone"] }), p = await c2.newPage();

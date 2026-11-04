@@ -54,6 +54,7 @@
     "bundle": "node scripts/bundle.js",
     "build:sea": "node scripts/build-sea.js --smoke",
     "smoke": "node scripts/smoke.js node packages/server/src/index.js",
-    "test:firmware": "bash firmware/test/run.sh"
+    "test:firmware": "bash firmware/test/run.sh",
+    "streamdeck": "node scripts/package-streamdeck.js"
   }
 }

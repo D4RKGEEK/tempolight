@@ -1,0 +1,98 @@
+{
+  "provider": {
+    "name": "Dota 2",
+    "appid": 570,
+    "version": 47,
+    "timestamp": 1762250800
+  },
+  "map": {
+    "name": "start",
+    "matchid": "7712345678",
+    "game_time": 1542,
+    "clock_time": 1450,
+    "daytime": false,
+    "nightstalker_night": false,
+    "radiant_score": 17,
+    "dire_score": 9,
+    "game_state": "DOTA_GAMERULES_STATE_GAME_IN_PROGRESS",
+    "paused": false,
+    "win_team": "none",
+    "customgamename": "",
+    "ward_purchase_cooldown": 0,
+    "roshan_state": "respawn_base",
+    "roshan_state_end_seconds": 480
+  },
+  "player": {
+    "steamid": "76561198012345678",
+    "accountid": "52079950",
+    "name": "d4rkgeek",
+    "activity": "playing",
+    "kills": 4,
+    "deaths": 3,
+    "assists": 7,
+    "last_hits": 88,
+    "denies": 6,
+    "kill_streak": 2,
+    "commands_issued": 3121,
+    "kill_list": {
+      "victimid_6": 2,
+      "victimid_8": 1
+    },
+    "team_name": "radiant",
+    "gold": 1630,
+    "gold_reliable": 420,
+    "gold_unreliable": 1210,
+    "gold_from_hero_kills": 600,
+    "gold_from_creep_kills": 2100,
+    "gold_from_income": 1300,
+    "gold_from_shared": 120,
+    "gpm": 420,
+    "xpm": 510
+  },
+  "hero": {
+    "xpos": -1640,
+    "ypos": -1240,
+    "id": 74,
+    "name": "npc_dota_hero_invoker",
+    "level": 18,
+    "xp": 9650,
+    "alive": false,
+    "respawn_seconds": 23,
+    "buyback_cost": 820,
+    "buyback_cooldown": 0,
+    "health": 0,
+    "max_health": 1520,
+    "health_percent": 0,
+    "mana": 1300,
+    "max_mana": 1450,
+    "mana_percent": 90,
+    "silenced": false,
+    "stunned": false,
+    "disarmed": false,
+    "magicimmune": false,
+    "hexed": false,
+    "muted": false,
+    "break": false,
+    "aghanims_scepter": false,
+    "aghanims_shard": false,
+    "smoked": false,
+    "has_debuff": false,
+    "talent_1": false,
+    "talent_2": true,
+    "talent_3": false,
+    "talent_4": false,
+    "talent_5": false,
+    "talent_6": false,
+    "talent_7": false,
+    "talent_8": false
+  },
+  "events": [],
+  "previously": {
+    "hero": {
+      "alive": true
+    }
+  },
+  "auth": {
+    "token": "__TOKEN__"
+  }
+}

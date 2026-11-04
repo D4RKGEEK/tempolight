@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tempolight for OBS</title>
+<!-- An OBS browser source: Tempolight's live preview and what's playing, on a transparent background.
+     Add it in OBS: Sources → + → Browser → URL http://<tempolight>/obs (1920 x 1080, or smaller).
+     Options in the address: ?preview=0 (no lights), ?np=0 (no "now playing"), ?corner=tl|tr|bl|br, ?scale=1.5,
+     ?bg=1 (the dark room behind the lights instead of transparent). Read-only: it shows, it changes nothing. -->
+<style>
+  html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
+  body { font: 600 22px/1.25 system-ui, -apple-system, "Segoe UI", sans-serif; color: #fff; }
+  body.bg { background: #0b0c10; }
+  #stage { position: absolute; inset: 0; }
+  #stage canvas { width: 100%; height: 100%; display: block; }
+  #np { position: absolute; max-width: 46vw; padding: .55em .9em .6em; border-radius: .6em; background: rgba(10, 11, 15, .62); backdrop-filter: blur(6px);
+    display: flex; gap: .7em; align-items: center; transform-origin: left bottom; transition: opacity .4s; }
+  #np[hidden] { display: flex !important; opacity: 0; }
+  #np .lamp { width: .7em; height: .7em; border-radius: 50%; background: #f5a524; box-shadow: 0 0 .7em #f5a524; flex: none; transition: transform .08s; }
+  #np .t { min-width: 0; } #np b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #np small { display: block; font-weight: 500; font-size: .68em; opacity: .78; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl { top: 4vh; left: 3vw; } .tr { top: 4vh; right: 3vw; transform-origin: right top !important; } .bl { bottom: 4vh; left: 3vw; } .br { bottom: 4vh; right: 3vw; transform-origin: right bottom !important; }
+</style>
+</head>
+<body>
+<div id="stage"></div>
+<div id="np" class="bl" hidden><span class="lamp" id="lamp"></span><span class="t"><b id="np-t">Tempolight</b><small id="np-s"></small></span></div>
+<script type="module">
+import { createRenderer } from "/preview.js";
+const q = new URLSearchParams(location.search), on = k => q.get(k) !== "0";
+const stage = document.getElementById("stage"), np = document.getElementById("np");
+if (q.get("bg") === "1") document.body.classList.add("bg");
+const corner = ["tl", "tr", "bl", "br"].includes(q.get("corner")) ? q.get("corner") : "bl"; np.className = corner;
+const scale = Math.max(0.5, Math.min(4, Number(q.get("scale")) || 1)); np.style.transform = `scale(${scale})`;
+let L = null, frame = null, status = null;
+async function layout() { try { L = await (await fetch("/api/layout")).json(); } catch {} }
+const cv = on("preview") ? stage.appendChild(document.createElement("canvas")) : null, R2 = cv ? createRenderer(cv) : null;
+function draw() { requestAnimationFrame(draw); if (!R2) return; const dpr = Math.min(2, devicePixelRatio || 1), r = stage.getBoundingClientRect();
+  if (cv.width !== Math.round(r.width * dpr)) { cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr); }
+  if (draw.last === frame && draw.L === L && draw.w === cv.width) return; draw.last = frame; draw.L = L; draw.w = cv.width; R2.draw(L, frame, dpr); }
+draw();
+function text(m) {
+  const song = m.song?.name || (m.nowPlaying?.title ? (m.nowPlaying.artist ? `${m.nowPlaying.artist} – ${m.nowPlaying.title}` : m.nowPlaying.title) : null) || m.recognised?.name || null;
+  const t = song || (m.source !== "idle" ? m.sourceLabel : null);
+  const sub = [m.effectName, m.bpm ? `${Math.round(m.bpm)} BPM` : null, m.part && m.part !== "idle" ? { build: "build-up", drop: "drop!" }[m.part] || null : null].filter(Boolean).join(" · ");
+  return { t, sub };
+}
+function onStatus(m) {
+  status = m; if (!on("np")) return;
+  const { t, sub } = text(m); np.hidden = !t;
+  if (t) { document.getElementById("np-t").textContent = t; document.getElementById("np-s").textContent = sub; }
+  document.getElementById("lamp").style.transform = m.beat === 1 ? "scale(1.35)" : "scale(1)";
+}
+function connect() {
+  const s = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws`); s.binaryType = "arraybuffer";
+  s.onopen = () => { if (R2) s.send(JSON.stringify({ type: "preview", on: true })); };
+  s.onmessage = e => { if (typeof e.data !== "string") { const b = new Uint8Array(e.data); if (b[0] === 1) frame = b.subarray(1); return; }
+    const m = JSON.parse(e.data); if (m.type === "status" || m.type === "hello") onStatus(m); else if (m.type === "changed" && (m.what === "room" || m.what === "devices" || m.what === "all")) layout(); };
+  s.onclose = () => setTimeout(connect, 2000);
+}
+layout().then(connect);
+</script>
+</body>
+</html>
