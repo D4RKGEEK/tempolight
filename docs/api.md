@@ -14,7 +14,7 @@ the public address in `TEMPOLIGHT_ALLOWED_ORIGINS` (comma-separated, for example
 | Call | Area | What it does |
 | --- | --- | --- |
 | `GET /api/state` | | Settings, show, devices, room, scenes, schedules, effects, styles, palettes, presets |
-| `GET /api/status` | | What is happening now: source, effect, tempo, song part, level, spectrum, device health |
+| `GET /api/status` | | What is happening now: source, effect, tempo, song part, level, spectrum, device health. Each of `devices[]` also has the latency meter: `latencyMs` (sound to light, `null` when off or offline), `latency: {audioMs, analysisMs, networkMs, frameMs, offsetMs}`, `latencyLevel` (`good` under 40 ms, `ok` under 80, `slow`), `rttMs` (WLED's HTTP round trip) and `warnings: [{kind: "offline"\|"wifi"\|"frames"\|"notlive"\|"power"\|"slow", text}]` |
 | `GET /api/health` | | `{ok, version, uptime, fps, leds}` for monitoring |
 | `GET /api/layout` | | LED positions for drawing the room |
 | `GET /api/log` | | The last 100 activity messages |
@@ -100,7 +100,7 @@ Turn requests off with `PATCH /api/settings {requests: false}`.
 | `GET /api/backup` | admin: everything except the PIN, as one JSON file |
 | `POST /api/restore` | admin: a backup file; the current PIN is kept |
 
-Settings (`PATCH /api/settings`, admin) also take `songMemory: true|false`, `shows: true|false`, `requests: true|false`, `djlink: {enabled, port}`, `location: {lat, lon}`, `night: {enabled, from, to, maxBrightness, warm}`
+Settings (`PATCH /api/settings`, admin) also take `setupDone: true|false` (the setup wizard opens by itself on a first start with no lights until it is finished or skipped), `songMemory: true|false`, `shows: true|false`, `requests: true|false`, `djlink: {enabled, port}`, `location: {lat, lon}`, `night: {enabled, from, to, maxBrightness, warm}`
 (times like `23:00`, `sunset` or `sunrise-30`) and `text: {source: "song"|"bpm"|"clock"|"custom", custom}` for the
 Text Scroller. Schedules accept `time: "sunset+30"` or `"sunrise-15"` once a location is set.
 
@@ -125,7 +125,7 @@ Add `?token=` when locked. The server sends `{type: "status", ...}` four times a
 `{type: "changed", what}` when something changes. Send:
 
 - `{type: "preview", on: true}` to get binary frames: byte 0 = 1, then R, G, B for every LED in layout order (30 fps)
-- `{type: "audio-start", rate: 22050, label}` then binary messages of 16-bit little-endian mono samples to be a live audio source; `{type: "audio-stop"}`
+- `{type: "audio-start", rate: 22050, label, latencyMs?}` (`latencyMs`: the browser's estimate of its capture delay, for the latency meter) then binary messages of 16-bit little-endian mono samples to be a live audio source; `{type: "audio-stop"}`
 - `{type: "clock", pos, playing}` while a song plays
 - `{type: "action", action: {type: "flash"}}` for pads, with low delay
 - `{type: "screen", w, h, px, label}` to feed the Screen Sync effect: `px` is base64 of `w × h` RGB bytes (up to 4,096 pixels), a few times a second;

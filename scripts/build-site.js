@@ -19,7 +19,7 @@ copy("apps/web", "");                                   // the app
 copy("packages/engine/src", "engine");                  // /engine/... (what the app imports)
 copy("packages/engine/src", "packages/engine/src");     // /packages/... (what the server core imports)
 mkdirSync(path.join(out, "packages/server/src"), { recursive: true });
-for (const f of ["core.js", "runtime.js", "scheduler.js", "defaults.js", "sun.js"]) copy(`packages/server/src/${f}`, `packages/server/src/${f}`); // browser-safe parts only
+for (const f of ["core.js", "runtime.js", "scheduler.js", "defaults.js", "sun.js", "latency.js"]) copy(`packages/server/src/${f}`, `packages/server/src/${f}`); // browser-safe parts only
 copy("apps/playground/demo.mp3", "demo.mp3");
 mkdirSync(path.join(out, "playground"), { recursive: true }); copy("apps/playground/index.html", "playground/index.html");
 mkdirSync(path.join(out, "about"), { recursive: true }); copy("docs/index.html", "about/index.html"); copy("docs/images", "about/images");

@@ -18,7 +18,12 @@ export function createAudio({ ws, api, onChange }) {
     });
     await tapReady; return ctx;
   }
-  function startStream(label) { ws.send({ type: "audio-start", rate: 22050, label }); }
+  // the latency meter: how long a sound takes from here to the server (input buffer, our 512-sample chunks, half the round trip)
+  let rttMs = 0;
+  const latencyMs = () => Math.round(((ctx?.baseLatency || 0) * 1000) + (S.mode === "mic" || S.mode === "system" ? 10 : 0) + 512 / 22050 * 1000 + rttMs / 2);
+  async function measureRtt() { const t = []; for (let k = 0; k < 3; k++) { const t0 = performance.now(); try { await api("GET", "/api/health"); } catch { return; } t.push(performance.now() - t0); } rttMs = Math.min(...t); }
+  function startStream(label) { ws.send({ type: "audio-start", rate: 22050, label, latencyMs: latencyMs() });
+    measureRtt().then(() => { if (S.mode && S.label === label.replace(/^Song: /, "")) ws.send({ type: "audio-start", rate: 22050, label, latencyMs: latencyMs() }); }); }
   function stopStream() { ws.send({ type: "audio-stop" }); }
 
   // ---------------------------------------------------------------- songs
@@ -120,6 +125,6 @@ export function createAudio({ ws, api, onChange }) {
     try { if (S.song) S.song.gain.connect(recDest); if (S.stream) S.stream.src.connect(recDest); } catch {}
     return recDest.stream;
   }
-  return { captureStream, state: S, addFiles, addUrl, playIndex, toggle, seek, next, prev, pos, remove, listen, stopLive, stopSong, listInputs, level, calibrate,
+  return { captureStream, state: S, addFiles, addUrl, playIndex, toggle, seek, next, prev, pos, remove, listen, stopLive, stopSong, listInputs, level, calibrate, latencyMs,
     get duration() { return S.song ? S.song.item.buffer.duration : 0; } };
 }

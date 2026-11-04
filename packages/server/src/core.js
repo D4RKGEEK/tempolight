@@ -132,7 +132,7 @@ export function createCore({ store, runtime, env }) {
     if (b.syncOffsetMs !== undefined) s.syncOffsetMs = Math.round(num(b.syncOffsetMs, -500, 500));
     if (b.idleBrightness !== undefined) s.idleBrightness = num(b.idleBrightness, 0, 1);
     if (b.idleAfterSec !== undefined) s.idleAfterSec = num(b.idleAfterSec, 1, 600);
-    for (const k of ["safe", "predict", "dropFlash", "audioSync", "autoDiscover"]) if (b[k] !== undefined) s[k] = !!b[k];
+    for (const k of ["safe", "predict", "dropFlash", "audioSync", "autoDiscover", "setupDone"]) if (b[k] !== undefined) s[k] = !!b[k];
     if (b.ambient !== undefined) { if (b.ambient !== "off" && !effectIds().has(b.ambient)) throw new HttpError(400, `Unknown effect "${b.ambient}"`); s.ambient = b.ambient; }
     if (b.capture) Object.assign(s.capture, { enabled: b.capture.enabled ?? s.capture.enabled, source: b.capture.source ?? s.capture.source, command: b.capture.command ?? s.capture.command });
     if (b.metronome) Object.assign(s.metronome, { enabled: b.metronome.enabled ?? s.metronome.enabled, bpm: b.metronome.bpm !== undefined ? num(b.metronome.bpm, 40, 220) : s.metronome.bpm });
@@ -400,7 +400,7 @@ export function createCore({ store, runtime, env }) {
     return {
       /** @param {string|Int16Array} msg text, or 16-bit samples */
       message(msg, binary) {
-        if (binary) { if (c.data.audio) runtime.pushPcm(msg, "browser", c.data.audio.label, c.data.id, c.data.audio.rate); return; }
+        if (binary) { if (c.data.audio) runtime.pushPcm(msg, "browser", c.data.audio.label, c.data.id, c.data.audio.rate, c.data.audio.latencyMs); return; }
         let m; try { m = JSON.parse(msg); } catch { return; }
         if (m.type === "preview") { if (m.on) runtime.previewClients.add(c); else runtime.previewClients.delete(c); }
         else if (m.type === "screen") { // screen sync: a small picture, or {end: true} when sharing stops
@@ -411,7 +411,7 @@ export function createCore({ store, runtime, env }) {
               if (runtime.setScreen(Number(m.w) | 0, Number(m.h) | 0, px, String(m.label || "").slice(0, 80), c.data.id) === "busy") tell("busy", "Another browser is already sharing its screen. Stop it there first."); } catch {} } } }
         else if (m.type === "map") { if (c.data.auth(null)) runtime.mapLight(m.end ? null : String(m.device), m.led ?? -1, m.level, c.data.id); } // camera mapping (admin)
         else if (m.type === "phone") { if (m.on) { if (!runtime.phones.has(c)) { runtime.phones.add(c); runtime.note(`A phone joined as a light (${runtime.phones.size} now)`); } } else runtime.phones.delete(c); }
-        else if (m.type === "audio-start") { c.data.audio = { rate: Number(m.rate) || 22050, label: String(m.label || "Browser audio").slice(0, 80) }; }
+        else if (m.type === "audio-start") { c.data.audio = { rate: Number(m.rate) || 22050, label: String(m.label || "Browser audio").slice(0, 80), latencyMs: Math.max(0, Math.min(2000, Number(m.latencyMs) || 0)) }; }
         else if (m.type === "audio-stop") { c.data.audio = null; runtime.stopLive(c.data.id); }
         else if (m.type === "clock") runtime.songClock(m, null);
         else if (m.type === "action" && m.action) { if (c.data.auth("pads")) { try { runtime.action(m.action); } catch {} } }

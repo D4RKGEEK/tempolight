@@ -35,7 +35,12 @@ page.on("dialog", d => d.accept(d.type() === "prompt" ? "Test scene" : undefined
 const shot = async n => { if (shots) await page.screenshot({ path: path.join(shots, `${n}.png`) }); };
 const go = async h => { await page.goto(`${base}/#/${h}`); await page.waitForSelector("#page .panel"); await sleep(300); };
 
-await step("first start shows the welcome card", async () => { await go("home"); ok(await page.isVisible("text=Welcome to Tempolight"), "no welcome card"); await shot("01-welcome"); });
+await step("first start opens the setup wizard; skipping it leaves the welcome card", async () => {
+  await page.goto(`${base}/#/home`); await page.waitForSelector("#wizard"); ok(await page.isVisible("#wz-title"), "no wizard title"); await shot("00-wizard");
+  await page.click("#wz-close"); await until(async () => !(await page.$("#wizard")), 3000, "wizard didn't close"); await until(() => app.store.data.settings.setupDone === true, 3000, "setupDone not saved");
+  await go("home"); ok(!(await page.$("#wizard")), "the wizard came back after skipping it");
+  ok(await page.isVisible("text=Welcome to Tempolight"), "no welcome card"); await shot("01-welcome");
+});
 await step("add a controller by IP address from Home", async () => {
   await page.fill("#s-ip", A.host); await page.click("#s-add");
   await until(() => app.store.data.devices.length === 1, 5000, "device not added");
@@ -206,6 +211,41 @@ await step("phone-sized screen has no sideways scrolling", async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   for (const h of ["home", "music", "live", "room", "devices"]) { await go(h); const w = await page.evaluate(() => document.documentElement.scrollWidth); ok(w <= 392, `${h} is ${w}px wide`); }
   await shot("09-phone");
+});
+await step("devices: the latency meter shows a delay per controller", async () => {
+  await page.setViewportSize({ width: 1400, height: 950 }); await go("devices");
+  await until(async () => (await page.$$("#d-lat .latrow")).length === 2, 4000, "no latency rows");
+  await until(async () => /\d+ ms/.test(await page.textContent("#d-lat")), 12000, "no delay shown");
+  ok((await page.$$("#d-rows .lat")).length === 2, "no delay column"); ok(status().devices.every(d => typeof d.latencyMs === "number" && Array.isArray(d.warnings)), "status has no latency");
+  A.override.wifi = { signal: 20 }; await fetch(`${base}/api/devices/${app.store.data.devices[0].id}/check`, { method: "POST" });
+  await until(async () => /Very weak Wi-Fi/.test(await page.textContent("#d-lat")), 4000, "weak Wi-Fi not shown"); A.override = {};
+  await go("home"); await until(async () => /Delay|warning/.test(await page.textContent("#h-lat")), 4000, "no latency badge on Home"); await shot("09b-latency");
+});
+await step("setup wizard on a fresh start, phone-sized: lights, room, timing, test song, PIN, done", async () => {
+  const dir2 = mkdtempSync(path.join(os.tmpdir(), "tempolight-e2e-wz-")), app2 = await createApp({ dataDir: dir2, discover: false, logger: null });
+  const base2 = `http://127.0.0.1:${await app2.listen(0, "127.0.0.1")}`, c2 = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ["microphone"] }), p = await c2.newPage();
+  p.on("pageerror", e => errors.push("wizard: " + e.message)); p.on("console", m => { if (m.type() === "error") errors.push("wizard: " + m.text()); });
+  const wide = async where => { const w = await p.evaluate(() => document.documentElement.scrollWidth); ok(w <= 392, `wizard ${where} is ${w}px wide`); };
+  const dot = () => p.$eval(".wz-dots li[aria-current]", li => Number(li.dataset.dot));
+  try {
+    await p.goto(base2 + "/"); await p.waitForSelector("#wizard"); ok(await dot() === 0, "doesn't start at step 1"); await wide("step 1");
+    ok(await p.isDisabled("#wz-next"), "Next works with no lights yet");
+    await p.click("#wz-virtual"); await until(() => app2.store.data.devices.some(d => d.virtual), 4000, "no virtual device");
+    await until(async () => await dot() === 1, 3000, "didn't move on to the room"); await p.waitForSelector("[data-wzp] canvas"); await wide("step 2");
+    ok((await p.$$("[data-wzp] canvas")).length >= 8, "no preset pictures");
+    await p.click('[data-wzp="tv"]'); await until(() => app2.store.data.room.shapes.some(sh => /TV/i.test(sh.name)), 4000, "room preset not used");
+    await p.click("#wz-next"); ok(await dot() === 2, "not on the timing step"); ok(await p.isVisible("#wz-cal"), "no timing button");
+    await p.click("#wz-back"); ok(await dot() === 1, "Back doesn't go back"); await p.click("#wz-next"); await p.click("#wz-skip");
+    ok(await dot() === 3, "Skip didn't skip the timing"); await p.waitForSelector("#wz-stage canvas"); await p.click("#wz-play");
+    await until(() => app2.runtime.status().source === "song", 60000, "the test song never played"); await wide("step 4");
+    await until(async () => /BPM/.test(await p.textContent("#wz-songmeta")), 5000, "no tempo shown");
+    await p.click("#wz-next"); ok(await dot() === 4, "not on the last step"); await p.fill("#wz-pin", "4321"); await p.click("#wz-lock");
+    await until(() => !!app2.store.data.lock, 3000, "PIN not set"); await p.click("#wz-next");
+    await until(async () => !(await p.$("#wizard")), 3000, "wizard didn't close"); ok(app2.store.data.settings.setupDone === true, "setupDone not set");
+    await p.reload(); await p.waitForSelector("#page .panel"); await sleep(500); ok(!(await p.$("#wizard")), "wizard came back after finishing");
+    await p.goto(base2 + "/#/settings"); await p.waitForSelector("#s-wizard"); await p.click("#s-wizard"); await p.waitForSelector("#wizard");
+    ok(/ready/.test(await p.textContent("#wz-have")), "the added lights aren't shown when running setup again"); await p.click("#wz-close");
+  } finally { await c2.close(); await app2.close(); rmSync(dir2, { recursive: true, force: true }); }
 });
 await step("no errors in the browser console", async () => ok(!errors.length, errors.slice(0, 5).join(" | ")));
 

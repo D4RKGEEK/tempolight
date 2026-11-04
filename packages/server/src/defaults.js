@@ -15,6 +15,7 @@ export const DEFAULTS = () => ({
     djlink: { enabled: false, port: 50001 }, // Pioneer Pro DJ Link: take the beat from CDJs/XDJs
     requests: true, // guests can request songs from their phones (/request)
     shows: true, // remembered songs play their show timeline (auto-generated, editable) in automatic mode
+    setupDone: false, // the setup wizard was finished or skipped (it opens by itself on a first start with no lights)
     songMemory: true, // remember analysed songs and recognise them when they play again while listening live
   },
   show: { power: true, mode: "auto", effect: "shock", style: "auto", palette: "auto", everyBeats: 8, speed: 1, params: {}, layer: null },

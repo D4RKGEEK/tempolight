@@ -2,6 +2,7 @@
 // Sources, best first: a song playing in the browser (analysed ahead of time), live audio (from a browser or this
 // computer's sound card), the metronome, and finally the idle/ambient effect when nothing is playing.
 import { inWindow } from "./sun.js";
+import { noteRtt, audioDelay, deviceLatency } from "./latency.js";
 import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, gridAt, toRGB8, LiveAnalyser, memoryEntry, memoryAnalysis, recognise, matchAt, refineByKicks, planShow } from "../../engine/src/index.js";
 // Everything that touches the network or the sound card comes in through `io` (see node-io.js), so the same runtime
 // runs on a PC or Pi and, with pretend devices, inside the browser for the online demo.
@@ -46,7 +47,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
       // everything a sender is built from: a change to any of it (segments, a new token after pairing again, a restored backup) makes a new sender
       const key = JSON.stringify([d.host, port, proto, d.universe ?? "", d.goveeMode || "", d.goveeSegments || 0, d.leds, d.orgbIndex ?? "", d.nanoleaf?.token, d.nanoleaf?.panels, d.hue?.user, d.hue?.lights, d.hue?.color]);
       if (!o || o.key !== key) { const old = o; // the new sender first, so a connection shared with the old one (OpenRGB) stays open
-        o = { sender: proto === "ddp" ? new DDPSender(ip, port) : proto === "hue" ? new HueSender(d.host, { user: d.hue?.user, lights: d.hue?.lights, color: d.hue?.color }) : proto === "nanoleaf" ? new NanoleafSender(d.host, { token: d.nanoleaf?.token, panels: d.nanoleaf?.panels, port }) : proto === "openrgb" ? new OpenRGBSender(ip, { port, index: d.orgbIndex || 0, leds: d.leds }) : proto === "govee" ? new GoveeSender(ip, { mode: d.goveeMode, segments: d.goveeSegments || d.leds, port }) : new E131Sender(ip, { protocol: proto, universe: d.universe }), ip, port, key }; outs.set(d.id, o); if (old) old.sender.close(); }
+        o = { sender: proto === "ddp" ? new DDPSender(ip, port) : proto === "hue" ? new HueSender(d.host, { user: d.hue?.user, lights: d.hue?.lights, color: d.hue?.color }) : proto === "nanoleaf" ? new NanoleafSender(d.host, { token: d.nanoleaf?.token, panels: d.nanoleaf?.panels, port }) : proto === "openrgb" ? new OpenRGBSender(ip, { port, index: d.orgbIndex || 0, leds: d.leds }) : proto === "govee" ? new GoveeSender(ip, { mode: d.goveeMode, segments: d.goveeSegments || d.leds, port }) : new E131Sender(ip, { protocol: proto, universe: d.universe }), ip, port, key, createdAt: Date.now() }; outs.set(d.id, o); if (old) old.sender.close(); }
       o.size = size; o.buf = new Uint8Array(size * 3); o.used = used;
     }
     col8 = new Uint8Array(L.N * 3);
@@ -71,13 +72,13 @@ export function createRuntime(store, { io, logger = console } = {}) {
   let col8 = new Uint8Array(0);
 
   // ---------------------------------------------------------------- music sources
-  function pushPcm(samples, kind, label, clientId, rate = RATE) {
+  function pushPcm(samples, kind, label, clientId, rate = RATE, inMs = 0) { // inMs: the browser's estimate of its capture delay (latency meter)
     if (!rt.live || rt.live.kind !== kind || rt.live.clientId !== clientId || rt.live.rate !== rate) {
       if (rt.live && rt.live.kind === "browser" && kind === "capture" && performance.now() - rt.live.lastPush < 1500) return; // a browser that is sending wins
       rt.live = { an: new LiveAnalyser(rate), kind, label, clientId, rate, lastPush: 0, started: performance.now() }; rt.mem.lock = null; rt.mem.cand = null; memT = 0;
       note(`Listening to ${label}`);
     }
-    rt.live.an.push(samples); rt.live.lastPush = performance.now();
+    rt.live.an.push(samples); rt.live.lastPush = performance.now(); rt.live.inMs = inMs; rt.live.chunkMs = samples.length / rate * 1000;
   }
   function liveFresh() { return rt.live && performance.now() - rt.live.lastPush < 1500; }
   function stopLive(clientId) { if (rt.live && (clientId == null || rt.live.clientId === clientId)) { note(`Stopped listening to ${rt.live.label}`); rt.live = null; rt.mem.lock = null; rt.mem.cand = null; } }
@@ -322,15 +323,16 @@ export function createRuntime(store, { io, logger = console } = {}) {
   async function checkDevice(d) {
     const h = health.get(d.id) || {}; health.set(d.id, h);
     if (d.virtual) return Object.assign(h, { online: true, version: "virtual", ledsReported: d.leds, lastSeen: Date.now() });
-    if (d.kind === "hue") { try { const l = await io.hueLights(d.host, d.hue?.user); return Object.assign(h, { online: true, version: "Hue bridge", ledsReported: l.length, lastSeen: Date.now(), error: null }); }
+    if (d.kind === "hue") { try { const t0 = performance.now(), l = await io.hueLights(d.host, d.hue?.user); noteRtt(h, performance.now() - t0); return Object.assign(h, { online: true, version: "Hue bridge", ledsReported: l.length, lastSeen: Date.now(), error: null }); }
       catch (e) { if (h.online !== false) note(`${d.name} is not answering (${d.host})`, "warn"); return Object.assign(h, { online: false, error: e.message }); } }
-    if (d.kind === "nanoleaf") { try { const info = await io.nanoleafInfo(d.host, d.nanoleaf?.token); return Object.assign(h, { online: true, version: `Nanoleaf ${info.model}`.trim(), ledsReported: info.panels.length, lastSeen: Date.now(), error: null }); }
+    if (d.kind === "nanoleaf") { try { const t0 = performance.now(), info = await io.nanoleafInfo(d.host, d.nanoleaf?.token); noteRtt(h, performance.now() - t0); return Object.assign(h, { online: true, version: `Nanoleaf ${info.model}`.trim(), ledsReported: info.panels.length, lastSeen: Date.now(), error: null }); }
       catch (e) { if (h.online !== false) note(`${d.name} is not answering (${d.host})`, "warn"); return Object.assign(h, { online: false, error: e.message }); } }
     if (d.kind === "openrgb") { try { const list = await io.listOpenRGB(ipOf(d.host), d.ddpPort || 6742), c = list.find(x => x.index === (d.orgbIndex || 0));
         return Object.assign(h, { online: !!c, version: c ? `OpenRGB: ${c.name}` : "OpenRGB", ledsReported: c?.leds, lastSeen: Date.now(), error: c ? null : "device not found in OpenRGB" }); }
       catch (e) { if (h.online !== false) note(`${d.name}: OpenRGB is not answering (${d.host}). Is its SDK server running?`, "warn"); return Object.assign(h, { online: false, error: e.message }); } }
     if (d.kind === "govee") return Object.assign(h, { online: true, version: "Govee (LAN)", ledsReported: d.leds, lastSeen: Date.now() }); // Govee answers status on a shared port; not checked
-    try { const info = await getInfo(d.host, 2500); Object.assign(h, { online: true, rssi: info.rssi, signal: info.signal, version: info.version, ledsReported: info.leds, fps: info.fps, live: info.live, lastSeen: Date.now(), error: null });
+    try { const t0 = performance.now(), info = await getInfo(d.host, 2500); noteRtt(h, performance.now() - t0); // the round trip, for the latency meter
+      Object.assign(h, { online: true, rssi: info.rssi, signal: info.signal, version: info.version, ledsReported: info.leds, fps: info.fps, live: info.live, power: info.power, maxPower: info.maxPower, lastSeen: Date.now(), error: null });
       if (!d.leds && info.leds) { d.leds = info.leds; store.save(); } }
     catch (e) { if (h.online !== false) note(`${d.name} is not answering (${d.host})`, "warn"); Object.assign(h, { online: false, error: e.message }); }
     return h;
@@ -358,7 +360,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
     return segs;
   }
   async function setPower(on) {
-    data().show.power = !!on; store.save(); if (!on) rt.powerOffAt = performance.now();
+    data().show.power = !!on; store.save(); if (!on) rt.powerOffAt = performance.now(); else rt.powerOnAt = Date.now();
     note(on ? "Lights on" : "Lights off");
     await Promise.all(data().devices.filter(d => d.enabled && !d.virtual).map(d => d.kind === "openrgb" ? null : d.kind === "govee" || d.kind === "nanoleaf" || d.kind === "hue" ? outs.get(d.id)?.sender.power?.(!!on) : setState(d.host, { on: !!on }, 2000).catch(() => {})));
   }
@@ -402,11 +404,18 @@ export function createRuntime(store, { io, logger = console } = {}) {
       bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, mapping: rt.mapping ? { device: rt.mapping.dev, led: rt.mapping.led } : null, djlink: djFresh(performance.now()) ? { name: rt.dj.name, bpm: rt.dj.bpm, beatInBar: rt.dj.beatInBar } : null, recognised: rt.mem.lock && liveFresh() ? { id: rt.mem.lock.id, name: rt.mem.lock.name, pos: Math.round(lockPos(rt.mem.lock, rt.live.an.t) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
       song: rt.song ? { memId: rt.song.memId || null, name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
       capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null,
-      overlay: overlayState(), devices: data().devices.map(d => ({ id: d.id, ...health.get(d.id), sent: outs.get(d.id)?.sender.sent || 0, used: outs.get(d.id)?.used || 0, amps: Math.round((outs.get(d.id)?.amps || 0) * 100) / 100, limited: !!outs.get(d.id)?.limited })),
+      overlay: overlayState(), devices: data().devices.map(d => { const o = outs.get(d.id), { rtts, ...h } = health.get(d.id) || {}; void rtts;
+        return { id: d.id, ...h, sent: o?.sender.sent || 0, used: o?.used || 0, amps: Math.round((o?.amps || 0) * 100) / 100, limited: !!o?.limited, ...latencyOf(d, h, o) }; }),
       uptime: Math.round((Date.now() - rt.startedAt) / 1000),
     };
   }
 
+  // the latency meter: sound-to-light delay per device and what may be wrong (see latency.js)
+  function latencyOf(d, h, o) {
+    const s = data().settings, since = Math.max(rt.startedAt, rt.powerOnAt || 0, o?.createdAt || 0);
+    return deviceLatency({ dev: d, health: h, out: o || {}, fps: rt.fps || s.fps, offsetMs: s.syncOffsetMs || 0, audio: audioDelay({ source: rt.source, live: liveFresh() ? rt.live : null }),
+      streaming: !!(data().show.power && d.enabled && o), streamingFor: ((h.lastSeen || 0) - since) / 1000 }); // how long we had been sending when it was last checked
+  }
   function layoutInfo() {
     return { N: L.N, x: Array.from(L.LX, v => Math.round(v * 100) / 100), y: Array.from(L.LY, v => Math.round(v * 100) / 100), shape: Array.from(L.LF), chainStart: L.chainStart, ranges, shapes: data().room.shapes };
   }
