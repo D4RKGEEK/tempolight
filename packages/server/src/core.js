@@ -206,7 +206,11 @@ export function createCore({ store, runtime, env }) {
   route("PUT", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id), ids = effectIds(), segs = ctx.body.show;
     if (!Array.isArray(segs) || !segs.length || segs.length > 500) throw new HttpError(400, "show is a list of {t0, t1, effect}");
     const clean = segs.map(x => ({ t0: Number(x.t0), t1: Number(x.t1), part: String(x.part || "calm").slice(0, 10), effect: String(x.effect) })).sort((a, b) => a.t0 - b.t0);
-    for (const x of clean) { if (!ids.has(x.effect)) throw new HttpError(400, `Unknown effect "${x.effect}"`); if (!(x.t1 > x.t0 && x.t0 >= 0)) throw new HttpError(400, "Each block needs t0 < t1"); }
+    const end = (e.dur || 0) + 1; let prev = null; // blocks must fit the song and not overlap (the director looks them up by time)
+    for (const x of clean) { if (!ids.has(x.effect)) throw new HttpError(400, `Unknown effect "${x.effect}"`);
+      if (!(Number.isFinite(x.t0) && Number.isFinite(x.t1) && x.t1 > x.t0 && x.t0 >= 0)) throw new HttpError(400, "Each block needs 0 <= t0 < t1");
+      if (x.t0 >= end) throw new HttpError(400, "A block starts after the song ends"); x.t1 = Math.min(x.t1, end);
+      if (prev && x.t0 < prev.t1 - 1e-3) throw new HttpError(400, "Blocks overlap"); prev = x; }
     e.show = clean; e.showEdited = true; changed("songs"); return { ok: true, show: e.show }; });
   route("DELETE", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id); e.show = runtime.planFor(e); e.showEdited = false; changed("songs"); return { ok: true, show: e.show }; });
   route("DELETE", "/api/songs/:id", "admin", (ctx, p) => { if (!runtime.forget(p.id)) throw new HttpError(404, "That song isn't remembered"); changed("songs"); return { ok: true }; });

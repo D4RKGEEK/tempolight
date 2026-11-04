@@ -5,6 +5,18 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Hardening (four parallel reviews)
+- Security: browsers can no longer change settings, run updates or open the WebSocket from another website (Origin check); Nanoleaf tokens and Hue user names are kept out of every API answer, including PATCH responses.
+- Song memory: recognition kept working after a restart (caches were being saved and broke on reload); no more locks one or two beats off in repetitive songs; the lock now follows songs played slightly fast or slow, lets go when the song ends, the room goes silent, the source stops or song memory is turned off, and follows skips; memory is capped at about 2 MB.
+- Shows: blocks can't overlap or run past the song; banned effects are skipped; a clock jump (seek, recognition) no longer breaks crossfades or stops automatic mode changing effects.
+- Vocal detection: plucked guitar melodies no longer count as singing.
+- Screen sync: black bars of films are cut off; one browser shares at a time; locked guests are told why; sharing stops at once; frames are dropped instead of piling up on a slow connection.
+- Camera mapping: measures how slow the camera is before scanning, copes with exposure drift, stops cleanly when the page or connection closes, lights whole segments on Govee, explains that phones need https; mapped shapes move as a whole when dragged.
+- Lights: Govee razer packets capped at 60 segments and re-enabled after pauses; OpenRGB sends the device's exact LED count, can't hang on a silent server and closes connections it no longer needs; Nanoleaf skips the right non-light pieces; Hue shares one ~10 commands/s budget per bridge, queues power-off, handles white-only lights.
+- Pro DJ Link: automatic mode changes effect again on a DJ Link grid; the beat follows smoothly through jitter and lost packets; the leading deck stays the lead (the mixer's on-air flags decide between two); a stopped deck lets go after two beats.
+- Updates: clear messages for missing git, no upstream, detached HEAD or local commits; only one update at a time; the restarted copy waits for the old one to close its ports.
+- Effect builder: bad or hand-edited values are cleaned; ids can't replace built-in effects; deleting an effect also clears it from scenes, zones, layers, ambient, likes and shows; saving keeps the pads (blackout, strobe) as they are.
+
 - Make your own effects (Effects page): pick a pattern (waves, a moving dot, pulse, sparkles, level meter, breathing, gradient), a direction, what moves it (beat, kicks, bass, loudness or time), colours, speed and size. They play in automatic mode like the built-in ones, and share codes (`TL1:…`) let friends import them.
 
 - Philips Hue (basic): pair the bridge with its link button; each colour light becomes one light in the room. Hue's bridge takes about 10 commands a second, so Tempolight sends the light that changed most first; best for calm effects. Hue Entertainment streaming isn't supported (it needs DTLS, which Node.js doesn't include).

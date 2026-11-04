@@ -30,7 +30,7 @@ export class LiveAnalyser {
     this.bpm = 0; this.cand = 0; this.candN = 0; this.phase = 0; this.phaseSet = false; this.lastEst = -9;
     this.eFast = 0; this.eSlow = 0; this.eMax = 1e-4; this.rms = 0;
     this.bass = 0; this.bassMax = 1e-4; this.mid = 0; this.high = 0; this.highMax = 1e-4;
-    this.bands = new Float32Array(24); this.bandMax = new Float32Array(24).fill(1e-4); this.vocal = 0; this.vocalRaw = 0; this.pitchHist = [];
+    this.bands = new Float32Array(24); this.bandMax = new Float32Array(24).fill(1e-4); this.vocal = 0; this.vocalRaw = 0; this.pitchHist = []; this.ampHist = []; this.fade = 0;
     this.state = "silent"; this.cand2 = "silent"; this.candT = 0; this.stateT = 0; this.buildStart = 0; this.dropT = -9; this.barOff = 0;
     this.domS = null; this.domHist = []; this.domHistT = -9;
     this.styleStats = { env: [], envT: -9, drops: [] }; this.style = null; this.styleCand = null; this.lastStyleT = -9; this.styleLock = null;
@@ -121,12 +121,17 @@ export class LiveAnalyser {
     // pitch: the strongest peak in 150-1000 Hz, to a fraction of a bin (parabolic fit), tracked for half a second
     const pa = Math.max(2, Math.floor(150 / this.binHz)), pb = Math.ceil(1000 / this.binHz); let pi = pa; for (let i = pa; i <= pb; i++) if (m[i] > m[pi]) pi = i;
     const y0 = Math.log(m[pi - 1] + 1e-9), y1 = Math.log(m[pi] + 1e-9), y2 = Math.log(m[pi + 1] + 1e-9), off = Math.max(-0.5, Math.min(0.5, 0.5 * (y0 - y2) / (y0 - 2 * y1 + y2 || 1e-9)));
-    const ph = this.pitchHist; ph.push(m[pi] > 1e-5 ? Math.log2((pi + off) * this.binHz) : 0); if (ph.length > Math.round(0.5 / dt)) ph.shift();
+    // ...and that peak's level (log, corrected for where it falls between FFT bins)
+    const ph = this.pitchHist, ah = this.ampHist; ph.push(m[pi] > 1e-5 ? Math.log2((pi + off) * this.binHz) : 0); ah.push(y1 - 0.25 * (y0 - y2) * off); if (ph.length > Math.round(0.5 / dt)) { ph.shift(); ah.shift(); }
     // a singer's pitch moves smoothly (vibrato, slides); two notes of a chord fighting for the top spot jump back and forth
-    let d1 = 0, d2 = 0, prevD = null;
-    for (let i = 1; i < ph.length; i++) { const d = ph[i] - ph[i - 1]; if (!ph[i] || !ph[i - 1] || Math.abs(d) > 0.06) { prevD = null; continue; } d1 += Math.abs(d); if (prevD != null) d2 += Math.abs(d - prevD); prevD = d; }
+    let d1 = 0, d2 = 0, prevD = null, fall = 0, nf = 0;
+    for (let i = 1; i < ph.length; i++) { const d = ph[i] - ph[i - 1]; if (!ph[i] || !ph[i - 1] || Math.abs(d) > 0.06) { prevD = null; continue; } d1 += Math.abs(d); if (prevD != null) d2 += Math.abs(d - prevD); prevD = d;
+      const da = ah[i] - ah[i - 1]; if (Math.abs(da) < 0.25) { fall -= da; nf++; } } // (a note's attack is a jump: left out)
+    // a guitar note with vibrato wanders like a voice, but it was plucked: it fades away (over ~10 dB a second) where a
+    // sung note is held. (A synth lead with vibrato still passes for a voice when it plays alone; over drums it doesn't.)
+    this.fade = nf > 2 ? fall / nf / dt : 0; const held = Math.max(0, Math.min(1, (1.2 - this.fade) / 0.7));
     const wander = Math.min(1, d1 / 0.08) * Math.max(0, Math.min(1, (1.1 - d2 / Math.max(1e-6, d1)) / 0.6));
-    const raw = loud ? Math.min(1, peakShare * 2.5) * Math.min(1, share * 1.6) * wander * (0.5 + 0.5 * tonal) : 0;
+    const raw = loud ? Math.min(1, peakShare * 2.5) * Math.min(1, share * 1.6) * wander * held * (0.5 + 0.5 * tonal) : 0;
     this.vocalRaw = raw; this.vocal += (Math.min(1, raw * 2.2) - this.vocal) * (1 - Math.exp(-dt / 0.25));
   }
 

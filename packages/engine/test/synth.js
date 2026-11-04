@@ -56,3 +56,10 @@ export function pad(sr = 22050, seconds = 8) {
   for (let i = 0; i < n; i++) { const t = i / sr; x[i] = [220, 277.2, 329.6].reduce((s, f) => s + Math.sin(2 * Math.PI * f * t) + 0.4 * Math.sin(4 * Math.PI * f * t), 0) * 0.12 * Math.min(1, t * 2); }
   return { x, sr };
 }
+/** pluck(): a guitar-like plucked melody with finger vibrato: each note starts hard and fades, harmonics fading faster. */
+export function pluck(sr = 22050, seconds = 8) {
+  const n = Math.floor(seconds * sr), x = new Float32Array(n), notes = [440, 494, 523, 494, 392, 440, 587, 523], len = seconds / notes.length; let ph = 0;
+  for (let i = 0; i < n; i++) { const t = i / sr, k = Math.min(notes.length - 1, Math.floor(t / len)), nt = t - k * len, f0 = notes[k] * (1 + 0.02 * Math.sin(2 * Math.PI * 5.5 * t));
+    ph += f0 / sr; let v = 0; for (let h = 1; h < 12; h++) v += Math.sin(2 * Math.PI * h * ph) / h * Math.exp(-nt * (1 + h * 0.6)); x[i] = v * 0.2; }
+  return { x, sr };
+}
