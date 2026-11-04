@@ -1,8 +1,10 @@
 // Whole-song analysis. Pure JavaScript, no dependencies; runs in Node and in the browser.
+import { songChroma, packChroma, keyOf, moodOf } from "./tonal.js";
 export function lastLE(arr, t) { let lo = 0, hi = arr.length - 1, r = -1; while (lo <= hi) { const m = (lo + hi) >> 1; if (arr[m] <= t) { r = m; lo = m + 1; } else hi = m - 1; } return r; }
 /**
  * Analyse a whole song once: onsets (kick, snare, hi-hat), tempo, beat grid, bars,
- * song parts (calm, build, drop, silent), a loudness envelope and a music style.
+ * song parts (calm, build, drop, silent), a loudness envelope, a music style, the key and the mood
+ * (and a compact chroma fingerprint for song memory).
  * @param {Float32Array} x mono samples (about 22 kHz is enough)
  * @param {number} sr sample rate of x
  * @param {(p:number)=>void} [onProgress] called with 0..1
@@ -147,8 +149,14 @@ export async function preAnalyseCore(x, sr, onProgress) {
   else if (drops.length >= 1 && kickFrac > 0.25 && bpm >= 110) style = "party";
   else if (bpm < 102) style = "hiphop";
   else style = "poprock";
+  // key and mood (tonal.js): the song's average chroma against the 24 key profiles; valence and energy from the
+  // mode, brightness, drums, onsets and tempo
+  const ch = await songChroma(x, sr), avg = new Float64Array(12);
+  for (let i = 0; i < ch.frames.length; i++) avg[i % 12] += ch.frames[i];
+  const key = keyOf(avg), mood = moodOf({ majorness: key?.majorness, confidence: key?.confidence, bright: ch.bright, onsetRate, bpm, hatRate, kickFrac });
   onProgress && onProgress(1);
-  return { bpm, P, off, barOff, kicks, snares, hats, bars: bars.map(b => ({ t0: b.t0, t1: b.t1, state: b.state, level: Math.min(1, b.rmN) })), drops, env, dur,
-           features: { kickFrac, dyn, onsetRate, hatRate, snareRate }, style };
+  return { key: key ? key.key : null, mode: key ? key.mode : null, keyConfidence: key ? key.confidence : 0, mood, chroma: packChroma(ch.frames),
+            bpm, P, off, barOff, kicks, snares, hats, bars: bars.map(b => ({ t0: b.t0, t1: b.t1, state: b.state, level: Math.min(1, b.rmN) })), drops, env, dur,
+           features: { kickFrac, dyn, onsetRate, hatRate, snareRate, bright: Math.round(ch.bright * 100) / 100 }, style };
 }
 

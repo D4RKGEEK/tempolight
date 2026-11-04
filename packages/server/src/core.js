@@ -149,6 +149,7 @@ export function createCore({ store, runtime, env }) {
       Object.assign(s.night, { enabled: b.night.enabled ?? s.night.enabled, from: b.night.from ?? s.night.from, to: b.night.to ?? s.night.to,
         maxBrightness: b.night.maxBrightness !== undefined ? num(b.night.maxBrightness, 0.02, 1) : s.night.maxBrightness, warm: b.night.warm ?? s.night.warm }); }
     if (b.songMemory !== undefined) s.songMemory = !!b.songMemory;
+    if (b.moodColours !== undefined) s.moodColours = !!b.moodColours;
     if (b.requests !== undefined) s.requests = !!b.requests;
     if (b.shows !== undefined) s.shows = !!b.shows;
     if (b.djlink) Object.assign(s.djlink, { enabled: b.djlink.enabled !== undefined ? b.djlink.enabled === true : s.djlink.enabled, port: b.djlink.port !== undefined && Number.isFinite(Number(b.djlink.port)) ? Math.round(num(b.djlink.port, 1024, 65535)) : s.djlink.port });

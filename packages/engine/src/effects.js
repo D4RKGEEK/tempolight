@@ -29,6 +29,7 @@ export function createEffects(layout, opts = {}) {
   const WHITE = [1, 0.97, 0.94];
   const PALSETS = { neon: ["#ff2bd6", "#16e0ff"], sunset: ["#ff5e3a", "#ffb648"], ocean: ["#0a6cff", "#00e5d0"], fire: ["#ff3d00", "#ffc400"],
     ice: ["#7cc8ff", "#e8f6ff"], forest: ["#19c37d", "#c6ff3d"], mono: ["#ffe2b8", "#fff4e6"] };
+  PALSETS.mood = ["#ff8a1f", "#7b2fff"]; // "mood": every effect takes the music's mood colours (director.js, tonal.js); these until a mood is known
   let melodyHue = 0, chordHue = 0, vocalLvl = 0, chorusSlow = 0.5, chorusFast = 0.5; // smoothed state for Melody Colour, Colour Chord, Vocal Glow, Chorus Bloom
   const G = (x, w) => Math.exp(-(x / w) * (x / w));
   const wrapd = (a, b) => { const d = Math.abs(a - b) % 1; return Math.min(d, 1 - d); };

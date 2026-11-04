@@ -25,7 +25,13 @@
   that beats the hi-hat band and the snare body and makes the low band jump, so bass notes and piano attacks don't
   count as drums; snares and hats need real high-frequency energy. Tempo is re-estimated twice a second, the song part
   is decided by a vote over the last fraction of a second, and the style every 2 seconds over the last 30.
+- **tonal.js**: key and mood. A 4096-point FFT every 100 ms puts spectral peaks (65 Hz to 4.2 kHz) on the 12 pitch
+  classes (chroma); the average chroma against the Krumhansl-Schmuckler profiles gives the key, major or minor and a
+  confidence. Valence comes from the mode and brightness, energy from drums, tempo, onsets and brightness. The same
+  ChromaTap runs over whole songs and live, and its frames (5 a second, 6 bytes each) are song memory's second
+  fingerprint. Mood colours: four corner palettes (warm, teal, deep blue, red-magenta) blended by valence and energy.
 - **director.js**: picks the effect from the style's pools for the current part (or a fixed effect), crossfades,
+  eases the automatic palette towards the mood's colours (palette "auto" with moodColours, or "mood"),
   keeps quiet music lit with the ambient effect, flashes on drops, applies live-pad overlays and the photosensitivity
   limiter (at most 3 big brightness jumps per second).
 - **effects.js**: 93 effects. Each reads per-LED coordinates and a signals object and adds linear RGB light.

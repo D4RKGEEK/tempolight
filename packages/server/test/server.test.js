@@ -626,6 +626,28 @@ test("song memory: skipping to another remembered song follows the new one; turn
   } finally { await s.done(); }
 });
 
+test("key and mood: shown in /api/status for a played song; a drumless ballad heard live from its middle is recognised", async () => {
+  const { minorBallad } = await import("../../engine/test/synth.js");
+  const s = await setup();
+  try {
+    await s.call("POST", "/api/devices", { virtual: true });
+    const song = minorBallad(22050), pre = await preAnalyseCore(song.x, song.sr);
+    await s.call("POST", "/api/song", { name: "Slow one", analysis: { ...pre, env: Array.from(pre.env) } });
+    await s.call("POST", "/api/song/clock", { pos: 20, playing: true, rate: 1 }); await sleep(100);
+    const st = (await s.call("GET", "/api/status")).body;
+    assert.deepEqual([st.key?.name, st.mood?.name, st.hears], ["F# minor", "melancholic", "F# minor · melancholic"]);
+    assert.ok(st.mood.valence < 0.5 && st.mood.energy < 0.5 && st.key.confidence > 0.3, JSON.stringify(st.mood));
+    assert.equal(s.app.store.data.settings.moodColours, true, "mood colours are on by default");
+    await s.call("PATCH", "/api/settings", { moodColours: false }); assert.equal(s.app.runtime.director.settings.moodColours, false, "the setting reaches the director");
+    await s.call("DELETE", "/api/song");
+    const saved = s.app.store.data.songs[0]; assert.ok(saved.ch && saved.key === "F#" && saved.mood, "remembered with its chroma, key and mood");
+    let found = null, heard = 0; await playLive(s, song.x.subarray(30 * 22050), 0.6, (r, t) => { if (r) { found = r; heard = t; return false; } });
+    assert.ok(found && found.name === "Slow one" && heard < 20, `recognised after ${heard} s`);
+    const truth = 30 + s.app.runtime.rt.live.an.t; assert.ok(Math.abs(found.pos - truth) < 0.4, `position ${found.pos} vs ${truth}`);
+    assert.equal(s.app.runtime.status().hears, "F# minor · melancholic", "a recognised song shows its stored key and mood");
+  } finally { await s.done(); }
+});
+
 test("shows: edits that overlap, don't fit the song or aren't numbers are refused; long songs and many songs fit the budget", async () => {
   const s = await setup();
   try {

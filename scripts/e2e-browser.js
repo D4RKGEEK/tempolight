@@ -91,6 +91,8 @@ await step("music: play a song, it is analysed and drives the lights", async () 
   const s = status(); ok(s.song && s.song.bpm > 60 && s.song.bpm < 200, "no tempo"); await sleep(1500);
   const seen = new Set(); for (let i = 0; i < 10; i++) { seen.add(lum(A).toFixed(0)); await sleep(150); } ok(seen.size > 3, "lights are not changing with the music");
   ok(status().bands && status().bands.some(v => v > 0), "no spectrum from the browser audio"); await shot("04-music");
+  const hears = await until(() => page.textContent("#m-key").then(t => / (major|minor) · /.test(t) && t), 4000, "no key and mood on the Music page");
+  ok(hears === status().hears, `the page shows "${hears}", the status says "${status().hears}"`);
 });
 await step("music: the song is remembered in song memory", async () => {
   await until(() => page.textContent("#m-songs").then(t => /BPM/.test(t)), 6000, "song not in the memory list");

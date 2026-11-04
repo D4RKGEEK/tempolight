@@ -21,6 +21,7 @@ export const DEFAULTS = () => ({
     setupDone: false, // the setup wizard was finished or skipped (it opens by itself on a first start with no lights)
     songMemory: true, // remember analysed songs and recognise them when they play again while listening live
     nowPlaying: { enabled: true, spotifyClientId: "" }, // read the track music apps on this computer play (server only, see nowplaying.js)
+    moodColours: true, // with the "auto" palette, colours follow the music's mood (key, brightness, energy)
   },
   show: { power: true, mode: "auto", effect: "shock", style: "auto", palette: "auto", everyBeats: 8, speed: 1, params: {}, layer: null },
   devices: [],

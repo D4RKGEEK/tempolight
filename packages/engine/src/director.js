@@ -4,6 +4,7 @@
 import { showAt } from "./show.js";
 import { buildSignals } from "./signals.js";
 import { rangeAt, brightAt, cuesAt, createCueFirer, blockPalette } from "./timeline.js";
+import { moodPalette } from "./tonal.js";
 
 const G = (x, w) => Math.exp(-(x / w) * (x / w));
 
@@ -35,6 +36,7 @@ export function createDirector(layout, fx) {
     zones: [],    // [{id, mode: "follow"|"effect"|"ambient"|"off", effect, brightness}]; shapes join a zone with shape.zone
     layer: null,  // {effect, amount}: an accent effect added on top of whatever is showing
     // plan: the song's effect blocks (show.js); timeline: its {colors, cues, bright} (timeline.js), both on the song's clock
+    moodColours: true, // palette "auto": colours from the music's mood when it is known (palette "mood": always, for every effect)
   };
   const cueFirer = createCueFirer();
   const ZBUF = new Float32Array(N * 3);
@@ -91,7 +93,19 @@ export function createDirector(layout, fx) {
   }
 
   const style = V => fx.styles[settings.style !== "auto" ? settings.style : (V && V.style) || "party"] || fx.styles.party;
-  const palette = () => settings.palette === "auto" ? fx.palettes.auto[st.palIdx % fx.palettes.auto.length] : (fx.palettes[settings.palette] || fx.palettes.neon);
+  const basePalette = () => settings.palette === "auto" || settings.palette === "mood" ? fx.palettes.auto[st.palIdx % fx.palettes.auto.length] : (fx.palettes[settings.palette] || fx.palettes.neon);
+  const palette = () => st.moodPal && (settings.palette === "mood" || (settings.palette === "auto" && settings.moodColours !== false)) ? st.moodPal : basePalette();
+  // mood colours: the music's valence and energy pick two colours (warm for happy, deep blue for sad, red and magenta
+  // for tense, soft teal for calm and major); they ease over ~2.5 s, so a change of mood (or effect) crossfades
+  function updateMood(V, wall) {
+    const want = settings.palette === "mood" || (settings.palette === "auto" && settings.moodColours !== false);
+    if (V && V.mood) { st.mood = V.mood; st.moodSeen = wall; } else if (st.mood && !(wall - st.moodSeen < 5)) st.mood = null; // gone for 5 s: back to the usual colours
+    const m = st.mood || (settings.palette === "mood" ? { valence: 0.5, energy: 0.5 } : null);
+    if (!want || !m) { st.moodPal = null; st.moodWall = wall; return; }
+    const target = moodPalette(m.valence, m.energy, st.palIdx), dt = Math.max(0, Math.min(0.5, wall - (st.moodWall ?? wall))); st.moodWall = wall;
+    if (!st.moodPal) st.moodPal = basePalette().map(c => c.slice()); // start from what is showing
+    const k = 1 - Math.exp(-dt / 2.5); for (let c = 0; c < 2; c++) for (let i = 0; i < 3; i++) st.moodPal[c][i] += (target[c][i] - st.moodPal[c][i]) * k;
+  }
 
   function choose(t, V) {
     const g = V.g;
@@ -168,6 +182,7 @@ export function createDirector(layout, fx) {
   function frame(V, t, extra = {}, wall = t) {
     COL.fill(0);
     if (st.overlay.freeze) { COL.set(PREV); overlays(wall); return COL; }
+    updateMood(V, wall);
     if (!V) {
       if (settings.mode !== "auto" && ids.has(settings.effect)) { renderFx(settings.effect, Object.assign(idleSignals(t * settings.speed, palette(), settings.palette !== "auto"), { text: extra.text || "", screen: extra.screen || null }), COL); st.cur = settings.effect; st.showing = st.cur; }
       else { renderAmbient(t, COL); st.showing = settings.ambient; }

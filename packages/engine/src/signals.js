@@ -28,7 +28,8 @@ export function songView(pre, t) {
   return { g, bpm: pre.bpm, style: pre.style, loud, level: lvl < 0.35 ? "low" : lvl < 0.72 ? "mid" : "peak",
     state: (pre.env[Math.round(t / 0.02)] || 0) < 0.1 ? "silent" : state, buildP,
     dropT: di >= 0 ? pre.drops[di] : -9, nextDrop: di + 1 < pre.drops.length ? pre.drops[di + 1] : null,
-    kick, snare: si >= 0 ? pre.snares[si] : -9, hat: hi >= 0 ? pre.hats[hi] : -9, pulses, snares, pulseN: ki };
+    kick, snare: si >= 0 ? pre.snares[si] : -9, hat: hi >= 0 ? pre.hats[hi] : -9, pulses, snares, pulseN: ki,
+    key: pre.key || null, mode: pre.mode || null, keyConf: pre.keyConfidence ?? 0, mood: pre.mood || null }; // key and mood: whole-song (tonal.js)
 }
 
 /** A steady beat with no audio, for demos and hardware tests. grid ({P, off, barOff}, as for gridAt) puts the beats
