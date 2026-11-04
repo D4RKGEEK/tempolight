@@ -34,13 +34,15 @@ export class ChromaTap {
     const binHz = sr / NF; this.binHz = binHz; this.kLo = Math.max(2, Math.floor(65 / binHz)); this.kHi = Math.min(HALF - 2, Math.ceil(4200 / binHz)); this.kTop = Math.min(HALF - 1, Math.ceil(10000 / binHz));
     this.reset();
   }
-  reset() { this.pos = 0; this.n = 0; this.since = 0; this.frames = []; this.count = 0; this.eRef = 0; this.bright = 0.5; this.lastBright = null; }
+  reset() { this.lite = !!this.lite; this.pos = 0; this.n = 0; this.since = 0; this.frames = []; this.count = 0; this.eRef = 0; this.bright = 0.5; this.lastBright = null; }
   /** one sample (-1..1) */
   push(v) { this.ring[this.pos] = v; this.pos = (this.pos + 1) & (NF - 1); this.n++; if (++this.since >= this.hop) { this.since = 0; this.frame(); } }
   frame() {
     const { re, im, ring, mag, T } = this, { rev, cosT, sinT, win } = T; let e = 0;
     for (let i = 0; i < NF; i++) { const v = ring[(this.pos + i) & (NF - 1)]; re[i] = v * win[i]; im[i] = 0; e += v * v; }
     e /= NF; this.eRef = Math.max(this.eRef * 0.9967, e); // the loudest of the last ~30 s
+    // low-power mode: every 2nd frame repeats the one before (the 186 ms FFT window spans both 100 ms steps anyway)
+    if (this.lite && (this.count & 1) && this.frames.length) { this.count++; this.keep(this.frames[this.frames.length - 1]); return; }
     const c = new Float32Array(12); this.count++;
     if (this.n < NF || e < 1e-10 || e < this.eRef * 1e-3) { this.lastBright = null; this.keep(c); return; }
     for (let i = 0; i < NF; i++) { const j = rev[i]; if (j > i) { let t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
@@ -50,7 +52,7 @@ export class ChromaTap {
         const tr = re[b] * co - im[b] * sn, ti = re[b] * sn + im[b] * co;
         re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti; } }
     let top = 0, cs = 0, cw = 0;
-    for (let k = 1; k <= this.kTop; k++) { const m = Math.hypot(re[k], im[k]); mag[k] = m; if (k >= this.kLo && k <= this.kHi && m > top) top = m; cs += m * k; cw += m; }
+    for (let k = 1; k <= this.kTop; k++) { const a = re[k], b = im[k], m = Math.sqrt(a * a + b * b); mag[k] = m; if (k >= this.kLo && k <= this.kHi && m > top) top = m; cs += m * k; cw += m; }
     this.lastBright = cw > 0 ? clamp((Math.log2(cs / cw * this.binHz) - Math.log2(350)) / 3) : null; // centroid 350 Hz → 0, 2.8 kHz → 1
     const thr = top * 0.02, binHz = this.binHz;
     for (let k = this.kLo; k <= this.kHi; k++) {

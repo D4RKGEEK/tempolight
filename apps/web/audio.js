@@ -1,6 +1,5 @@
 // Browser audio for Tempolight: play songs (analysed ahead of time so lights can anticipate drops), or listen to
 // this computer's sound or a microphone. Samples go to the server over the WebSocket; the server does the lighting.
-import { preAnalyseCore } from "/engine/analysis.js";
 
 export function createAudio({ ws, api, onChange }) {
   let ctx = null, tap = null, tapReady = null;
@@ -31,6 +30,7 @@ export function createAudio({ ws, api, onChange }) {
     const ch = buf.getChannelData(0), ch1 = buf.numberOfChannels > 1 ? buf.getChannelData(1) : null;
     const dec = buf.sampleRate > 32000 ? 2 : 1, n = Math.floor(ch.length / dec), x = new Float32Array(n), div = dec * (ch1 ? 2 : 1);
     for (let i = 0; i < n; i++) { let v = 0; for (let k = 0; k < dec; k++) { v += ch[i * dec + k]; if (ch1) v += ch1[i * dec + k]; } x[i] = v / div; }
+    const { preAnalyseCore } = await import("/engine/analysis.js"); // (loaded with the first song, not with the page)
     return preAnalyseCore(x, buf.sampleRate / dec, onProgress);
   }
   const plain = a => ({ ...a, env: Array.from(a.env, v => Math.round(v * 1000) / 1000), features: a.features });

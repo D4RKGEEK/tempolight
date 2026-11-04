@@ -59,6 +59,8 @@
   controller that changes address is found again by name. **latency.js**: the latency meter (sound-to-light delay per
   device from the audio path, half WLED's HTTP round trip, the frame time and the timing offset; Wi-Fi, dropped-frame,
   realtime and power warnings).
+- **perf.js**: performance modes: full, or lite on small computers (30 fps, lighter preview and analyser), picked by itself on
+  a Pi Zero or Pi 3 or when the frame loop can't keep up. Song memory's matching runs in slices of a few ms between frames.
 - **store.js**: one JSON settings file, written atomically. **ws.js**: a minimal RFC 6455 WebSocket server.
   **nowplaying.js**: the track music apps on this computer play (osascript, MPRIS, Windows media controls, optionally
   the Spotify Web API); a remembered song is followed with its beat map at the app's position. **capture.js**: sound capture commands. **scheduler.js**: day/time schedules. **osc.js**: OSC over UDP.

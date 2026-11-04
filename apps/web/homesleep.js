@@ -1,14 +1,12 @@
 // Home & sleep page: the sunrise alarm (wake-up), the sleep timer (wind-down) and the ambient plan for the day.
-// Also the small strip on the Home page ("Sleep in 30 min", and Snooze / Stop while a sunrise runs).
+// The small strip on the Home page is in homestrip.js, so the Home page doesn't need to load this page.
 import { app, api, act, toast, esc, panel, opt, $, $$, unlocked, guestOk, DEMO, guestUrl } from "/app.js";
+import { hm, when, mins, nowText } from "/homestrip.js";
+export { homeStrip, bindHomeStrip, updateHomeStrip } from "/homestrip.js"; // the strip on the Home page lives on its own (loaded with the Home page)
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 const ORDER = [1, 2, 3, 4, 5, 6, 0]; // Monday first on screen; stored Sunday first, like Date.getDay()
 const DOCS = "https://github.com/D4RKGEEK/tempolight/blob/main/docs/wake-up.md";
-const hm = iso => iso ? new Date(iso).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "";
-const when = iso => { if (!iso) return ""; const d = new Date(iso), today = new Date(), tm = new Date(); tm.setDate(tm.getDate() + 1);
-  const day = d.toDateString() === today.toDateString() ? "today" : d.toDateString() === tm.toDateString() ? "tomorrow" : d.toLocaleDateString([], { weekday: "long" }); return `${day} ${hm(iso)}`; };
-const mins = s => s >= 60 ? `${Math.floor(s / 60)} min` : `${s} s`;
 
 let styled = false;
 function style() { if (styled) return; styled = true; const s = document.createElement("style"); s.textContent = `
@@ -27,39 +25,10 @@ function style() { if (styled) return; styled = true; const s = document.createE
 .hs-seg button[aria-pressed="true"] { background: var(--text); color: var(--panel); }
 .hs-url { font: 12px var(--mono); word-break: break-all; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; }
 .hs-plan td { white-space: nowrap; } .hs-plan td input[type=time], .hs-plan td input[data-k=from], .hs-plan td input[data-k=to] { width: 124px; } .hs-plan td input[type=range] { width: 90px; vertical-align: middle; }
-.hs-strip { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line-2); font-size: 12.5px; }
-.hs-strip .faint { flex: 1 1 100%; }
 @media (max-width: 820px) { .hs-days { grid-template-columns: repeat(2, minmax(0, 1fr)); } }`; document.head.appendChild(s); }
 
 function sunCss(p) { // the dot shows the sunrise's colour at progress p
   const c = p < 0.25 ? "#5a0600" : p < 0.5 ? "#ff3a08" : p < 0.75 ? "#ff8c30" : p < 0.95 ? "#ffbf70" : "#ffe2c0"; return `background:${c};box-shadow:0 0 ${Math.round(4 + p * 18)}px ${c}`; }
-
-/** One line about what is going on, for the page and the Home strip. */
-function nowText(h) {
-  if (!h) return "";
-  const w = h.wake, sl = h.sleep, out = [];
-  if (w) out.push(w.phase === "pending" ? `Sunrise from ${hm(w.start)}, full light at ${hm(w.end)}` : w.phase === "snoozed" ? `Sunrise snoozed until ${hm(w.snoozeUntil)}` : w.phase === "holding" ? "Sunrise: full light" : w.phase === "ending" ? "Sunrise ending" : `Sunrise ${Math.round(w.progress * 100)}%, full at ${hm(w.end)}`);
-  if (sl) out.push(`Sleep timer: off in ${mins(sl.left)}`);
-  if (!w && h.nextWake) out.push(`Next wake-up ${when(h.nextWake)}`);
-  return out.join(" · ");
-}
-
-// ---------------------------------------------------------------- the strip on the Home page
-export function homeStrip() { style(); return `<div class="hs-strip" id="hs-strip"><span class="faint" id="hs-strip-t"></span>
-  <button class="btn sm" id="hs-sleep" type="button">Sleep in 30 min</button><button class="btn sm" id="hs-sleepx" type="button" hidden>Cancel sleep timer</button>
-  <button class="btn sm" id="hs-snooze" type="button" hidden>Snooze</button><button class="btn sm" id="hs-stop" type="button" hidden>Stop sunrise</button><a class="btn sm" href="#/sleep">Home &amp; sleep</a></div>`; }
-export function bindHomeStrip() {
-  if (!$("#hs-strip")) return;
-  $("#hs-sleep").onclick = () => act(() => api("POST", "/api/sleep", { minutes: 30 }), "The lights fade out over 30 minutes").catch(() => {});
-  $("#hs-sleepx").onclick = () => act(() => api("DELETE", "/api/sleep"), "Sleep timer cancelled").catch(() => {});
-  $("#hs-snooze").onclick = () => act(() => api("POST", "/api/wake/snooze", {}), "Snoozed").catch(() => {});
-  $("#hs-stop").onclick = () => act(() => api("POST", "/api/wake/stop", {}), "Sunrise stopped").catch(() => {});
-}
-export function updateHomeStrip(m) {
-  const h = m.home; if (!h || !$("#hs-strip")) return; const w = h.wake, running = w && w.phase !== "pending" && w.phase !== "ending";
-  $("#hs-strip-t").textContent = nowText(h); $("#hs-sleep").hidden = !!h.sleep; $("#hs-sleepx").hidden = !h.sleep;
-  $("#hs-snooze").hidden = !running; $("#hs-stop").hidden = !running;
-}
 
 // ---------------------------------------------------------------- the page
 export function homeSleepPage(el) {

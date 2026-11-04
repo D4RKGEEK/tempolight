@@ -3,6 +3,7 @@ export const DEFAULTS = () => ({
   version: 2,
   settings: {
     brightness: 0.8, fps: 60, safe: false, syncOffsetMs: 0, predict: true,
+    performance: "auto", // auto, full or lite: low-power mode for small computers (Pi Zero 2 W, Pi 3), see perf.js
     ambient: "northern", idleBrightness: 0.5, idleAfterSec: 8, dropFlash: true,
     audioSync: false, osc: { enabled: false, port: 9000 }, autoDiscover: true,
     capture: { enabled: false, source: "auto", command: "" }, metronome: { enabled: false, bpm: 120 },

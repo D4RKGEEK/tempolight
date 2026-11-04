@@ -40,6 +40,10 @@ mkdirSync(path.join(out, "about"), { recursive: true }); copy("docs/index.html",
 const idx = path.join(out, "index.html");
 writeFileSync(idx, readFileSync(idx, "utf8").replace("<title>", `<meta name="tempolight-demo" content="1">\n<meta name="tempolight-version" content="${pkg.version}">\n<title>`));
 for (const f of ["phone.html", "request.html"]) { const ph = path.join(out, f); writeFileSync(ph, readFileSync(ph, "utf8").replace("<title>", `<meta name="tempolight-demo" content="1">\n<title>`)); }
+// No minifying and no pre-compressed .br/.gz copies: Cloudflare Pages compresses text files itself (brotli or gzip, as
+// the browser asks) and would serve a .br file only as a file of its own (sending it as the page takes a Pages Function
+// in front of every request). Stripping comments and indentation saves only ~4% once compressed, and without a real
+// JavaScript parser it can break template literals; the web app instead loads its pages only when they are opened.
 const sw = path.join(out, "sw.js"); writeFileSync(sw, readFileSync(sw, "utf8").replace("__BUILD__", build));
 writeFileSync(path.join(out, "_headers"), `/sw.js
   Cache-Control: no-cache

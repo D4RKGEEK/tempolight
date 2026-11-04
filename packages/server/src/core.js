@@ -128,10 +128,11 @@ export function createCore({ store, runtime, env }) {
     runtime.note(`Schedule ran: ${s.name}`);
   }
   function applySettings(b) {
-    const s = data().settings, before = JSON.stringify({ fps: s.fps, cap: s.capture, osc: s.osc, djlink: s.djlink });
+    const s = data().settings, before = JSON.stringify({ fps: s.fps, perf: s.performance, cap: s.capture, osc: s.osc, djlink: s.djlink });
     const num = (v, lo, hi) => Math.max(lo, Math.min(hi, Number(v)));
     if (b.brightness !== undefined) s.brightness = num(b.brightness, 0, 1);
     if (b.fps !== undefined) s.fps = Math.round(num(b.fps, 10, 120));
+    if (b.performance !== undefined) { if (!["auto", "full", "lite"].includes(b.performance)) throw new HttpError(400, "Performance is auto, full or lite"); s.performance = b.performance; }
     if (b.syncOffsetMs !== undefined) s.syncOffsetMs = Math.round(num(b.syncOffsetMs, -500, 500));
     if (b.idleBrightness !== undefined) s.idleBrightness = num(b.idleBrightness, 0, 1);
     if (b.idleAfterSec !== undefined) s.idleAfterSec = num(b.idleAfterSec, 1, 600);
@@ -159,7 +160,7 @@ export function createCore({ store, runtime, env }) {
     if (b.text) { if (b.text.source !== undefined && !["song", "bpm", "clock", "custom"].includes(b.text.source)) throw new HttpError(400, "Text source is song, bpm, clock or custom");
       Object.assign(s.text, { source: b.text.source ?? s.text.source, custom: b.text.custom !== undefined ? String(b.text.custom).slice(0, 80) : s.text.custom }); }
     const after = JSON.stringify({ fps: s.fps, cap: s.capture, osc: s.osc }), prev = JSON.parse(before);
-    if (prev.fps !== s.fps) runtime.startLoop();
+    if (prev.fps !== s.fps || prev.perf !== s.performance) runtime.startLoop();
     if (JSON.stringify(prev.cap) !== JSON.stringify(s.capture)) { if (s.capture.enabled) runtime.startCaptureSource(); else runtime.stopCaptureSource(); }
     if (JSON.stringify(prev.osc) !== JSON.stringify(s.osc)) restartOsc();
     if (JSON.stringify(prev.djlink) !== JSON.stringify(s.djlink)) restartDjLink();
@@ -437,7 +438,8 @@ export function createCore({ store, runtime, env }) {
     };
   }
   function broadcast(o) { const s = JSON.stringify(o); for (const c of clients) if (c.open && !c.busy) c.send(s); }
-  const statusTimer = setInterval(() => { if (clients.size) broadcast(runtime.status()); }, 250);
+  let statusN = 0; // 4 a second (2 in low-power mode)
+  const statusTimer = setInterval(() => { if (!clients.size || (runtime.perf?.lite && ++statusN % 2)) return; const t0 = performance.now(); broadcast(runtime.status()); runtime.perf?.add("broadcast", performance.now() - t0); }, 250);
   runtime.listeners.add(e => broadcast({ type: "log", ...e }));
 
   // ---------------------------------------------------------------- background jobs

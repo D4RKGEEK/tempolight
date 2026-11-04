@@ -2,6 +2,7 @@
 // (core.js), with real network and sound-card access (node-io.js).
 import os from "node:os";
 import http from "node:http";
+import zlib from "node:zlib";
 import crypto from "node:crypto";
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
@@ -30,6 +31,36 @@ const pkg = JSON.parse(String(await readStatic(path.join(ROOT, "package.json")))
 export const VERSION = pkg.version;
 const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".mp3": "audio/mpeg", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webmanifest": "application/manifest+json" };
 
+// ---------------------------------------------------------------- static files, compressed
+// Text files are sent compressed (brotli, else gzip, as the browser accepts) from buffers kept in memory, with an ETag
+// so a reload costs a 304. Brotli at its best setting is slow (half a second for the whole app on a fast PC, several on
+// a Pi Zero), so it is made in the background the first time a file is asked for (zlib's thread pool, not the frame
+// loop) and that request gets gzip, which takes milliseconds. URLs with ?v= are versioned: cached for a year.
+const COMPRESS = new Set([".html", ".js", ".css", ".json", ".svg", ".webmanifest", ".txt", ".md", ".map"]);
+const MAX_CACHED = 4 * 1024 * 1024; // bigger files (the demo song) are read each time, not kept
+const files = new Map(); // path -> {mtimeMs, size, raw, tag, gz?, gzP?, br?, brP?}
+export function acceptsEncoding(header, name) { // "br;q=1.0, gzip;q=0.5, *;q=0": q=0 means no
+  for (const part of String(header || "").toLowerCase().split(",")) { const [n, ...ps] = part.trim().split(";"), q = ps.map(x => x.trim()).find(x => x.startsWith("q="));
+    if ((n === name || n === "*") && !(q && Number(q.slice(2)) === 0)) return true; }
+  return false;
+}
+async function cachedFile(file, st) {
+  let c = files.get(file); if (c && c.mtimeMs === st.mtimeMs && c.size === st.size) return c;
+  const raw = Buffer.from(await readStatic(file)); c = { mtimeMs: st.mtimeMs, size: st.size ?? raw.length, raw, tag: crypto.createHash("sha1").update(raw).digest("base64url").slice(0, 22) };
+  if (c.size <= MAX_CACHED) { if (files.size > 1000) files.clear(); files.set(file, c); } return c;
+}
+const gzipOf = c => c.gzP || (c.gzP = new Promise(r => zlib.gzip(c.raw, { level: 9 }, (e, b) => r((c.gz = !e && b.length < c.raw.length ? b : null)))));
+const brotliOf = (c, quality) => c.brP || (c.brP = new Promise(r => zlib.brotliCompress(c.raw, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: quality, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: c.raw.length } }, (e, b) => r((c.br = !e && b.length < c.raw.length ? b : null)))));
+/** The representation to send: {body, encoding, etag}. lite: a quicker brotli setting (low-power mode). */
+export async function pickBody(c, ext, acceptEncoding, { lite = false } = {}) {
+  const id = { body: c.raw, encoding: null, etag: `"${c.tag}"` };
+  if (!COMPRESS.has(ext) || c.raw.length < 1024) return id;
+  if (acceptsEncoding(acceptEncoding, "br")) { if (c.br) return { body: c.br, encoding: "br", etag: `W/"${c.tag}-br"` }; brotliOf(c, lite ? 9 : 11); } // ready next time
+  if (acceptsEncoding(acceptEncoding, "gzip")) { const gz = c.gz || await gzipOf(c); if (gz) return { body: gz, encoding: "gzip", etag: `W/"${c.tag}-gz"` }; }
+  return id;
+}
+const matches = (inm, tag) => !!inm && String(inm).split(",").some(x => { const v = x.trim().replace(/^W\//, "").replace(/^"|"$/g, ""); return v === "*" || v === tag || v === tag + "-br" || v === tag + "-gz"; });
+
 async function readBody(req) {
   let n = 0; const chunks = [];
   for await (const c of req) { n += c.length; if (n > 12 * 1024 * 1024) throw new HttpError(413, "Too much data"); chunks.push(c); }
@@ -48,7 +79,7 @@ export async function createApp(opts) {
   const wifi = opts.wifi !== undefined ? opts.wifi : process.platform === "linux" && process.env.TEMPOLIGHT_WIFI_SETUP ? wifiClient(process.env.TEMPOLIGHT_WIFI_SETUP) : null;
   let closeApp = async () => {};
   const updater = opts.updater || createUpdater(ROOT, { exit: async (code, then) => { try { await closeApp(); } catch {} try { then?.(); } catch {} process.exit(code); } }); // then: after the port is free (start the new copy)
-  const runtime = createRuntime(store, { io, logger: opts.logger === undefined ? console : opts.logger, now: opts.now });
+  const runtime = createRuntime(store, { io, logger: opts.logger === undefined ? console : opts.logger, now: opts.now, host: opts.host, cpuUsage: () => process.cpuUsage() }); // opts.host: pretend computer (tests)
   const core = createCore({ store, runtime, env: {
     version: pkg.version, newId, hashPin, checkPin, randomToken: () => crypto.randomBytes(16).toString("hex"),
     getInfo: io.getInfo, discoverWled: io.discoverWled, discoverGovee: io.discoverGovee, listOpenRGB: io.listOpenRGB, nanoleafPair: io.nanoleafPair, nanoleafInfo: io.nanoleafInfo, panelPoints: io.panelPoints, huePair: io.huePair, hueLights: io.hueLights, ipOf: io.ipOf, listSources: io.listSources, startOsc,
@@ -62,14 +93,21 @@ export async function createApp(opts) {
   // /packages/ serves the engine and the server core to the browser too (the web app and the demo import them)
   const STATIC_DIRS = [["/engine/", path.join(ROOT, "packages/engine/src")], ["/packages/", path.join(ROOT, "packages")], ["/", path.join(ROOT, "apps/web")]];
   const ALIASES = { "/phone": "apps/web/phone.html", "/request": "apps/web/request.html", "/playground": "apps/playground/index.html", "/demo.mp3": "apps/playground/demo.mp3" };
-  async function serveStatic(req, res, pathname) {
+  async function serveStatic(req, res, pathname, search = "") {
     let file = ALIASES[pathname] ? path.join(ROOT, ALIASES[pathname]) : null;
     if (!file) for (const [prefix, dir] of STATIC_DIRS) if (pathname.startsWith(prefix)) {
       const rel = decodeURIComponent(pathname.slice(prefix.length)) || "index.html", f = path.resolve(dir, rel);
       if (!f.startsWith(dir + path.sep) && f !== dir) return false; file = f; break; }
     if (!file) return false;
     try { const st = await statStatic(file); if (st.isDirectory()) file = path.join(file, "index.html"); } catch { if (!path.extname(pathname)) file = path.join(ROOT, "apps/web/index.html"); else return false; }
-    try { const buf = await readStatic(file); res.writeHead(200, { "content-type": MIME[path.extname(file)] || "application/octet-stream", "cache-control": "no-cache" }); res.end(buf); return true; } catch { return false; }
+    try {
+      const st = await statStatic(file), c = await cachedFile(file, st), ext = path.extname(file), versioned = /(^|[?&])v=/.test(search);
+      const head = { "content-type": MIME[ext] || "application/octet-stream", "cache-control": versioned ? "public, max-age=31536000, immutable" : "no-cache" };
+      if (COMPRESS.has(ext)) head.vary = "Accept-Encoding";
+      if (matches(req.headers["if-none-match"], c.tag)) { const p = await pickBody(c, ext, req.headers["accept-encoding"], { lite: runtime.perf?.lite }); res.writeHead(304, { ...head, etag: p.etag }); res.end(); return true; }
+      const p = await pickBody(c, ext, req.headers["accept-encoding"], { lite: runtime.perf?.lite });
+      res.writeHead(200, { ...head, etag: p.etag, "content-length": p.body.length, ...(p.encoding ? { "content-encoding": p.encoding } : {}) }); res.end(p.body); return true;
+    } catch { return false; }
   }
 
   const server = http.createServer(async (req, res) => {
@@ -82,7 +120,7 @@ export async function createApp(opts) {
         const body = req.method === "GET" ? {} : await readBody(req);
         return send(200, await core.handle(req.method, url.pathname, { headers: req.headers, query: Object.fromEntries(url.searchParams), body }));
       }
-      if (req.method === "GET" && await serveStatic(req, res, url.pathname)) return;
+      if (req.method === "GET" && await serveStatic(req, res, url.pathname, url.search)) return;
       send(404, { error: "Not found" });
     } catch (e) { if (!res.headersSent) send(e.code && e.code >= 400 && e.code < 600 ? e.code : 500, { error: e.message || String(e) }); }
   });
