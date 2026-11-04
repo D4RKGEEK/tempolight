@@ -146,7 +146,7 @@ export default defineConfig({
   lang: "en",
   base,
   srcDir: "../docs",
-  ignoreDeadLinks: ["localhostLinks"], // http://localhost:8080 is the reader's own Tempolight, not a page of this site
+  ignoreDeadLinks: ["localhostLinks", /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?/], // http://localhost:8080 is the reader's own Tempolight, not a page of this site
   outDir: ".vitepress/dist",
   srcExclude: ["**/node_modules/**", "flash/**", "public/**"],
   cleanUrls: true,
