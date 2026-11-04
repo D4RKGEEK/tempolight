@@ -322,3 +322,27 @@ test("OpenRGB devices: added with their LED count and streamed in direct mode", 
     assert.ok(await until(async () => (await s.call("GET", "/api/status")).body.devices.find(d => d.id === add.body.id)?.online === true), "shows online");
   } finally { await s.done(); (await import("../../outputs/src/openrgb.js")).closeOpenRGB(); await new Promise(r => srv.close(r)); }
 });
+
+test("Nanoleaf: pairs, places the panels where they are, streams extControl frames", async () => {
+  const http = await import("node:http"); let paired = false, streaming = false; const frames = [];
+  const udp = dgram.createSocket("udp4"); await new Promise(r => udp.bind(0, "127.0.0.1", r)); udp.on("message", b => frames.push(b));
+  const api = http.createServer((q, r) => { let body = ""; q.on("data", c => body += c); q.on("end", () => {
+    const j = (code, o) => { r.writeHead(code, { "content-type": "application/json" }); r.end(o ? JSON.stringify(o) : ""); };
+    if (q.method === "POST" && q.url === "/api/v1/new") return paired ? j(200, { auth_token: "TOKEN1" }) : j(403);
+    if (q.url.startsWith("/api/v1/TOKEN1/effects") && q.method === "PUT") { streaming = JSON.parse(body).write.animType === "extControl"; return j(204); }
+    if (q.url === "/api/v1/TOKEN1") return j(200, { name: "Shapes 1A2B", model: "NL42", panelLayout: { layout: { numPanels: 4, positionData: [
+      { panelId: 0, x: 0, y: 0, o: 0, shapeType: 12 }, { panelId: 11, x: 0, y: 0, o: 0, shapeType: 7 }, { panelId: 22, x: 100, y: 0, o: 60, shapeType: 7 }, { panelId: 33, x: 50, y: 86, o: 0, shapeType: 7 }] } } });
+    j(404); }); });
+  await new Promise(r => api.listen(0, "127.0.0.1", r));
+  const s = await setup(), host = `127.0.0.1:${api.address().port}`;
+  try {
+    const first = await s.call("POST", "/api/devices", { host, kind: "nanoleaf" }); assert.equal(first.status, 400); assert.match(first.body.error, /power button/);
+    paired = true; const add = await s.call("POST", "/api/devices", { host, kind: "nanoleaf", ddpPort: udp.address().port });
+    assert.equal(add.status, 200); assert.equal(add.body.leds, 3, "the controller isn't a panel"); assert.equal(add.body.nanoleaf.token, undefined, "the token isn't sent to browsers");
+    const sh = (await s.call("GET", "/api/room")).body.shapes.find(x => x.dev === add.body.id); assert.equal(sh.type, "points"); assert.equal(sh.pts.length, 3);
+    assert.ok(sh.pts[2][1] < sh.pts[0][1], "a panel higher up on the wall is higher in the room");
+    assert.ok(await until(() => streaming && frames.length > 3), "streaming starts and frames arrive");
+    const f = frames.at(-1); assert.equal(f.readUInt16BE(0), 3); assert.deepEqual([f.readUInt16BE(2), f.readUInt16BE(10), f.readUInt16BE(18)], [11, 22, 33]);
+    const st = (await s.call("GET", "/api/state")).body.devices.find(d => d.id === add.body.id); assert.equal(st.nanoleaf.token, undefined);
+  } finally { await s.done(); udp.close(); await new Promise(r => api.close(r)); }
+});

@@ -6,3 +6,4 @@ export { audioSyncPacket, AudioSyncSender, AUDIOSYNC_PORT, AUDIOSYNC_GROUP } fro
 export { e131Packets, artnetPackets, E131Sender, E131_PORT, ARTNET_PORT, PIXELS_PER_UNIVERSE } from "./e131.js";
 export { GoveeSender, discoverGovee, goveeRazerPacket, goveeRazerOn, GOVEE_CMD_PORT, GOVEE_LISTEN_PORT, GOVEE_SCAN_PORT } from "./govee.js";
 export { OpenRGBSender, listOpenRGB, parseController, orgbPacket, closeOpenRGB, OPENRGB_PORT } from "./openrgb.js";
+export { NanoleafSender, nanoleafPair, nanoleafInfo, nanoleafStream, nanoleafPower, nanoleafFrame, panelPoints, NANOLEAF_PORT, NANOLEAF_STREAM_PORT } from "./nanoleaf.js";

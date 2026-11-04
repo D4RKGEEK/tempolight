@@ -42,10 +42,10 @@ export function roomPage(el) {
     $("#r-sum").textContent = `${draft.length} shape${draft.length === 1 ? "" : "s"}, ${total} LEDs${dirty ? " · not saved" : ""}`;
     $("#r-rows").innerHTML = draft.map((s, i) => { const r = ranges[i];
       return `<tr class="${i === sel ? "sel" : ""}" data-row="${i}"><td><input value="${esc(s.name)}" data-k="name" data-i="${i}" style="width:150px"></td>
-        <td><select data-k="type" data-i="${i}">${Object.entries(TYPES).map(([k, v]) => opt(k, v, k === s.type)).join("")}</select></td>
+        <td>${s.type === "points" ? '<span class="faint">Panels</span>' : `<select data-k="type" data-i="${i}">${Object.entries(TYPES).map(([k, v]) => opt(k, v, k === s.type)).join("")}</select>`}</td>
         <td><select data-k="dev" data-i="${i}">${devs.map(d => opt(d.id, d.name, d.id === s.dev)).join("")}</select></td>
         <td class="num"><input type="number" min="0" placeholder="auto" value="${s.from ?? ""}" data-k="from" data-i="${i}"></td>
-        <td class="num">${s.type === "matrix" ? `${s.cols}×${s.rows}` : `<input type="number" min="1" max="8192" value="${s.count}" data-k="count" data-i="${i}">`}</td>
+        <td class="num">${s.type === "matrix" ? `${s.cols}×${s.rows}` : s.type === "points" ? s.count : `<input type="number" min="1" max="8192" value="${s.count}" data-k="count" data-i="${i}">`}</td>
         <td class="mono">${r.start}–${r.end}</td>
         <td><input type="checkbox" data-k="rev" data-i="${i}" ${s.rev ? "checked" : ""} aria-label="Reverse direction"></td>
         <td><select data-k="zone" data-i="${i}" aria-label="Zone">${opt("", "None", !s.zone)}${zones.map(z => opt(z.id, z.name, z.id === s.zone)).join("")}</select></td>

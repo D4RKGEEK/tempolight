@@ -10,6 +10,7 @@
 | E1.31 (sACN) / Art-Net | UDP 5568 / 6454 | WLED set to E1.31 or Art-Net, Falcon/FPP pixel controllers, DMX nodes | 170 pixels per universe; first universe set per device (E1.31 default 1, Art-Net 0) |
 | Govee LAN (beta) | UDP 4001 (scan, multicast 239.255.255.250), 4002 (answers), 4003 (commands) | Govee lights with "LAN Control" on | One colour: `colorwc` about 10 times a second, only when it changes. Segments: the undocumented `razer` stream (`0xBB 0x00 len 0xB0 0x01 count RGB… xor`), 25 a second, on models that support DreamView |
 | OpenRGB SDK | TCP 6742 | PC lighting: RAM, fans, keyboards, motherboards, GPUs | Protocol version 0: `ORGB` header (device, packet id, size, little-endian). Lists devices (ids 0, 1), sets direct mode (1100), sends `UPDATELEDS` (1050) up to 40 a second |
+| Nanoleaf | HTTP 16021, UDP 60222 | Shapes, Canvas, Elements, Lines | Pair with `POST /api/v1/new` after holding the power button; layout from `GET /api/v1/<token>`; `extControl` v2 frames: panel count, then id, R, G, B, W, transition (big-endian) per panel, 30 a second |
 | Pro DJ Link (input) | UDP 50001 | Beat grid from Pioneer CDJs/XDJs | Listens to beat packets (`Qspt1WmJOL`, type `0x28`): track BPM at `0x5a` (÷100), pitch at `0x55` (`0x100000` = 0%), beat in bar at `0x5c`. Never joins the network as a player |
 | MQTT 3.1.1 | TCP 1883 | Home Assistant | Discovery under `homeassistant/`, QoS 0, retained config and state, last will on `tempolight/availability` |
 

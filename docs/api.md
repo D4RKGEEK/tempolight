@@ -43,7 +43,7 @@ Calls marked with a guest area (effects, scenes, pads, brightness) work without 
 | Call | Area | Body |
 | --- | --- | --- |
 | `GET /api/devices` | | |
-| `POST /api/devices` | admin | `{host: "192.168.1.42", name?, ddpPort?, force?}` (reads the LED count from WLED); `{virtual: true}` for a pretend room; `{host, kind: "govee", goveeMode?: "color"\|"segments"}` for a Govee light (beta); `{host: "127.0.0.1", kind: "openrgb", index}` for a device in OpenRGB (LED count is read from it) |
+| `POST /api/devices` | admin | `{host: "192.168.1.42", name?, ddpPort?, force?}` (reads the LED count from WLED); `{virtual: true}` for a pretend room; `{host, kind: "govee", goveeMode?: "color"\|"segments"}` for a Govee light (beta); `{host: "127.0.0.1", kind: "openrgb", index}` for a device in OpenRGB (LED count is read from it); `{host, kind: "nanoleaf"}` for Nanoleaf panels (hold the power button first; the panels are placed as a `points` shape) |
 | `PATCH /api/devices/:id` | admin | `{name?, host?, leds?, ddpPort?, enabled?, maxAmps?, mAperLed?, protocol?: "ddp"\|"e131"\|"artnet", universe?, goveeMode?, goveeSegments?}`; `maxAmps` caps brightness to the power supply |
 | `DELETE /api/devices/:id` | admin | also removes its shapes |
 | `POST /api/devices/:id/identify` | | lights that controller's shapes |

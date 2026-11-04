@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Nanoleaf panels: pair by holding the power button, and the panels are placed in the room where they really are (new `points` shape: one light at each point). Streams with Nanoleaf's extControl mode at 30 fps; the token never leaves the server.
+
 - OpenRGB: PC lighting (RAM, fans, keyboards, motherboards, GPUs) joins the show through OpenRGB's SDK server. Scan network lists its devices with their LED counts.
 
 - Guest song requests: guests scan a QR code (Music page), ask for songs and vote; the host sees the most wanted on top and marks them played. Works when settings are locked.

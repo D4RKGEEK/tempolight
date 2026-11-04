@@ -12,7 +12,7 @@ const LOOP_TYPES = new Set(["circle", "rect", "hex", "tri"]);
  *  dev?:string, from?:number|null}} Shape */
 
 export function outline(s) {
-  if (s.type === "line" || s.type === "pole" || s.type === "free") return s.pts;
+  if (s.type === "line" || s.type === "pole" || s.type === "free" || s.type === "points") return s.pts;
   if (s.type === "matrix") { const w = s.w / 2, h = s.h / 2; return [[s.cx - w, s.cy - h], [s.cx + w, s.cy - h], [s.cx + w, s.cy + h], [s.cx - w, s.cy + h]]; }
   const r = s.size, a0 = (s.rot || 0) * Math.PI / 180, pts = [];
   if (s.type === "circle") {
@@ -61,7 +61,7 @@ export function buildLayout(shapes) {
   shapes.forEach((s, si) => {
     const loop = LOOP_TYPES.has(s.type);
     if (s.type === "matrix") s.count = s.cols * s.rows;
-    let pts = s.type === "matrix" ? matrixPts(s) : samplePath(outline(s), s.count, loop);
+    let pts = s.type === "matrix" ? matrixPts(s) : s.type === "points" ? s.pts.slice(0, s.count) : samplePath(outline(s), s.count, loop); // points: one LED (or panel) at each point
     if (loop && s.start) { const k = Math.round(s.start * pts.length) % pts.length; pts = pts.slice(k).concat(pts.slice(0, k)); }
     if (s.rev) pts = loop ? [pts[0]].concat(pts.slice(1).reverse()) : pts.slice().reverse();
     const cx = pts.reduce((a, p) => a + p[0], 0) / pts.length, cy = pts.reduce((a, p) => a + p[1], 0) / pts.length;
