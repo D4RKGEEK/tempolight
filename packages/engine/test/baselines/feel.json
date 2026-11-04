@@ -1,0 +1,83 @@
+{
+ "about": "Feel baseline (scripts/feel-eval.js). Rewrite with: npm run eval:feel -- --baseline write",
+ "song": {
+  "seconds": 60.5,
+  "bpm": 128,
+  "drops": [
+   15,
+   45
+  ]
+ },
+ "analysis": {
+  "bpm": 63.9,
+  "bpmOk": false,
+  "drops": [
+   15.255,
+   45.302
+  ],
+  "style": "hiphop"
+ },
+ "whole": {
+  "kickContrast": 0.397,
+  "kickContrastP10": 0.101,
+  "kickLagMs": 12.5,
+  "lum": {
+   "intro": 0.117,
+   "build": 0.109,
+   "drop": 0.123,
+   "break": 0.35,
+   "outro": 0.231,
+   "silence": 0.099
+  },
+  "dropBreak": 0.353,
+  "preDropDip": [
+   1.661,
+   1.231
+  ],
+  "preDropDipWorst": 1.661,
+  "dropImpact": [
+   1.633,
+   0.444
+  ],
+  "dropImpactMin": 0.444,
+  "changes": 9,
+  "onDownbeat": 0,
+  "on4Bar": 0,
+  "shortEffects": 1
+ },
+ "live": {
+  "kickContrast": 0.401,
+  "kickContrastP10": 0.083,
+  "kickLagMs": 16.7,
+  "lum": {
+   "intro": 0.068,
+   "build": 0.131,
+   "drop": 0.212,
+   "break": 0.123,
+   "outro": 0.174,
+   "silence": 0.076
+  },
+  "dropBreak": 1.728,
+  "preDropDip": [
+   1.404,
+   1.025
+  ],
+  "preDropDipWorst": 1.404,
+  "dropImpact": [
+   1.617,
+   1.36
+  ],
+  "dropImpactMin": 1.36,
+  "changes": 26,
+  "onDownbeat": 0.077,
+  "on4Bar": 0.077,
+  "shortEffects": 12,
+  "dropDelayMs": [
+   166.7,
+   500
+  ],
+  "dropDelayWorstMs": 500,
+  "missedDrops": 0,
+  "falseDrops": 1
+ }
+}
