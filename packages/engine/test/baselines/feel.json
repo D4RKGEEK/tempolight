@@ -46,38 +46,38 @@
   "shortEffects": 0
  },
  "live": {
-  "kickContrast": 0.66,
-  "kickContrastP10": -0.043,
-  "kickLagMs": 22.9,
+  "kickContrast": 0.747,
+  "kickContrastP10": 0.574,
+  "kickLagMs": 0,
   "lum": {
-   "intro": 0.205,
-   "build": 0.135,
-   "drop": 0.186,
-   "break": 0.118,
-   "outro": 0.15,
-   "silence": 0.084
+   "intro": 0.181,
+   "build": 0.137,
+   "drop": 0.205,
+   "break": 0.102,
+   "outro": 0.135,
+   "silence": 0.094
   },
-  "dropBreak": 1.569,
+  "dropBreak": 2.01,
   "preDropDip": [
-   0.676,
-   0.736
+   0.22,
+   1.17
   ],
-  "preDropDipWorst": 0.736,
+  "preDropDipWorst": 1.17,
   "dropImpact": [
-   8.139,
-   0.709
+   5.131,
+   5.175
   ],
-  "dropImpactMin": 0.709,
-  "changes": 12,
-  "onDownbeat": 0.083,
-  "on4Bar": 0.083,
-  "shortEffects": 1,
+  "dropImpactMin": 5.131,
+  "changes": 11,
+  "onDownbeat": 0.727,
+  "on4Bar": 0.273,
+  "shortEffects": 0,
   "dropDelayMs": [
-   166.7,
-   500
+   50,
+   0
   ],
-  "dropDelayWorstMs": 500,
+  "dropDelayWorstMs": 50,
   "missedDrops": 0,
-  "falseDrops": 1
+  "falseDrops": 0
  }
 }

@@ -134,6 +134,10 @@ director takes from every source:
 grid from DJ Link, MIDI clock or Ableton Link. `LiveAnalyser.view()` gives it for live audio
 ([live analyser](live-analyser.md)).
 
+Live listening can't look ahead, so it doesn't use the analysis above. Its beat tracker (`beat.js`) follows an onset
+curve with a comb and keeps the tempo through breaks. The style never changes its tempo. It finds beat 1 from kicks,
+snares and chord changes. Its grid is in audio time: draw it at the newest sample's time (`an.sampleT`).
+
 ## Tests
 
 `packages/engine/test/engine.test.js` and `tonal.test.js` run the analysis on synthetic songs from
