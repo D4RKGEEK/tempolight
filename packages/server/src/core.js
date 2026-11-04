@@ -341,6 +341,9 @@ export function createCore({ store, runtime, env }) {
     if (b.goveeMode !== undefined && d.kind === "govee") d.goveeMode = b.goveeMode === "segments" ? "segments" : "color";
     if (b.goveeSegments !== undefined && d.kind === "govee") d.goveeSegments = b.goveeSegments ? Math.max(1, Math.min(60, Math.round(Number(b.goveeSegments)))) : undefined;
     if (b.maxAmps !== undefined) d.maxAmps = Math.max(0, Math.min(500, Number(b.maxAmps) || 0)); if (b.mAperLed !== undefined) d.mAperLed = Math.max(5, Math.min(200, Number(b.mAperLed) || 60));
+    if (b.lightLatencyMs !== undefined) { // light timing: this light's own delay set by hand (null: estimated by itself)
+      if (b.lightLatencyMs === null || b.lightLatencyMs === "") delete d.lightLatencyMs;
+      else { const ms = Number(b.lightLatencyMs); if (!Number.isFinite(ms) || ms < 0 || ms > 500) throw new HttpError(400, "A light's delay is 0 to 500 ms (or null: automatic)"); d.lightLatencyMs = Math.round(ms); } }
     await lights.patch(d, b); // {light: {...}} options, {hueFast, hueArea}
     runtime.rebuild(); changed("devices"); return safeDev(d);
   });

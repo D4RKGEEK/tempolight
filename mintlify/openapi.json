@@ -9030,6 +9030,12 @@
           "goveeSegments": {
             "type": "integer"
           },
+          "lightLatencyMs": {
+            "type": "integer",
+            "description": "This light's own delay set by hand, 0-500 ms (light timing). Left out: estimated.",
+            "minimum": 0,
+            "maximum": 500
+          },
           "light": {
             "type": "object",
             "additionalProperties": true,
@@ -9388,6 +9394,15 @@
               "integer",
               "null"
             ]
+          },
+          "lightLatencyMs": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "description": "Light timing: this light's own delay, 0-500 ms, instead of the estimate; `null`: estimated again.",
+            "minimum": 0,
+            "maximum": 500
           },
           "light": {
             "type": "object",
@@ -11506,6 +11521,57 @@
             "type": "number",
             "description": "The light timing in use."
           },
+          "timing": {
+            "type": "object",
+            "description": "Light timing (see docs/internals/runtime-and-outputs.md).",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "ahead",
+                  "reactive"
+                ],
+                "description": "`ahead`: frames are drawn ahead and fast lights held back; `reactive`: live without beat prediction, nothing held back."
+              },
+              "lookaheadMs": {
+                "type": "number",
+                "description": "How far ahead frames are drawn for the lights: the slowest light's delay, at most `capMs`."
+              },
+              "audioMs": {
+                "type": "number",
+                "description": "The sound's way in, made up for too (live)."
+              },
+              "leadMs": {
+                "type": "number",
+                "description": "All of it: lookahead, the sound's way in, half a frame and the render time."
+              },
+              "capMs": {
+                "type": "number"
+              },
+              "slowest": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "description": "The slowest light's device id."
+              },
+              "frame": {
+                "type": "object",
+                "properties": {
+                  "intervalMs": {
+                    "type": "number"
+                  },
+                  "jitterMs": {
+                    "type": "number",
+                    "description": "Standard deviation of the frame interval."
+                  },
+                  "worstMs": {
+                    "type": "number"
+                  }
+                }
+              }
+            }
+          },
           "djlink": {
             "type": [
               "object",
@@ -11726,6 +11792,13 @@
               },
               "offsetMs": {
                 "type": "number"
+              },
+              "lightMs": {
+                "type": "number",
+                "description": "The light's own delay used (network + frame, or set by hand)."
+              },
+              "lightAuto": {
+                "type": "boolean"
               }
             }
           },
@@ -11737,6 +11810,44 @@
               "slow",
               "none"
             ]
+          },
+          "timing": {
+            "type": "object",
+            "properties": {
+              "mode": {
+                "type": "string",
+                "enum": [
+                  "ahead",
+                  "reactive"
+                ]
+              },
+              "lightMs": {
+                "type": "number"
+              },
+              "auto": {
+                "type": "boolean"
+              },
+              "holdMs": {
+                "type": "number",
+                "description": "How long its frames are held back."
+              },
+              "shownMs": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "The delay left after light timing."
+              },
+              "level": {
+                "type": "string",
+                "enum": [
+                  "good",
+                  "ok",
+                  "slow",
+                  "none"
+                ]
+              }
+            }
           },
           "warnings": {
             "type": "array",

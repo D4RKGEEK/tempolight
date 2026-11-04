@@ -4,7 +4,7 @@
 import { inWindow } from "./sun.js";
 import { createFixtures } from "./fixtures.js";
 import { createBeatSources } from "./beatsources.js";
-import { noteRtt, audioDelay, deviceLatency } from "./latency.js";
+import { noteRtt, audioDelay, deviceLatency, lightLatency, timingPlan, newestSampleClock, level, LOOKAHEAD_CAP_MS } from "./latency.js";
 import { createPerf, LITE } from "./perf.js";
 import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, gridAt, toRGB8, LiveAnalyser, memoryEntry, memoryAnalysis, recognise, matchAt, refineByKicks, planShow, drumlessEntry, hearsLabel, moodName } from "../../engine/src/index.js";
 // Everything that touches the network or the sound card comes in through `io` (see node-io.js), so the same runtime
@@ -276,34 +276,39 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   let lastT = performance.now(), fpsN = 0, fpsT = performance.now(), lastSync = 0, timer = null, previewTick = 0;
   const previewClients = new Set(), phones = new Set(), syncSender = { s: null };
 
-  function currentView(now) {
-    const s = data().settings, off = syncOffset() / 1000;
+  // now: the wall clock (ms); lead: how far ahead (ms) this frame is drawn for (light timing, below). Sources on the
+  // wall clock (metronome, beat clocks, DJ Link, idle) are drawn for now + lead; sources with a music clock for where
+  // the music will be by then, plus the timing trim (syncOffset).
+  function currentView(now, lead = 0) {
+    const s = data().settings, off = syncOffset() / 1000, ld = lead / 1000, wt = (now + lead) / 1000;
     if (rt.song && rt.song.playing && now - rt.song.at < 4000) {
-      const t = rt.song.pos + (now - rt.song.at) / 1000 * rt.song.rate + off;
+      const t = rt.song.pos + ((now - rt.song.at) / 1000 + ld) * rt.song.rate + off;
       rt.source = "song"; rt.sourceLabel = rt.song.name;
       return { V: songView(rt.song.pre, t), t, extra: liveFresh() ? rt.live.an.extras() : {} };
     }
     const np = rt.nowPlaying && rt.nowPlaying.follow(now); // a music app here plays a remembered song: its beat map, at the app's position
-    if (np) { const t = np.pos + off; rt.source = "nowplaying"; rt.sourceLabel = `${np.app}: ${np.name} (remembered)`; return { V: songView(np.pre, t), t, extra: liveFresh() ? rt.live.an.extras() : {} }; }
-    if (rt.spotify && rt.spotify.paused()) { rt.source = "idle"; rt.sourceLabel = "Spotify paused"; return { V: null, t: now / 1000 }; } // fade to the ambient look
+    if (np) { const t = np.pos + ld + off; rt.source = "nowplaying"; rt.sourceLabel = `${np.app}: ${np.name} (remembered)`; return { V: songView(np.pre, t), t, extra: liveFresh() ? rt.live.an.extras() : {} }; }
+    if (rt.spotify && rt.spotify.paused()) { rt.source = "idle"; rt.sourceLabel = "Spotify paused"; return { V: null, t: wt }; } // fade to the ambient look
     if (liveFresh()) {
-      const an = rt.live.an, t = an.t + Math.min(0.12, (now - rt.live.lastPush) / 1000) + (s.predict ? off : 0);
+      // the analyser's clock now: its newest sample when it says (else its last frame's centre), plus the time since
+      // that audio came in; then ahead by the lead and the trim when beats are predicted
+      const an = rt.live.an, tl = (newestSampleClock(an) ?? an.t) + Math.min(0.12, (now - rt.live.lastPush) / 1000), t = tl + (s.predict ? off + ld : 0);
       songMemoryTick();
       if (rt.mem.lock) { const L = rt.mem.lock, pos = lockPos(L, t); // a song we know: use its beat map
         rt.source = rt.live.kind; rt.sourceLabel = `${rt.live.label}: ${L.name} (recognised)`;
         return { V: { ...songView(L.pre, pos), live: true, vocal: an.vocal, ...(L.pre.mood ? {} : { key: an.keyEst?.key || null, mode: an.keyEst?.mode || null, mood: an.mood }) }, t: pos, extra: an.extras() }; } // (remembered before key and mood were)
       const V = an.view(t, { predict: s.predict });
       rt.source = rt.live.kind; rt.sourceLabel = rt.live.label;
-      const G = djFresh(now) ? { ...djGrid(now, t), bpm: rt.dj.bpm, label: `DJ Link (${rt.dj.name})` } : beats.grid(now, t); // DJ Link, else MIDI clock, else Ableton Link
+      const G = djFresh(now) ? { ...djGrid(now, tl), bpm: rt.dj.bpm, label: `DJ Link (${rt.dj.name})` } : beats.grid(now, tl); // DJ Link, else MIDI clock, else Ableton Link (on the analyser's clock now)
       if (G) { V.g = gridAt(G, t); V.bpm = G.bpm; if (V.g.has && t - V.kick > 0.6) { V.kick = V.g.beatT; V.pulses = [V.g.beatT]; V.pulseN = V.g.idx; } rt.sourceLabel += ` + ${G.label}`; }
-      if (V.state === "silent" && V.quietFor > (s.idleAfterSec ?? 8)) { rt.source = "idle"; rt.sourceLabel = `${rt.live.label} (quiet)`; return { V: null, t: now / 1000 }; }
+      if (V.state === "silent" && V.quietFor > (s.idleAfterSec ?? 8)) { rt.source = "idle"; rt.sourceLabel = `${rt.live.label} (quiet)`; return { V: null, t: wt }; }
       return { V, t, extra: an.extras() };
     }
-    if (djFresh(now)) { const t = now / 1000, V = metronomeView(t, rt.dj.bpm, djGrid(now, t)); // decks but no audio: a steady show on their beat
+    if (djFresh(now)) { const t = wt, V = metronomeView(t, rt.dj.bpm, djGrid(now, now / 1000)); // decks but no audio: a steady show on their beat
       rt.source = "djlink"; rt.sourceLabel = `DJ Link: ${rt.dj.name} ${rt.dj.bpm.toFixed(1)} BPM`; return { V, t }; }
-    { const t = now / 1000, G = beats.grid(now, t); if (G) { rt.source = G.kind; rt.sourceLabel = `${G.label} ${G.bpm.toFixed(1)} BPM`; return { V: metronomeView(t, G.bpm, G), t }; } } // MIDI clock or Link, no audio
-    if (s.metronome.enabled) { const t = now / 1000; rt.source = "metronome"; rt.sourceLabel = `Metronome ${Math.round(s.metronome.bpm)} BPM`; return { V: metronomeView(t, s.metronome.bpm), t }; }
-    rt.source = "idle"; rt.sourceLabel = "Nothing playing"; return { V: null, t: now / 1000 };
+    { const t = wt, G = beats.grid(now, now / 1000); if (G) { rt.source = G.kind; rt.sourceLabel = `${G.label} ${G.bpm.toFixed(1)} BPM`; return { V: metronomeView(t, G.bpm, G), t }; } } // MIDI clock or Link, no audio
+    if (s.metronome.enabled) { const t = wt; rt.source = "metronome"; rt.sourceLabel = `Metronome ${Math.round(s.metronome.bpm)} BPM`; return { V: metronomeView(t, s.metronome.bpm), t }; }
+    rt.source = "idle"; rt.sourceLabel = "Nothing playing"; return { V: null, t: wt };
   }
 
   function applyForced(V, t, now) {
@@ -317,13 +322,69 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     return V;
   }
 
-  function frame() {
-    const now = performance.now(), wall = now / 1000, sh = data().show, s = data().settings;
-    let { V, t, extra } = currentView(now);
+  // ---------------------------------------------------------------- light timing: lookahead and holding lights back
+  // Lights are late by different amounts (WLED ~20 ms, Hue ~110 ms). When the beat is known ahead, each frame is
+  // drawn ONCE, for the moment it will be seen: now + the slowest light's delay (L, at most LOOKAHEAD_CAP_MS) + half a
+  // frame (a light shows a frame for a whole frame; the middle of that is "when"). Each faster light gets the frame
+  // later, held back by L minus its own delay, so all of them show it at the same time. Drawing once matters: effects
+  // keep state from frame to frame and start again when the time jumps. When the beat is only heard (live, without
+  // beat prediction) nothing can be drawn ahead: nothing is held back, each light shows what was heard as soon as it can.
+  const TM = { mode: "ahead", L: 0, common: 0, wantL: 0, wantC: 0, at: -1e9, src: null, slowest: null, lights: new Map(), procMs: 1, iv: [], last: 0, started: false };
+  const SCREEN_MS = 40; // about how late the preview and phones show a frame (WebSocket, the screen)
+  const ahead = () => !((rt.source === "browser" || rt.source === "capture") && !data().settings.predict);
+  function updateTiming(now) {
+    const changed = TM.src !== rt.source;
+    if (changed || now - TM.at >= 250) { // the plan, 4 times a second (and at once when the source changes)
+      TM.at = now; TM.src = rt.source; const fps = loopFps(), on = ahead(), list = []; TM.lights = new Map();
+      for (const d of data().devices) { const l = lightLatency(d, health.get(d.id) || {}, fps); TM.lights.set(d.id, l);
+        if (outs.has(d.id) && d.enabled && !d.virtual && health.get(d.id)?.online !== false) list.push({ id: d.id, ms: l.ms }); }
+      const p = timingPlan({ devices: list, ahead: on }), a = audioDelay({ source: rt.source, live: liveFresh() ? rt.live : null });
+      const was = TM.mode; TM.mode = on ? "ahead" : "reactive"; TM.slowest = p.slowest; TM.wantL = p.lookaheadMs; TM.wantC = on ? a.audioMs + a.analysisMs : 0;
+      if (changed || was !== TM.mode || !TM.started) { TM.L = TM.wantL; TM.common = TM.wantC; TM.started = true; } // a new source starts on a new clock anyway
+    }
+    // otherwise move there slowly (1 ms a frame): a jump back in time would make effects start again
+    const step = (v, w) => Math.abs(w - v) <= 1 ? w : v + Math.sign(w - v);
+    TM.L = step(TM.L, TM.wantL); TM.common = step(TM.common, TM.wantC);
+  }
+  /** How far ahead (ms) this frame is drawn for, from what the music clock says is playing now. */
+  const leadMs = () => TM.mode === "ahead" ? TM.L + TM.common + 500 / loopFps() + TM.procMs : 0;
+  /** How long (ms) to hold a device's frame back. */
+  function holdFor(d) { if (TM.mode !== "ahead") return 0; const l = TM.lights.get(d.id); return l ? Math.max(0, TM.L - l.ms) : 0; }
+  // each output keeps a short queue of frames waiting to go out ({at, buf}); one timer sends what is due
+  let flushTimer = null, flushAt = Infinity;
+  const scr = { q: [], pool: [], sender: { send: (b, m) => sendScreens(b, m) } }; // the preview and phones, held back like a light
+  function queueOut(o, buf, hold, at0, meta) {
+    const q = o.q || (o.q = []), pool = o.pool || (o.pool = []);
+    if (hold < 1 && !q.length) { o.sender.send(buf, meta); return; } // nothing to wait for (the slowest light, or not ahead)
+    let b = pool.pop(); if (!b || b.length !== buf.length) b = new Uint8Array(buf.length); b.set(buf);
+    q.push({ at: at0 + hold, buf: b, meta }); if (q.length > 96) pool.push(q.shift().buf); // (at most ~1.5 s even at 60 fps)
+    if (at0 + hold <= performance.now() + 1) flushOutputs(); else armFlush(at0 + hold);
+  }
+  function armFlush(at) { if (flushTimer && flushAt <= at) return; clearTimeout(flushTimer); flushAt = at; flushTimer = setTimeout(flushOutputs, Math.max(0, at - performance.now() - 0.5)); }
+  function flushOutputs() {
+    clearTimeout(flushTimer); flushTimer = null; flushAt = Infinity; const now = performance.now(); let next = Infinity;
+    for (const o of [...outs.values(), scr]) { const q = o.q; if (!q || !q.length) continue;
+      let k = -1; for (let i = 0; i < q.length; i++) if (q[i].at <= now + 1) k = i; // the newest that is due; older ones are dropped
+      if (k >= 0) { try { o.sender.send(q[k].buf, q[k].meta); } catch (e) { note(`Output error: ${e.message}`, "error"); } for (let i = 0; i <= k; i++) o.pool.push(q[i].buf); q.splice(0, k + 1); }
+      for (const e of q) if (e.at < next) next = e.at; }
+    if (next < Infinity) armFlush(next);
+  }
+  function dropQueued() { for (const o of [...outs.values(), scr]) if (o.q && o.q.length) { for (const e of o.q) o.pool.push(e.buf); o.q.length = 0; } }
+  /** Light timing for the status: the lookahead and how even the frame loop runs. */
+  function timingInfo() {
+    const iv = TM.iv, n = iv.length, mean = n ? iv.reduce((a, b) => a + b, 0) / n : 0, sd = n ? Math.sqrt(iv.reduce((a, b) => a + (b - mean) ** 2, 0) / n) : 0, r2 = v => Math.round(v * 100) / 100;
+    return { mode: TM.mode, lookaheadMs: Math.round(TM.L), audioMs: Math.round(TM.common), leadMs: Math.round(leadMs()), capMs: LOOKAHEAD_CAP_MS, slowest: TM.slowest,
+      frame: { intervalMs: r2(mean), jitterMs: r2(sd), worstMs: n ? r2(Math.max(...iv.map(v => Math.abs(v - 1000 / loopFps())))) : 0 } };
+  }
+
+  function frame(now = performance.now()) {
+    const wall = now / 1000, sh = data().show, s = data().settings;
+    updateTiming(now); const lead = leadMs();
+    let { V, t, extra } = currentView(now, lead);
     const pe = V ? currentPlan() : null; D.settings.plan = pe ? pe.show : null;
     D.settings.timeline = pe && (pe.colors?.length || pe.cues?.length || pe.bright?.length) ? { colors: pe.colors || [], cues: pe.cues || [], bright: pe.bright || [] } : null;
     if (rt.spotify && V) D.settings.timeline = rt.spotify.timeline(D.settings.timeline); // the album cover's colours, if on
-    if (rt.forced && !V) V = metronomeView(wall, s.metronome.bpm || 124), t = wall; // "build & drop" pad works even with no music
+    if (rt.forced && !V) t = (now + lead) / 1000, V = metronomeView(t, s.metronome.bpm || 124); // "build & drop" pad works even with no music
     V = applyForced(V, t, now);
     rt.view = V; rt.t = t;
     const tx = s.text || {}; extra = { ...(extra || {}), text: tx.source === "custom" ? tx.custom : tx.source === "clock" ? new Date().toTimeString().slice(0, 5)
@@ -334,15 +395,17 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     if (rt.spotify) bri *= rt.spotify.dim(); // Spotify muted, or a skip's dip
     rt.bri = bri; // the sunrise alarm draws at its own brightness, whatever this is
     const tr = performance.now(), col = D.frame(V, t, extra, wall), tr2 = performance.now(); perf.add("render", tr2 - tr);
+    TM.procMs = TM.procMs * 0.9 + Math.min(20, tr2 - now) * 0.1; // how long from the frame's start to sending it, on average
     if (!sh.power) { bri = 0; }
     toRGB8(col, col8, bri);
     fixtures.begin({ V, t, wall, cfg: s.dmx, safe: s.safe, night: !!rt.night, power: sh.power, overlay: D.state.overlay, bri });
     // copy each shape's LEDs into its controller's buffer at its segment range
     const shapes = data().room.shapes;
     const map = rt.mapping && now - rt.mapping.at < 5000 ? rt.mapping : null; if (!map && rt.mapping) { rt.mapping = null; rt.mapEndAt = now; }
+    if (map) dropQueued(); // camera mapping: at once, nothing held back
     const sendNow = sh.power || now - rt.powerOffAt < 600 || now - rt.mapEndAt < 600; // after power-off (or mapping with the power off), send black briefly, then go quiet
     for (const d of data().devices) {
-      const o = outs.get(d.id); if (o && d.kind === "dmx") { dmxOut(d, o, map, now); continue; }
+      const o = outs.get(d.id); if (o && d.kind === "dmx") { dmxOut(d, o, map, now, tr2); continue; }
       if (!o || !d.enabled) continue;
       if (map) { // camera mapping: everything dark except the one LED being looked for
         const n = Math.max(o.size, d.leds || 0); if (!o.mapBuf || o.mapBuf.length !== n * 3) o.mapBuf = new Uint8Array(n * 3); o.mapBuf.fill(0);
@@ -358,32 +421,31 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       const perCh = (d.mAperLed || 60) / 3 / 255, idle = o.size; let mA = idle + sum * perCh; o.limited = false;
       if (d.maxAmps > 0 && mA > d.maxAmps * 1000) { const k = Math.max(0, (d.maxAmps * 1000 - idle) / Math.max(1, sum * perCh)); for (let q = 0; q < o.buf.length; q++) o.buf[q] = o.buf[q] * k; mA = d.maxAmps * 1000; o.limited = true; }
       o.amps = o.amps == null ? mA / 1000 : o.amps * 0.8 + mA / 1000 * 0.2;
-      if (sendNow && !d.virtual) o.sender.send(o.buf);
+      if (sendNow && !d.virtual) queueOut(o, o.buf, holdFor(d), tr2);
     }
     // WLED audio sync, so the controllers' own sound-reactive effects can run too
     if (s.audioSync && liveFresh() && now - lastSync > 20) { lastSync = now; sendAudioSync(); }
     const tb = performance.now(); perf.add("output", tb - tr2);
     // preview for the web UI, 30 fps (15 in low-power mode)
+    // (held back like a light that is SCREEN_MS late, so the preview and phones show the beat with the lights)
     const fr = loopFps(); ++previewTick;
-    if (previewTick % Math.max(1, Math.round(fr / (perf.lite ? LITE.previewFps : 30))) === 0 && previewClients.size) {
-      const msg = new Uint8Array(1 + col8.length); msg[0] = 1; msg.set(col8, 1);
-      for (const c of previewClients) if (c.open && !c.busy) c.send(msg);
-    }
+    const pv = previewTick % Math.max(1, Math.round(fr / (perf.lite ? LITE.previewFps : 30))) === 0 && previewClients.size > 0;
     // phones as extra lights: each phone shows the colour of its own part of the room, so a crowd of phones moves with it
-    if (phones.size && previewTick % Math.max(1, Math.round(fr / (perf.lite ? LITE.phoneFps : 30))) === 0) sendPhones(sh.power ? 1 : 0);
+    const ph = phones.size > 0 && previewTick % Math.max(1, Math.round(fr / (perf.lite ? LITE.phoneFps : 30))) === 0;
+    if (pv || ph) queueOut(scr, col8, TM.mode === "ahead" ? Math.max(0, TM.L - SCREEN_MS) : 0, tr2, { pv, ph, on: sh.power ? 1 : 0 });
     rt.frames++; fpsN++; if (now - fpsT > 1000) { rt.fps = fpsN * 1000 / (now - fpsT); fpsN = 0; fpsT = now; }
     const end = performance.now(); perf.add("broadcast", end - tb);
     if (perf.frame(end - now, fr)) startLoop(); // auto mode stepped down: the loop restarts at the lower rate
   }
   // DMX: one universe per device, always sent (DMX nodes hold the last values, so stopping could leave fog on),
   // about 40 times a second; dark while camera mapping; zeros for 2 s after it is turned off, then nothing
-  function dmxOut(d, o, map, now) {
+  function dmxOut(d, o, map, now, at0 = now) {
     if (!d.enabled) { if (o.dmxOn !== false) { o.dmxOn = false; o.offAt = now; } if (now - o.offAt > 2000 || d.virtual) return; if (now - (o.lastSend || 0) >= 100) { o.lastSend = now; o.sender.send(new Uint8Array(512)); } return; }
     o.dmxOn = true; o.buf.fill(0);
     const shapes = data().room.shapes, pts = shapes.find(sp => sp.dev === d.id && sp.type === "points")?.pts || [];
     shapes.forEach((sp, si) => { if (sp.dev !== d.id) return; const r = ranges[si], a = L.chainStart[si], n = Math.min(sp.count, o.size - r.start); if (n > 0) o.buf.set(col8.subarray(a * 3, (a + n) * 3), r.start * 3); });
     const dmx = map ? new Uint8Array(512) : fixtures.render(d, o.buf, pts);
-    if (!d.virtual && now - (o.lastSend || 0) >= 24) { o.lastSend = now; o.sender.send(dmx); }
+    if (!d.virtual && now - (o.lastSend || 0) >= 24) { o.lastSend = now; if (map) o.sender.send(dmx); else queueOut(o, dmx, holdFor(d), at0); }
   }
   /** Camera mapping: light only LED `led` of device `dev` (-1: all dark); call again within 5 s to keep it going, or end(). */
   /** `owner` (a browser's id) lets endMap(owner) stop it when that browser goes away mid-scan. */
@@ -402,8 +464,12 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     rt.screen = { w, h, px, at: now, label, owner }; return true;
   }
   function clearScreen(owner) { if (rt.screen && rt.screen.owner === owner) rt.screen = null; }
-  function sendPhones(on) {
-    const list = [...phones].filter(c => c.open), n = list.length, N = L.N; if (!N) return;
+  function sendScreens(col, m) {
+    if (m.pv) { const msg = new Uint8Array(1 + col.length); msg[0] = 1; msg.set(col, 1); for (const c of previewClients) if (c.open && !c.busy) c.send(msg); }
+    if (m.ph) sendPhones(m.on, col);
+  }
+  function sendPhones(on, col8) {
+    const list = [...phones].filter(c => c.open), n = list.length, N = L.N; if (!N || col8.length < N * 3) return;
     const win = Math.max(1, Math.round(N / Math.max(6, n * 2)));
     list.forEach((c, i) => { if (c.busy) return; const mid = Math.floor((i + 0.5) / n * N); let r = 0, g = 0, b = 0, w = 0;
       for (let k = mid - (win >> 1); k < mid - (win >> 1) + win; k++) { const q = ((k % N) + N) % N * 3, R = col8[q], G = col8[q + 1], B = col8[q + 2], l = 1 + R + G + B; r += R * l; g += G * l; b += B * l; w += l; }
@@ -415,9 +481,22 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     let mi = 0; for (let i = 1; i < 24; i++) if (an.bands[i] > an.bands[mi]) mi = i;
     syncSender.s.send({ sampleRaw: Math.min(255, an.rms * 1200), sampleSmth: Math.min(255, an.eFast * 1200), peak: an.t - (an.kicks.at(-1) ?? -9) < 0.05, fft, magnitude: an.bands[mi] * 1000, majorPeak: 40 * Math.pow(250, (mi + 0.5) / 24) });
   }
+  // The frame loop runs against deadlines, not setInterval: each frame is due one frame time after the last was due, and
+  // the timer is set for what is left, so a late wake-up doesn't push every later frame back (and they don't drift).
+  // A loop that fell more than a frame behind (the computer was busy) starts again from now instead of rushing.
+  let loopGen = 0;
   function startLoop() {
     perf.update(); if (rt.live) rt.live.an.lite = perf.lite;
-    clearInterval(timer); timer = setInterval(() => { try { frame(); } catch (e) { note(`Render error: ${e.message}`, "error"); } }, 1000 / loopFps()); }
+    clearTimeout(timer); const gen = ++loopGen, period = 1000 / loopFps(); let due = performance.now() + period;
+    const frameTick = () => {
+      if (gen !== loopGen) return; const now = performance.now();
+      if (TM.last) { TM.iv.push(now - TM.last); if (TM.iv.length > 120) TM.iv.shift(); } TM.last = now;
+      try { frame(now); } catch (e) { note(`Render error: ${e.message}`, "error"); }
+      if (gen !== loopGen) return; // frame() restarted the loop (performance mode changed)
+      const after = performance.now(); due += period; if (due < after - period) due = after + period;
+      timer = setTimeout(frameTick, Math.max(0, due - after - 0.5)); // (timers wake up a little late: ask a little early)
+    };
+    TM.last = 0; timer = setTimeout(frameTick, period); }
 
   // ---------------------------------------------------------------- devices
   async function checkDevice(d) {
@@ -467,7 +546,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     return segs;
   }
   async function setPower(on) {
-    data().show.power = !!on; store.save(); if (!on) rt.powerOffAt = performance.now(); else rt.powerOnAt = Date.now();
+    data().show.power = !!on; store.save(); if (!on) { rt.powerOffAt = performance.now(); dropQueued(); } else rt.powerOnAt = Date.now(); // (frames held back from before would turn lights on again)
     note(on ? "Lights on" : "Lights off");
     await Promise.all(data().devices.filter(d => d.enabled && !d.virtual).map(d => d.kind === "openrgb" || d.kind === "dmx" ? null : d.kind === "govee" || d.kind === "nanoleaf" || d.kind === "hue" || LK[d.kind] ? outs.get(d.id)?.sender.power?.(!!on) : setState(d.host, { on: !!on }, 2000).catch(() => {})));
   }
@@ -512,7 +591,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, key: V && V.key ? { key: V.key, mode: V.mode, name: `${V.key} ${V.mode}`, confidence: V.keyConf ?? 0 } : null, mood: V && V.mood ? { ...V.mood, name: moodName(V.mood) } : null, hears: V ? hearsLabel(V.key, V.mode, V.mood) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, mapping: rt.mapping ? { device: rt.mapping.dev, led: rt.mapping.led } : null, djlink: djFresh(performance.now()) ? { name: rt.dj.name, bpm: rt.dj.bpm, beatInBar: rt.dj.beatInBar } : null, recognised: rt.mem.lock && liveFresh() ? { id: rt.mem.lock.id, name: rt.mem.lock.name, pos: Math.round(lockPos(rt.mem.lock, rt.live.an.t) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, home: rt.home ? rt.home.status() : null, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
       song: rt.song ? { memId: rt.song.memId || null, name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
       nowPlaying: rt.nowPlaying ? rt.nowPlaying.info() : null, spotify: rt.spotify ? rt.spotify.info() : null,
-      capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null, hearing: hearingInfo(), offsetMs: syncOffset(),
+      capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null, hearing: hearingInfo(), offsetMs: syncOffset(), timing: timingInfo(),
       overlay: overlayState(), devices: data().devices.map(d => { const o = outs.get(d.id), { rtts, ...h } = health.get(d.id) || {}; void rtts;
         return { id: d.id, ...h, sent: o?.sender.sent || 0, used: o?.used || 0, amps: Math.round((o?.amps || 0) * 100) / 100, limited: !!o?.limited, ...latencyOf(d, h, o) }; }),
       uptime: Math.round((Date.now() - rt.startedAt) / 1000), perf: { ...perf.status(), fps: perf.fps || Math.round(rt.fps) },
@@ -521,10 +600,14 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   }
 
   // the latency meter: sound-to-light delay per device and what may be wrong (see latency.js)
+  // timing: what light timing does about it: {mode, lightMs (its own delay), auto (estimated, not set by hand), holdMs
+  // (held back), shownMs (what is left of the delay: about 0 when it is lined up and the trim is 0), level}
   function latencyOf(d, h, o) {
     const s = data().settings, since = Math.max(rt.startedAt, rt.powerOnAt || 0, o?.createdAt || 0);
-    return deviceLatency({ dev: d, health: h, out: o || {}, fps: rt.fps || s.fps, offsetMs: syncOffset(), audio: audioDelay({ source: rt.source, live: liveFresh() ? rt.live : null }),
+    const r = deviceLatency({ dev: d, health: h, out: o || {}, fps: rt.fps || s.fps, offsetMs: syncOffset(), audio: audioDelay({ source: rt.source, live: liveFresh() ? rt.live : null }),
       streaming: !!(data().show.power && d.enabled && o), streamingFor: ((h.lastSeen || 0) - since) / 1000 }); // how long we had been sending when it was last checked
+    const l = r.latency, made = TM.mode === "ahead" ? Math.round(TM.common + Math.min(l.lightMs, TM.L)) : 0, shownMs = r.latencyMs == null ? null : r.latencyMs - made;
+    return { ...r, timing: { mode: TM.mode, lightMs: l.lightMs, auto: l.lightAuto, holdMs: Math.round(holdFor(d)), shownMs, level: level(shownMs) } };
   }
   function layoutInfo() {
     return { N: L.N, x: Array.from(L.LX, v => Math.round(v * 100) / 100), y: Array.from(L.LY, v => Math.round(v * 100) / 100), shape: Array.from(L.LF), chainStart: L.chainStart, ranges, shapes: data().room.shapes };
@@ -545,7 +628,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     rebuild, rebuildEffects, syncDirector, startLoop, syncOffset, setOutput, hearingInfo, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
     fixtures, beats, identify, syncSegments, setPower, action, status, setScreen, clearScreen, remember, forget, djBeat, djOnAir, planFor, setDraft, mapLight, endMap, layoutInfo, checkDevice, note,
     close() { for (const [id, o] of outs) if (data().devices.find(d => d.id === id)?.kind === "dmx") try { o.sender.send(new Uint8Array(512)); } catch {} // DMX: leave everything at zero
-      clearInterval(timer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
+      loopGen++; clearTimeout(timer); clearTimeout(flushTimer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
   };
 }
 

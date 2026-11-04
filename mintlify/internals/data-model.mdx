@@ -50,7 +50,7 @@ Changed with `PATCH /api/settings` (admin) unless noted; out-of-range numbers ar
 | `fps` | integer 10-120 | `60` | frame rate; restarts the loop |
 | `performance` | `"auto"` \| `"full"` \| `"lite"` | `"auto"` | see [performance modes](/internals/runtime-and-outputs#performance-modes) |
 | `safe` | boolean | `false` | photosensitivity limiter, no DMX strobes or lasers |
-| `syncOffsetMs` | integer -500..500 | `0` | light timing offset; positive shows light earlier |
+| `syncOffsetMs` | integer -500..500 | `0` | light timing offset (a trim on top of the automatic per-light timing); positive shows light earlier |
 | `predict` | boolean | `true` | live: kicks on the beat grid, offset applied to live audio too |
 | `ambient` | effect id or `"off"` | `"northern"` | what plays when nothing does |
 | `idleBrightness` | number 0-1 | `0.5` | brightness factor while idle in automatic mode |
@@ -100,7 +100,8 @@ A scene's `show` has the same keys (all optional): applying it is `Object.assign
 ## devices
 
 Common: `id` (`d` + 8 hex), `name` (≤ 60), `host` (IP or `ip:port`), `ddpPort` (the port for its protocol), `leds`,
-`enabled`, optional `kind`, `maxAmps` (0-500) and `mAperLed` (5-200, default 60). By kind (see
+`enabled`, optional `kind`, `maxAmps` (0-500), `mAperLed` (5-200, default 60) and `lightLatencyMs` (0-500, the
+light's own delay for [light timing](/internals/runtime-and-outputs#light-timing), set by hand; left out: estimated). By kind (see
 [device kinds](/internals/runtime-and-outputs#device-kinds-and-their-senders)):
 
 | Kind | Extra fields |

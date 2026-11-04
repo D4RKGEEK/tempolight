@@ -1,5 +1,6 @@
 // The live latency meter in the web app: per device, the delay from a sound to its light (GET /api/status
-// devices[].latencyMs, worked out on the server in packages/server/src/latency.js) and what may be wrong.
+// devices[].latencyMs, worked out on the server in packages/server/src/latency.js) and what may be wrong. When the
+// beat is known ahead, light timing makes up the lights' own delay (devices[].timing): what is left is shown.
 // Shown as a column and a panel on the Devices page, and as a badge on Home.
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const svg = d => `<svg viewBox="0 0 24 24" aria-hidden="true"><path d="${d}"/></svg>`;
@@ -17,12 +18,16 @@ export const fmtMs = ms => ms == null ? "–" : `${ms < 0 ? "−" : ""}${Math.ab
 export function breakdown(h) {
   const p = h.latency; if (!p) return "";
   const parts = [p.audioMs ? `sound in ${p.audioMs}` : "", p.analysisMs ? `listening ${p.analysisMs}` : "", p.networkMs != null ? `network ${p.networkMs}` : "network ?", `frame ${p.frameMs}`, p.offsetMs ? `timing ${p.offsetMs > 0 ? "−" : "+"}${Math.abs(p.offsetMs)}` : ""].filter(Boolean);
-  return parts.join(" + ").replace(/\+ timing −/, "− timing ") + " ms";
+  const own = p.lightAuto === false ? `light ${p.lightMs} (set by hand)` : "";
+  const tm = h.timing, made = tm && tm.mode === "ahead" ? `; made up by drawing ahead${tm.holdMs ? `, held back ${tm.holdMs} ms to match the slowest light` : ""}` : "";
+  return (own ? parts.filter(x => !/^(network|frame)/.test(x)).concat(own) : parts).join(" + ").replace(/\+ timing −/, "− timing ") + " ms" + made;
 }
+/** The delay that is left (light timing made up the rest), and its level. */
+const shown = h => h.timing ? { ms: h.timing.shownMs, lvl: h.timing.level } : { ms: h.latencyMs, lvl: h.latencyLevel };
 /** A small coloured delay chip for a table cell. */
 export function latencyChip(h) {
   if (!h || h.latencyMs == null) return '<span class="lat none">–</span>';
-  return `<span class="lat ${h.latencyLevel}" title="${esc(breakdown(h))}">${fmtMs(h.latencyMs)}</span>`;
+  const v = shown(h); return `<span class="lat ${v.lvl}" title="${esc(breakdown(h))}">${fmtMs(v.ms)}</span>`;
 }
 /** Warning icons for a status cell (the text is in the title and the panel). */
 export function warnIcons(h) {
@@ -31,24 +36,24 @@ export function warnIcons(h) {
 /** The slowest working device and how many warnings there are: for the Home badge. */
 export function summary(status, devices) {
   const on = new Set(devices.filter(d => d.enabled !== false).map(d => d.id)), list = (status?.devices || []).filter(h => on.has(h.id));
-  const worst = list.filter(h => h.latencyMs != null).sort((a, b) => Math.abs(b.latencyMs) - Math.abs(a.latencyMs))[0] || null;
+  const worst = list.filter(h => h.latencyMs != null).sort((a, b) => Math.abs(shown(b).ms) - Math.abs(shown(a).ms))[0] || null;
   return { worst, warnings: list.reduce((n, h) => n + (h.warnings?.length || 0), 0) };
 }
 export function homeBadge(status, devices) {
   const { worst, warnings } = summary(status, devices);
   if (!worst && !warnings) return "";
-  const cls = warnings ? "warn" : worst.latencyLevel === "good" ? "live" : worst.latencyLevel === "ok" ? "warn" : "err";
-  return `<a class="badge ${cls}" href="#/devices" id="h-latb" title="${esc(worst ? `Sound to light: ${breakdown(worst)}` : "")}"><i></i>${worst ? `Delay ${fmtMs(worst.latencyMs)}` : ""}${warnings ? `${worst ? " · " : ""}${warnings} warning${warnings > 1 ? "s" : ""}` : ""}</a>`;
+  const lv = worst ? shown(worst).lvl : null, cls = warnings ? "warn" : lv === "good" ? "live" : lv === "ok" ? "warn" : "err";
+  return `<a class="badge ${cls}" href="#/devices" id="h-latb" title="${esc(worst ? `Sound to light: ${breakdown(worst)}` : "")}"><i></i>${worst ? `Delay ${fmtMs(shown(worst).ms)}` : ""}${warnings ? `${worst ? " · " : ""}${warnings} warning${warnings > 1 ? "s" : ""}` : ""}</a>`;
 }
 /** The "Sound to light" panel body on the Devices page. */
 export function latencyPanel(status, devices) {
   const byId = new Map((status?.devices || []).map(h => [h.id, h]));
   if (!devices.length) return '<p class="faint">Add a light to see its delay.</p>';
   const scale = 150; // ms at the end of the bar
-  return `<div class="latlist">${devices.map(d => { const h = byId.get(d.id) || {}, ms = h.latencyMs, w = ms == null ? 0 : Math.min(100, Math.abs(ms) / scale * 100);
+  return `<div class="latlist">${devices.map(d => { const h = byId.get(d.id) || {}, v = shown(h), ms = h.latencyMs == null ? null : v.ms, lv = h.latencyMs == null ? "none" : v.lvl || "none", w = ms == null ? 0 : Math.min(100, Math.abs(ms) / scale * 100);
     return `<div class="latrow" data-lat="${esc(d.id)}"><div class="latname"><b>${esc(d.name)}</b>${d.enabled === false ? ' <span class="faint">off</span>' : ""}</div>
-      <div class="latbar ${h.latencyLevel || "none"}" title="${esc(breakdown(h))}"><i style="width:${w}%"></i></div><div class="latms ${h.latencyLevel || "none"}">${fmtMs(ms)}</div>
+      <div class="latbar ${lv}" title="${esc(breakdown(h))}"><i style="width:${w}%"></i></div><div class="latms ${lv}">${fmtMs(ms)}</div>
       ${h.latency ? `<div class="latparts faint">${esc(breakdown(h))}${ms != null && ms < 0 ? " (light comes a little early)" : ""}</div>` : ""}
       ${(h.warnings || []).map(x => `<div class="latw ${x.kind === "offline" ? "err" : "warn"}">${icon(x.kind)}${esc(x.text)}</div>`).join("")}</div>`; }).join("")}</div>
-    <p class="faint latnote">Green is under 40 ms, which nobody notices. Speakers add their own delay (Bluetooth a lot): <a href="#/music">fix the timing</a> once and it's taken care of.</p>`;
+    <p class="faint latnote">Green is under 40 ms, which nobody notices. When the beat is known ahead, slow lights are made up for by themselves: frames are drawn ahead and faster lights wait, so they all flash together. Speakers add their own delay (Bluetooth a lot): <a href="#/music">fix the timing</a> once and it's taken care of.</p>`;
 }
