@@ -5,6 +5,13 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Spotify and integrations
+- Sync with Spotify: exact position from the Spotify app on this computer or the Web API (smoothed, follows pause, skip and seek); old Spotify apps that still have audio analysis use it; any other song is learned on its first play and followed exactly from then on. Reacts to pause, skips and volume; optional album-cover colours. Optional shared beat maps on your own Cloudflare Worker + D1 (served once two installs agree). Guide: docs/spotify.md.
+- More lights: LIFX (bulbs and multizone strips), WiZ, TP-Link Kasa, Yeelight (music mode, 20 updates/s), Twinkly (realtime, real layout), and Philips Hue Entertainment (fast streaming over a built-in DTLS client), falling back to basic Hue.
+- Apple Home: Tempolight is a HomeKit bridge (no Homebridge): a light, a "Music reactive" switch and a switch per scene, so Siri works. Pair from Settings → Apple Home.
+- Integrations page: Stream Deck plugin (scenes, effects, pads, brightness dial), OBS (scene mapping, stream/recording looks, tally light, /obs browser source), CS2 and Dota 2 game events, Twitch chat commands and follow/sub/raid/cheer reactions, Discord webhook posts.
+- macOS: a .dmg with Tempolight.app; opening the app again shows the running Tempolight; Settings → Quit in the one-file app.
+
 ### Easier to install, lighter to run
 - One-file app: a single download for Windows, macOS (a .dmg with Tempolight.app, or a zip) and Linux (no Node.js or git needed), built and smoke-tested by a new release workflow that also publishes multi-arch Docker images to ghcr.io; Homebrew, Scoop and winget manifests and `npx tempolight`. Every way to install is in docs/install.md.
 - Raspberry Pi image: flash it, and Tempolight is at http://tempolight.local. With no network it opens a "Tempolight-Setup" hotspot so you can pick the Wi-Fi from your phone (docs/raspberry-pi.md).

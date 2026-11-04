@@ -57,6 +57,8 @@ designer: it knows where the beat is, which part of the song you're in, and what
 | 🌅 **Home & sleep** | Sunrise wake-up linked to your phone's alarm, a sleep timer, and an hourly ambient plan; voice control through Home Assistant |
 | 🎚️ **Show editor** | Effects, colours, flashes and brightness on the song's waveform, snapped to the beat |
 | 🔦 **DMX, Link, MIDI clock** | Moving heads, pars, lasers and fog over Art-Net/sACN; follow Ableton Link or MIDI clock |
+| 🟢 **Sync with Spotify** | Exact sync with Spotify: songs are learned on the first play and followed beat-perfectly after; optional shared beat maps |
+| 🍎 **Apple Home, Stream Deck, OBS, Twitch** | Siri and the Home app, Stream Deck buttons, OBS scenes and tally, CS2/Dota 2 game lighting, Twitch chat commands |
 | ⏱️ **One-tap timing fix** | Plays clicks, listens with the microphone and sets the light delay for your speakers, Bluetooth included |
 | 🔌 **Power limit** | Tell it your power supply's amps and the strip never draws more |
 | 🎛️ **Live pads** | Flash, strobe, blackout, freeze, build & drop, drop now, next effect, boost, tap tempo, colour hold, with keyboard shortcuts |
@@ -67,7 +69,7 @@ designer: it knows where the beat is, which part of the song you're in, and what
 | 🎹 **MIDI, clips, backups, updates** | Play the pads from a MIDI controller, record a 15-second clip to share, back up your whole setup to one file, update with one click |
 | 🔒 **PIN lock** | Guests at a party can pick effects and use the pads, but can't touch your setup |
 | 👁️ **Photosensitive-safe mode** | No more than three big flashes per second (WCAG 2.3.1) |
-| 🔌 **Integrations** | DDP, E1.31 (sACN) and Art-Net output, Govee lights (beta), OpenRGB (PC lighting), Nanoleaf, Philips Hue (basic), HTTP + WebSocket API, OSC (TouchOSC, Companion, lighting desks), WLED audio sync, Home Assistant (MQTT discovery, appears by itself) |
+| 🔌 **Integrations** | DDP, E1.31 (sACN) and Art-Net output, Govee lights (beta), OpenRGB (PC lighting), Nanoleaf, Philips Hue (Entertainment), LIFX, WiZ, Kasa, Yeelight, Twinkly, HTTP + WebSocket API, OSC (TouchOSC, Companion, lighting desks), WLED audio sync, Home Assistant (MQTT discovery, appears by itself) |
 | 📱 **An app on your phone** | Add it to your iPhone or Android home screen; it opens full screen with its own icon. Works offline in the online demo |
 | 🌐 **Online demo** | The whole app in the browser with pretend lights, deployed to Cloudflare on every push |
 
