@@ -12,21 +12,22 @@ function hashStr(s) { let h = 2166136261; for (const c of String(s)) { h ^= c.ch
  */
 export function planShow(pre, fx, o = {}) {
   const ST = fx.styles[pre.style] || fx.styles.party, prefs = o.prefs || {}, per = o.barsPer || 8, seed = hashStr(o.seed || "");
-  const pool = key => { let p = (ST.pools[key] || ST.pools.calm || ST.pools.low || []).filter(id => prefs[id] !== -1); if (!p.length) p = ST.pools[key] || [];
+  const pool = key => { let p = (ST.pools[key] || ST.pools.calm || ST.pools.low || []).filter(id => prefs[id] !== -1); if (!p.length) p = ST.pools[key] || ST.pools.calm || ST.pools.low || []; // everything banned: as the director does, use the whole pool
     const liked = p.filter(id => prefs[id] === 1); return liked.length ? [...liked, ...p.filter(id => prefs[id] !== 1)] : p; };
   const keyOf = b => ST.mode === "sections" ? (b.state === "silent" ? "calm" : b.state) : b.level < 0.35 ? "low" : b.level < 0.72 ? "mid" : "peak";
   const out = [], used = {}; let i = 0;
   const bars = pre.bars || [];
   while (i < bars.length) {
     const k = keyOf(bars[i]); let j = i; while (j + 1 < bars.length && keyOf(bars[j + 1]) === k && j + 1 - i < (k === "drop" || k === "peak" ? per / 2 : per)) j++;
-    const p = pool(k), n = used[k] = (used[k] ?? (seed % Math.max(1, p.length))) ; let eff = p[n % p.length]; used[k] = n + 1;
+    const p = pool(k); if (!p.length) { i = j + 1; continue; } // no effects for this part at all: the director chooses live
+    const n = used[k] = (used[k] ?? (seed % Math.max(1, p.length))) ; let eff = p[n % p.length]; used[k] = n + 1;
     if (out.length && out.at(-1).effect === eff && p.length > 1) { eff = p[(n + 1) % p.length]; used[k] = n + 2; }
     const part = bars[i].state;
     if (out.length && out.at(-1).effect === eff && out.at(-1).part === part) out.at(-1).t1 = bars[j].t1; // merge repeats
     else out.push({ t0: Math.round(bars[i].t0 * 1000) / 1000, t1: Math.round(bars[j].t1 * 1000) / 1000, part, effect: eff });
     i = j + 1;
   }
-  if (out.length) { out[0].t0 = 0; out.at(-1).t1 = Math.max(out.at(-1).t1, pre.dur); }
+  if (out.length) { out[0].t0 = 0; out.at(-1).t1 = Math.max(out.at(-1).t1, Math.round((pre.dur || 0) * 1000) / 1000); }
   return out;
 }
 

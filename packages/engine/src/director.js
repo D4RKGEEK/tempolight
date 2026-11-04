@@ -92,9 +92,14 @@ export function createDirector(layout, fx) {
 
   function choose(t, V) {
     const g = V.g;
+    // the music's clock jumped back (a seek, a recognised song's position replacing the live clock, the next song):
+    // a crossfade or bar count from the old clock would run backwards (or wait minutes), so start them afresh
+    if (t < st.xfadeT) st.xfadeT = t - 99;
+    if (g.has && g.idx < st.lastSwitchBeat) st.lastSwitchBeat = g.idx;
     if (settings.mode !== "auto") { const want = ids.has(settings.effect) ? settings.effect : "shock"; if (st.cur !== want) { st.prev = st.cur; st.cur = want; st.xfadeT = t; } return; }
-    if (settings.plan && settings.plan.length) { const b = showAt(settings.plan, t); // a show timeline for this song: play it
-      if (b && ids.has(b.effect)) { if (st.cur !== b.effect) { st.prev = st.cur; st.cur = b.effect; st.xfadeT = t; st.palIdx++; } return; } }
+    // a show timeline for this song: play it (an effect banned since the show was made is skipped)
+    if (settings.plan && settings.plan.length) { const b = showAt(settings.plan, t);
+      if (b && ids.has(b.effect) && settings.prefs[b.effect] !== -1) { if (st.cur !== b.effect) { st.prev = st.cur; st.cur = b.effect; st.xfadeT = t; st.palIdx++; } return; } }
     const ST = style(V);
     const sec = ST.mode === "sections" ? (V.state === "silent" ? "calm" : V.state) : V.level, pool = withPrefs(ST.pools[sec] || ST.pools.calm || ST.pools.low);
     const wrongPool = !pool.includes(st.cur), hot = sec === "drop" || sec === "peak";
@@ -169,7 +174,7 @@ export function createDirector(layout, fx) {
       S.text = extra.text || ""; S.screen = extra.screen || null;
       renderFx(st.cur, S, COL);
       if (st.prev && t - st.xfadeT < ST.xfade) {
-        const k = (t - st.xfadeT) / ST.xfade; PREV.set(COL); renderFx(st.prev, S, COL);
+        const k = Math.max(0, (t - st.xfadeT) / ST.xfade); PREV.set(COL); renderFx(st.prev, S, COL);
         for (let i = 0; i < COL.length; i++) COL[i] = PREV[i] * k + COL[i] * (1 - k);
       }
       // never let the room go dark: quiet parts fade to the ambient effect; only the planned pause before a drop is a blackout

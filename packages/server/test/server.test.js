@@ -10,7 +10,7 @@ import { due, nextRun, startScheduler } from "../src/scheduler.js";
 import { oscMessage, parseOsc } from "../src/osc.js";
 import { fileSource } from "../src/capture.js";
 import { startFakeWled } from "../../../scripts/fake-wled.js";
-import { edm } from "../../engine/test/synth.js";
+import { edm, ballad } from "../../engine/test/synth.js";
 import { preAnalyseCore } from "../../engine/src/index.js";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -423,4 +423,58 @@ test("your own effects: create, play, change, delete", async () => {
     assert.equal((await s.call("DELETE", `/api/custom-effects/${e.id}`)).status, 200);
     const st = (await s.call("GET", "/api/state")).body; assert.ok(!st.effects.some(x => x.id === e.id)); assert.equal(st.show.mode, "auto", "deleting the playing effect goes back to automatic");
   } finally { await s.done(); wled.close(); }
+});
+
+// song memory, harder cases: play remembered songs "live" through the capture source, half a second of audio at a time
+async function playLive(s, x, gain = 0.9, each = () => {}) {
+  const chunk = 11025; for (let i = 0; i < x.length; i += chunk) { const pcm = new Int16Array(chunk); for (let k = 0; k < chunk; k++) pcm[k] = Math.round(Math.max(-1, Math.min(1, (x[i + k] || 0) * gain)) * 32767);
+    s.app.runtime.pushPcm(pcm, "capture", "Line in", null, 22050); await sleep(25); if (each(s.app.runtime.status().recognised, i / 22050) === false) return; }
+}
+async function rememberSong(s, name, song) { const pre = await preAnalyseCore(song.x, song.sr);
+  await s.call("POST", "/api/song", { name, analysis: { ...pre, env: Array.from(pre.env) } }); await s.call("DELETE", "/api/song"); return pre; }
+
+test("song memory: a loud song is followed through its repetitive drop to the end, then let go; nothing extra is saved", async () => {
+  const s = await setup();
+  try {
+    await s.call("POST", "/api/devices", { virtual: true });
+    const song = edm(22050), pre = await rememberSong(s, "Anthem", song), rec = [];
+    await playLive(s, song.x, 0.95, (r, t) => { rec.push([t, r]); }); // nearly full scale: the live fingerprint must not clip
+    const first = rec.findIndex(([, r]) => r); assert.ok(first >= 0 && rec[first][0] < 20, "recognised");
+    const after = rec.slice(first).filter(([t]) => t < pre.dur - 2); assert.ok(after.every(([, r]) => r && r.name === "Anthem"), "never lets go mid-song");
+    await playLive(s, new Float32Array(22050 * 4)); assert.equal(s.app.runtime.status().recognised, null, "the song ended: back to live listening");
+    let wrong = 0; await playLive(s, ballad(22050).x, 0.9, r => { if (r) wrong++; }); assert.equal(wrong, 0, "an unknown song isn't taken for it");
+    const saved = JSON.stringify(s.app.store.data.songs); assert.ok(!/_fp|_shape/.test(saved) && saved.length < 30000, `saved songs stay small (${saved.length})`);
+  } finally { await s.done(); }
+});
+
+test("song memory: skipping to another remembered song follows the new one; turning memory off lets go", async () => {
+  const s = await setup();
+  try {
+    await s.call("POST", "/api/devices", { virtual: true });
+    const a = edm(22050), b = { x: edm(22050).x.reverse(), sr: 22050 }; await rememberSong(s, "Anthem", a); await rememberSong(s, "Backwards", b);
+    let got = null; await playLive(s, a.x, 0.5, r => { got = r; return !r; }); assert.equal(got?.name, "Anthem");
+    let switched = null; await playLive(s, b.x.subarray(3 * 22050), 0.5, (r, t) => { if (r && r.name === "Backwards") { switched = t; return false; } });
+    assert.ok(switched != null && switched < 22, `follows the new song (after ${switched} s)`);
+    await s.call("PATCH", "/api/settings", { songMemory: false }); await sleep(100); await playLive(s, b.x.subarray(25 * 22050, 27 * 22050), 0.5);
+    assert.equal(s.app.runtime.status().recognised, null, "song memory off: stops following");
+  } finally { await s.done(); }
+});
+
+test("shows: edits that overlap, don't fit the song or aren't numbers are refused; long songs and many songs fit the budget", async () => {
+  const s = await setup();
+  try {
+    const song = edm(22050), pre = await rememberSong(s, "Showtime", song), id = (await s.call("GET", "/api/songs")).body[0].id;
+    const put = show => s.call("PUT", `/api/songs/${id}/show`, { show });
+    assert.equal((await put([{ t0: 0, t1: 20, effect: "laser" }, { t0: 10, t1: 30, effect: "solar" }])).status, 400, "overlap");
+    assert.equal((await put([{ t0: 0, t1: "1e999", effect: "laser" }])).status, 400, "not a finite number");
+    assert.equal((await put([{ t0: pre.dur + 50, t1: pre.dur + 60, effect: "laser" }])).status, 400, "after the song ends");
+    const ok = await put([{ t0: 10, t1: 9999, effect: "solar" }, { t0: 0, t1: 10, effect: "laser" }]); assert.equal(ok.status, 200, "unsorted is fine");
+    assert.deepEqual(ok.body.show.map(b => [b.t0, b.effect]), [[0, "laser"], [10, "solar"]]); assert.ok(ok.body.show[1].t1 <= pre.dur + 1.01, "clipped to the song");
+    const rt = s.app.runtime, big = { ...pre, dur: 9000, kicks: Array.from({ length: 60000 }, (_, i) => i * 0.13), env: new Float32Array(450000) };
+    assert.ok(rt.remember("A whole DJ set", big) === null, "too long to remember"); assert.ok(!s.app.store.data.songs.some(e => e.name === "A whole DJ set"));
+    const mid = { ...pre, kicks: Array.from({ length: 4000 }, (_, i) => i * 0.4567), dur: 1800 };
+    for (let i = 0; i < 80; i++) rt.remember(`Song ${i}`, i % 2 ? mid : pre);
+    const list = s.app.store.data.songs; assert.ok(list.length <= 60 && JSON.stringify(list).length <= 2000000, `${list.length} songs, ${JSON.stringify(list).length} chars`);
+    assert.equal(list.at(-1).name, "Song 79", "the newest are kept");
+  } finally { await s.done(); }
 });

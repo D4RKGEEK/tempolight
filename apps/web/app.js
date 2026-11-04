@@ -315,7 +315,7 @@ function musicPage(el) {
   let showFor = null, showData = null;
   async function showLine(force) {
     const box = $("#m-show"); if (!box) return; const memId = app.status?.song?.memId; if (!memId) { box.innerHTML = '<span class="faint" style="font-size:12.5px">The show appears here once the song is remembered.</span>'; showFor = null; return; }
-    if (force || showFor !== memId || !showData) { showData = await api("GET", `/api/songs/${memId}/show`).catch(() => null); showFor = memId; }
+    if (force || showFor !== memId || !showData) { showFor = memId; showData = await api("GET", `/api/songs/${memId}/show`).catch(() => null); }
     if (!showData) return; const d = showData.dur || 1, names = Object.fromEntries(st.effects.map(e => [e.id, e.name]));
     box.innerHTML = showData.show.map((b, i) => `<button class="blk ${esc(b.part)}" type="button" data-blk="${i}" style="left:${b.t0 / d * 100}%;width:${(b.t1 - b.t0) / d * 100}%" title="${fmtTime(b.t0)}–${fmtTime(b.t1)}: ${esc(names[b.effect] || b.effect)}"><span>${esc(names[b.effect] || b.effect)}</span></button>`).join("");
     $$("#m-show [data-blk]").forEach(b => b.onclick = () => { const i = Number(b.dataset.blk), blk = showData.show[i], ed = $("#m-showed"); ed.hidden = false;
