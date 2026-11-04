@@ -5,6 +5,14 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### A new sync engine
+- New live beat tracker: lights land on 91% of beats (was 64%) across house, hip-hop, dubstep, broken beats, swing, breaks and tempo changes; it holds the beat through breaks and finds it again in under a second; kicks are heard under sidechained bass; beat 1 of the bar is found live. It also says how sure it is, and reacts to hits instead of guessing when it isn't.
+- Every light shows the beat at the same moment: each frame is drawn a little ahead and faster lights wait for the slowest (Hue, WiZ and WLED now flash together, within a few ms). Each light's delay is set by itself; the timing slider is a fine trim on top. A steadier frame loop.
+- The feel: in drops the whole room pumps on every kick; drops are clearly brighter than calm parts; every style gets a dip on the last beat before a drop, a flash and a hard cut at the drop; effects change on downbeats and 4-bar lines and never last less than a bar; drops vary every 2 bars. New settings: Punch, Drama and drop variations (Settings → Lighting).
+- Song analysis: no more half-tempo readings that turned EDM into hip-hop; the beat grid stays within ~2 ms over a whole song; the key is right for minor songs; songs are split into sections (repeats share a label) with chords and energy per bar; analysis is twice as fast.
+- Song memory recognises songs sooner (median 8 s instead of 14), through EQ, and when played up to 6% faster or slower.
+- Feel and beat checks in `npm test` (`npm run eval:beat`, `npm run eval:feel`), so a change that makes the sync worse fails the tests.
+
 ## [0.3.0] - 2026-11-04
 
 ### The sync feels right again
