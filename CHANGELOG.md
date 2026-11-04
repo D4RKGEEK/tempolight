@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Camera LED mapping (Room → Map with the camera): Tempolight lights the LEDs one at a time, a phone or laptop camera finds each one, and the strip's real shape becomes a room shape. Mirrors and reflections are skipped; missed points are filled in.
+
 - Auto-generated shows: every remembered song gets a timeline of effects, one block per section (build-ups get build effects, drops the big ones), shown under the song on the Music page. Tap a block to change its effect, or ask for a new show. Played or recognised songs follow their show in automatic mode.
 
 - Nanoleaf panels: pair by holding the power button, and the panels are placed in the room where they really are (new `points` shape: one light at each point). Streams with Nanoleaf's extControl mode at 30 fps; the token never leaves the server.

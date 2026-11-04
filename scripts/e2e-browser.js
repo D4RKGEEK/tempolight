@@ -60,6 +60,14 @@ await step("room: edit a shape's LED count and save", async () => {
   await go("room"); const inp = page.locator('#r-rows input[data-k="count"]').first(); await inp.fill("60"); await inp.dispatchEvent("change");
   await page.click("#r-save"); await until(() => app.store.data.room.shapes[0].count === 60, 4000, "room not saved");
 });
+await step("room: camera mapping runs end to end (fake camera)", async () => {
+  await go("room"); await page.click("#r-map"); await page.waitForSelector("#mp-cam"); await page.click("#mp-cam");
+  await until(() => page.isEnabled("#mp-go"), 6000, "camera didn't start"); await page.selectOption("#mp-n", "40"); await page.click("#mp-go");
+  let sawOne = false; for (let k = 0; k < 40 && !sawOne; k++) { const m = status().mapping; if (m && m.led >= 0) sawOne = true; await sleep(100); }
+  ok(sawOne, "no LED was lit for mapping");
+  await until(() => page.textContent("#mp-go").then(t => /again/.test(t)), 30000, "mapping didn't finish"); ok(!status().mapping, "mapping mode left on");
+  const msg = await page.textContent("#mp-msg"); ok(/found|hardly/i.test(msg), `no result message: ${msg}`);
+});
 await step("music: play a song, it is analysed and drives the lights", async () => {
   await go("music"); await page.setInputFiles("#m-files", path.join(root, "apps/playground/demo.mp3"));
   await until(() => status().source === "song", 60000, "song never became the source");

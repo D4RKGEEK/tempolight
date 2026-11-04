@@ -51,9 +51,10 @@ Calls marked with a guest area (effects, scenes, pads, brightness) work without 
 | `POST /api/discover` | admin | `{scan: true}` returns WLED controllers found by mDNS and a network scan, Govee lights (`kind: "govee"`) and OpenRGB devices on this computer (`kind: "openrgb"`, `index`) |
 | `GET /api/room`, `PUT /api/room` | admin | `{name, shapes: [...]}` |
 | `POST /api/room/preset` | admin | `{id: "fourwalls"}`, built for your controllers |
+| `POST /api/map` | admin | camera mapping: `{device, led}` lights only that LED (`-1`: all dark), `{end: true}` goes back to the show; also over the WebSocket as `{type: "map", device, led}`. Stops by itself after 5 s without news |
 
-A shape: `{type: "line"|"pole"|"free"|"circle"|"rect"|"hex"|"tri"|"matrix", name, dev: "<device id>", count, from: <first LED or null for "after the previous shape">, rev, ...}` plus
-`pts: [[x, y], ...]` for lines, or `cx, cy, size` (and `w, h` for rectangles, `cols, rows, w, h` for matrices). Positions are on a 16 × 9 wall view, y = 0 at the top.
+A shape: `{type: "line"|"pole"|"free"|"circle"|"rect"|"hex"|"tri"|"matrix"|"points", name, dev: "<device id>", count, from: <first LED or null for "after the previous shape">, rev, ...}` plus
+`pts: [[x, y], ...]` for lines (and for `points`: one LED exactly at each point, used by camera mapping and Nanoleaf), or `cx, cy, size` (and `w, h` for rectangles, `cols, rows, w, h` for matrices). Positions are on a 16 × 9 wall view, y = 0 at the top.
 
 ## Music
 

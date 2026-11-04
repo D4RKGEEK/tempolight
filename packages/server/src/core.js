@@ -217,6 +217,7 @@ export function createCore({ store, runtime, env }) {
   route("PATCH", "/api/requests/:id", "admin", (ctx, p) => { const r = data().requests.find(x => x.id === p.id); if (!r) throw new HttpError(404, "No such request"); if (ctx.body.done !== undefined) r.done = !!ctx.body.done; changed("requests"); return r; });
   route("DELETE", "/api/requests/:id", "admin", (ctx, p) => { const l = data().requests, i = l.findIndex(x => x.id === p.id); if (i < 0) throw new HttpError(404, "No such request"); l.splice(i, 1); changed("requests"); return { ok: true }; });
   route("DELETE", "/api/requests", "admin", () => { data().requests = []; changed("requests"); return { ok: true }; });
+  route("POST", "/api/map", "admin", (ctx) => { const b = ctx.body; if (b.end) runtime.mapLight(null); else { if (!data().devices.some(d => d.id === b.device)) throw new HttpError(404, "No such device"); runtime.mapLight(b.device, b.led ?? -1, b.level); } return { ok: true }; });
   route("GET", "/api/network", null, () => ({ addresses: env.lan ? env.lan() : [] })); // for the phone QR code
   route("GET", "/api/log", null, () => runtime.log.slice(-100));
 
@@ -357,6 +358,7 @@ export function createCore({ store, runtime, env }) {
         if (m.type === "preview") { if (m.on) runtime.previewClients.add(c); else runtime.previewClients.delete(c); }
         else if (m.type === "screen" && typeof m.px === "string") { if (c.data.auth("effects")) { try { const b = atob(m.px), px = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) px[i] = b.charCodeAt(i);
           runtime.setScreen(Number(m.w) | 0, Number(m.h) | 0, px, String(m.label || "").slice(0, 80)); } catch {} } }
+        else if (m.type === "map") { if (c.data.auth(null)) runtime.mapLight(m.end ? null : String(m.device), m.led ?? -1, m.level); } // camera mapping (admin)
         else if (m.type === "phone") { if (m.on) { if (!runtime.phones.has(c)) { runtime.phones.add(c); runtime.note(`A phone joined as a light (${runtime.phones.size} now)`); } } else runtime.phones.delete(c); }
         else if (m.type === "audio-start") { c.data.audio = { rate: Number(m.rate) || 22050, label: String(m.label || "Browser audio").slice(0, 80) }; }
         else if (m.type === "audio-stop") { c.data.audio = null; runtime.stopLive(c.data.id); }

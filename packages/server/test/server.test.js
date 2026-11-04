@@ -368,3 +368,20 @@ test("auto-generated shows: a remembered song gets a timeline the director follo
     const fresh = (await s.call("DELETE", `/api/songs/${id}/show`)).body; assert.ok(fresh.show.length >= 3); assert.equal((await s.call("GET", `/api/songs/${id}/show`)).body.edited, false);
   } finally { await s.done(); }
 });
+
+test("camera mapping: one LED at a time, then back to the show", async () => {
+  const wled = await startFakeWled({ leds: 50 }), s = await setup();
+  try {
+    const add = await s.call("POST", "/api/devices", { host: wled.host }); await s.call("PATCH", `/api/devices/${add.body.id}`, { ddpPort: wled.ddpPort });
+    await s.call("PATCH", "/api/show", { effect: "solar" }); assert.ok(await until(() => lum(wled) > 3));
+    await s.call("POST", "/api/map", { device: add.body.id, led: 7 });
+    const lit = () => { const f = wled.lastFrame, on = []; for (let i = 0; i < f.length / 3; i++) if (f[i * 3] + f[i * 3 + 1] + f[i * 3 + 2] > 0) on.push(i); return on; };
+    assert.ok(await until(() => { const on = lit(); return on.length === 1 && on[0] === 7; }), "only LED 7 is lit");
+    await s.call("POST", "/api/map", { device: add.body.id, led: -1 }); assert.ok(await until(() => lit().length === 0), "all dark for the reference picture");
+    await s.call("POST", "/api/map", { end: true }); assert.ok(await until(() => lit().length > 10), "the show comes back");
+    assert.equal((await s.call("POST", "/api/map", { device: "nope", led: 1 })).status, 404);
+    const pts = [[1, 1], [2, 1], [3, 2]], room = (await s.call("GET", "/api/room")).body;
+    const put = await s.call("PUT", "/api/room", { ...room, shapes: [{ type: "points", name: "Mapped", count: 3, dev: add.body.id, pts, from: 0 }] }); assert.equal(put.status, 200);
+    assert.deepEqual(s.app.runtime.layoutInfo().n ?? s.app.runtime.layout.N, 3);
+  } finally { await s.done(); wled.close(); }
+});

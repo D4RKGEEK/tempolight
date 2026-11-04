@@ -245,3 +245,8 @@ body.demo .side { top: 0; padding-top: 0; }
 .showline .blk span { pointer-events: none; }
 .showline .blk.calm, .showline .blk.silent { background: #4a6fa5; } .showline .blk.build { background: #c58a1d; } .showline .blk.drop { background: #c8366e; }
 .showline .blk:focus-visible { outline: 2px solid var(--text, #000); outline-offset: -2px; }
+
+/* camera mapping */
+.mapview { position: relative; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 4 / 3; max-height: 60vh; }
+.mapview video, .mapview canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; }
+.mapview .empty { position: absolute; inset: 0; display: grid; place-items: center; color: #ccc; padding: 16px; text-align: center; }

@@ -2,6 +2,7 @@
 // live status the server sends 4 times a second.
 import { createAudio } from "/audio.js";
 import { roomPage } from "/room.js";
+import { mapPage } from "/mapper.js";
 import { createRenderer } from "/preview.js";
 
 export const $ = (s, r = document) => r.querySelector(s);
@@ -690,12 +691,12 @@ function settingsPage(el) {
 
 // ---------------------------------------------------------------- router and boot
 const PAGES = { home: ["Home", homePage], music: ["Music", musicPage], effects: ["Effects", effectsPage], live: ["Live pads", livePage], scenes: ["Scenes & schedules", scenesPage],
-  room: ["Room", el => unlocked() ? roomPage(el) : lockScreen(el, "Room setup")], devices: ["Devices", devicesPage], settings: ["Settings", settingsPage] };
+  room: ["Room", el => unlocked() ? roomPage(el) : lockScreen(el, "Room setup")], map: ["Camera mapping", el => unlocked() ? mapPage(el) : lockScreen(el, "Room setup")], devices: ["Devices", devicesPage], settings: ["Settings", settingsPage] };
 export function route() {
   const name = (location.hash.match(/^#\/(\w+)/) || [])[1] || "home", [title, fn] = PAGES[name] || PAGES.home;
   if (app.page?.destroy) app.page.destroy();
   if (app.page?.preview) ws.send({ type: "preview", on: false });
-  $$("#nav a").forEach(a => a.toggleAttribute("aria-current", a.dataset.page === name)); $("#title").textContent = title; document.title = `${title} · Tempolight`;
+  $$("#nav a").forEach(a => a.toggleAttribute("aria-current", a.dataset.page === (name === "map" ? "room" : name))); $("#title").textContent = title; document.title = `${title} · Tempolight`;
   const el = $("#page"); el.innerHTML = ""; app.page = fn(el) || {};
   if (app.status) app.page.onStatus?.(app.status);
   $("#side").classList.remove("open");

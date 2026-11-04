@@ -201,8 +201,13 @@ export function createRuntime(store, { io, logger = console } = {}) {
     // copy each shape's LEDs into its controller's buffer at its segment range
     const shapes = data().room.shapes;
     const sendNow = sh.power || now - rt.powerOffAt < 600; // after power-off, send black briefly, then go quiet
+    const map = rt.mapping && now - rt.mapping.at < 5000 ? rt.mapping : null; if (!map) rt.mapping = null;
     for (const d of data().devices) {
       const o = outs.get(d.id); if (!o || !d.enabled) continue;
+      if (map) { // camera mapping: everything dark except the one LED being looked for
+        const n = Math.max(o.size, d.leds || 0); if (!o.mapBuf || o.mapBuf.length !== n * 3) o.mapBuf = new Uint8Array(n * 3); o.mapBuf.fill(0);
+        if (map.dev === d.id && map.led >= 0 && map.led < n) o.mapBuf.fill(map.level, map.led * 3, map.led * 3 + 3);
+        if (!d.virtual) o.sender.send(o.mapBuf); continue; }
       o.buf.fill(0);
       shapes.forEach((sp, si) => { if (sp.dev !== d.id) return; const r = ranges[si], a = L.chainStart[si], n = Math.min(sp.type === "matrix" ? sp.cols * sp.rows : sp.count, o.size - r.start);
         if (n > 0) o.buf.set(col8.subarray(a * 3, (a + n) * 3), r.start * 3); });
@@ -224,6 +229,8 @@ export function createRuntime(store, { io, logger = console } = {}) {
     if (phones.size && previewTick % Math.max(1, Math.round((s.fps || 60) / 30)) === 0) sendPhones(sh.power ? 1 : 0);
     rt.frames++; fpsN++; if (now - fpsT > 1000) { rt.fps = fpsN * 1000 / (now - fpsT); fpsN = 0; fpsT = now; }
   }
+  /** Camera mapping: light only LED `led` of device `dev` (-1: all dark); call again within 5 s to keep it going, or end(). */
+  function mapLight(dev, led, level = 200) { if (dev == null) { rt.mapping = null; return; } rt.mapping = { dev, led: Number(led), level: Math.max(20, Math.min(255, level)), at: performance.now() }; }
   /** A small picture of a shared screen (RGB bytes), for the Screen Sync effect. */
   function setScreen(w, h, px, label) { if (!(w > 0 && h > 0 && w * h <= 4096 && px.length >= w * h * 3)) return false; rt.screen = { w, h, px, at: performance.now(), label }; return true; }
   function sendPhones(on) {
@@ -320,7 +327,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
       type: "status", source: rt.source, sourceLabel: rt.sourceLabel, fps: Math.round(rt.fps), leds: L.N, effect: D.showing, effectName: fx.list.find(e => e.id === D.showing)?.name || D.showing, style: D.style,
       styleName: fx.styles[D.style]?.name || D.style, bpm: V && V.bpm ? Math.round(V.bpm * 10) / 10 : null, part: V ? V.state : "idle",
       beat: V && V.g.has ? V.g.beatInBar : null, level: an ? Math.round(Math.min(1, an.eFast / an.eMax) * 100) / 100 : V ? Math.round((V.loud || 0) * 100) / 100 : 0,
-      bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, djlink: djFresh(performance.now()) ? { name: rt.dj.name, bpm: rt.dj.bpm, beatInBar: rt.dj.beatInBar } : null, recognised: rt.mem.lock && liveFresh() ? { id: rt.mem.lock.id, name: rt.mem.lock.name, pos: Math.round((rt.mem.lock.pos0 + rt.live.an.t - rt.mem.lock.t0) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
+      bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, mapping: rt.mapping ? { device: rt.mapping.dev, led: rt.mapping.led } : null, djlink: djFresh(performance.now()) ? { name: rt.dj.name, bpm: rt.dj.bpm, beatInBar: rt.dj.beatInBar } : null, recognised: rt.mem.lock && liveFresh() ? { id: rt.mem.lock.id, name: rt.mem.lock.name, pos: Math.round((rt.mem.lock.pos0 + rt.live.an.t - rt.mem.lock.t0) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
       song: rt.song ? { memId: rt.song.memId || null, name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
       capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null,
       overlay: overlayState(), devices: data().devices.map(d => ({ id: d.id, ...health.get(d.id), sent: outs.get(d.id)?.sender.sent || 0, used: outs.get(d.id)?.used || 0, amps: Math.round((outs.get(d.id)?.amps || 0) * 100) / 100, limited: !!outs.get(d.id)?.limited })),
@@ -345,7 +352,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
   return {
     get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, rt, log, listeners, previewClients, phones, health,
     rebuild, syncDirector, startLoop, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
-    identify, syncSegments, setPower, action, status, setScreen, remember, forget, djBeat, planFor, layoutInfo, checkDevice, note,
+    identify, syncSegments, setPower, action, status, setScreen, remember, forget, djBeat, planFor, mapLight, layoutInfo, checkDevice, note,
     close() { clearInterval(timer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
   };
 }
