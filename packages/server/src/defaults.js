@@ -7,7 +7,7 @@ export const DEFAULTS = () => ({
     syncOffsets: {}, // light timing per sound output (hearing.js finds which one plays): {key: {ms, name, bt}}
     hearing: { method: "" }, // how Tempolight hears music: "computer" (server capture of this computer's sound), "mic" (a browser's microphone), "pi" (automatic, Linux), or "" (not chosen)
     performance: "auto", // auto, full or lite: low-power mode for small computers (Pi Zero 2 W, Pi 3), see perf.js
-    ambient: "northern", idleBrightness: 0.5, idleAfterSec: 8, dropFlash: true,
+    ambient: "northern", idleBrightness: 0.5, idleAfterSec: 8, dropFlash: true, punch: 0.7, dynamics: 0.8, variations: true,
     audioSync: false, osc: { enabled: false, port: 9000 }, autoDiscover: true,
     capture: { enabled: false, source: "auto", command: "" }, metronome: { enabled: false, bpm: 120 },
     guest: { effects: true, scenes: true, pads: true, brightness: true },

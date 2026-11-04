@@ -45,7 +45,7 @@ layout or the senders), and what the director was doing carries over (the effect
 blackout and strobe).
 
 `syncDirector()` copies `show` and `settings` into `director.settings` (mode, effect, style, palette, everyBeats, speed,
-ambient, moodColours, safe, dropFlash, prefs, params, layer, zones), applying night mode (warm palette, safe on, no drop
+ambient, moodColours, safe, dropFlash, night, punch, dynamics, variations, prefs, params, layer, zones), applying night mode (warm palette, safe on, no drop
 flash).
 
 ## Health and latency

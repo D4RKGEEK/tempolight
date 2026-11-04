@@ -6,7 +6,7 @@ import { createFixtures } from "./fixtures.js";
 import { createBeatSources } from "./beatsources.js";
 import { noteRtt, audioDelay, deviceLatency, lightLatency, timingPlan, newestSampleClock, level, LOOKAHEAD_CAP_MS } from "./latency.js";
 import { createPerf, LITE } from "./perf.js";
-import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, gridAt, toRGB8, LiveAnalyser, memoryEntry, memoryAnalysis, recognise, matchAt, refineByKicks, planShow, drumlessEntry, hearsLabel, moodName } from "../../engine/src/index.js";
+import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, gridAt, toRGB8, LiveAnalyser, memoryEntry, memoryAnalysis, recognise, matchAt, refineByKicks, planShow, SHOW_VERSION, drumlessEntry, hearsLabel, moodName } from "../../engine/src/index.js";
 // Everything that touches the network or the sound card comes in through `io` (see node-io.js), so the same runtime
 // runs on a PC or Pi and, with pretend devices, inside the browser for the online demo.
 
@@ -82,7 +82,8 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     const s = data().settings, sh = data().show;
     const night = !!rt.night; // night mode: no strobing, warm colours
     Object.assign(D.settings, { mode: sh.mode, effect: sh.effect, style: sh.style, palette: night && s.night.warm ? "sunset" : sh.palette, everyBeats: sh.everyBeats, speed: sh.speed,
-      ambient: s.ambient, moodColours: s.moodColours !== false, safe: s.safe || night, dropFlash: s.dropFlash && !night, prefs: s.effectPrefs || {}, params: sh.params || {}, layer: sh.layer || null, zones: data().room.zones || [] });
+      ambient: s.ambient, moodColours: s.moodColours !== false, safe: s.safe || night, dropFlash: s.dropFlash && !night, night,
+      punch: s.punch ?? 0.7, dynamics: s.dynamics ?? 0.8, variations: s.variations !== false, prefs: s.effectPrefs || {}, params: sh.params || {}, layer: sh.layer || null, zones: data().room.zones || [] });
   }
   let col8 = new Uint8Array(0);
 
@@ -197,7 +198,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     while (list.length > 60 || (total > MEM_ALL && list.length > 1)) total -= JSON.stringify(list.shift()).length;
     store.save(); return e;
   }
-  const SHOW_V = 2; // shows made by an older planner (one effect per 8 bars, flat in drops) are made again, unless edited by hand
+  const SHOW_V = SHOW_VERSION; // shows made by an older planner are made again, unless edited by hand
   const planFor = (e, seed = e.name + ":" + Date.now()) => planShow(memoryAnalysis(e), fx, { seed, prefs: data().settings.effectPrefs, everyBeats: data().show.everyBeats }); // "New show": a new seed
   /** The show timeline for the song playing now (played or recognised), when shows are on. */
   function currentPlan() {

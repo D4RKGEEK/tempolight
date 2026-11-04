@@ -757,6 +757,9 @@ function settingsPage(el) {
       <div class="field"><label for="s-perf">Performance</label><select id="s-perf">${opt("auto", "Automatic", (s.performance || "auto") === "auto")}${opt("full", "Full", s.performance === "full")}${opt("lite", "Low power (small computers)", s.performance === "lite")}</select><span class="help">Low power: at most 30 fps, a lighter preview and fewer updates. Automatic picks it on a Raspberry Pi Zero or Pi 3, or when this computer can't keep up.</span><span class="help" id="s-perf-st"></span></div>
       <label class="check"><input type="checkbox" id="s-safe" ${s.safe ? "checked" : ""}> Photosensitive-safe mode (at most 3 flashes a second)</label>
       <label class="check"><input type="checkbox" id="s-dropf" ${s.dropFlash ? "checked" : ""}> Flash on drops</label>
+      <div class="field"><label for="s-punch">Punch <output id="s-punch-o">${Math.round((s.punch ?? 0.7) * 100)}%</output></label><input type="range" id="s-punch" min="0" max="1" step="0.05" value="${s.punch ?? 0.7}"><span class="help">How hard the whole room pumps on each kick in a drop.</span></div>
+      <div class="field"><label for="s-dyn">Drama <output id="s-dyn-o">${Math.round((s.dynamics ?? 0.8) * 100)}%</output></label><input type="range" id="s-dyn" min="0" max="1" step="0.05" value="${s.dynamics ?? 0.8}"><span class="help">How much brighter drops are than calm parts, with a dip just before each drop.</span></div>
+      <label class="check"><input type="checkbox" id="s-vary" ${s.variations !== false ? "checked" : ""}> Vary drops every 2 bars (colour flip, mirror)</label>
     </div>`, "span-12")}
     ${panel("Integrations", "", "", `<div class="pb controls">
       <label class="check"><input type="checkbox" id="s-sync" ${s.audioSync ? "checked" : ""}> Send WLED audio sync (lets WLED's own sound effects react too)</label>
@@ -813,7 +816,8 @@ function settingsPage(el) {
   $("#s-amb").onchange = e => setS({ ambient: e.target.value });
   range("s-idleb", "idleBrightness", v => Math.round(v * 100) + "%"); range("s-idlea", "idleAfterSec", v => v + " s"); range("s-fps", "fps", v => v + " fps");
   $("#s-perf").onchange = e => setS({ performance: e.target.value });
-  $("#s-safe").onchange = e => setS({ safe: e.target.checked }); $("#s-dropf").onchange = e => setS({ dropFlash: e.target.checked });
+  $("#s-safe").onchange = e => setS({ safe: e.target.checked }); $("#s-dropf").onchange = e => setS({ dropFlash: e.target.checked }); $("#s-vary").onchange = e => setS({ variations: e.target.checked });
+  for (const [id, k] of [["s-punch", "punch"], ["s-dyn", "dynamics"]]) { const r = $(`#${id}`); r.oninput = () => { $(`#${id}-o`).textContent = `${Math.round(r.value * 100)}%`; }; r.onchange = () => setS({ [k]: Number(r.value) }); }
   $("#s-sync").onchange = e => setS({ audioSync: e.target.checked }); $("#s-disc").onchange = e => setS({ autoDiscover: e.target.checked });
   $("#s-dj").onchange = e => setS({ djlink: { enabled: e.target.checked } }); $("#s-link").onchange = e => setS({ link: { enabled: e.target.checked } });
   $("#s-osc").onchange = e => setS({ osc: { enabled: e.target.checked } }); $("#s-oscport").onchange = e => setS({ osc: { port: Number(e.target.value) } });

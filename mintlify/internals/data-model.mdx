@@ -56,6 +56,9 @@ Changed with `PATCH /api/settings` (admin) unless noted; out-of-range numbers ar
 | `idleBrightness` | number 0-1 | `0.5` | brightness factor while idle in automatic mode |
 | `idleAfterSec` | number 1-600 | `8` | seconds of live silence before going idle |
 | `dropFlash` | boolean | `true` | white flash at drops |
+| `punch` | 0-1 | `0.7` | how hard the room pumps on each kick in a drop (Settings → Punch) |
+| `dynamics` | 0-1 | `0.8` | how much brightness follows the song part, and the dip before a drop (Settings → Drama) |
+| `variations` | boolean | `true` | drops change look every 2 bars (colour flip, mirror) between effect changes |
 | `audioSync` | boolean | `false` | send WLED audio sync packets |
 | `osc` | `{enabled, port}` | `{enabled: false, port: 9000}` | OSC over UDP (port 1024-65535) |
 | `autoDiscover` | boolean | `true` | look for WLED controllers on a first start |

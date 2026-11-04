@@ -433,7 +433,8 @@ default: [internals/data-model.md](internals/data-model.md#settings).
 | Key | Value |
 | --- | --- |
 | `brightness`, `fps`, `syncOffsetMs`, `idleBrightness`, `idleAfterSec` | numbers (0-1, 10-120, -500..500, 0-1, 1-600) |
-| `safe`, `predict`, `dropFlash`, `audioSync`, `autoDiscover`, `setupDone`, `songMemory`, `moodColours`, `requests`, `shows` | booleans |
+| `punch`, `dynamics` | 0 to 1: the kick pump in drops and how much brightness follows the song part |
+| `safe`, `predict`, `dropFlash`, `variations`, `audioSync`, `autoDiscover`, `setupDone`, `songMemory`, `moodColours`, `requests`, `shows` | booleans |
 | `performance` | `"auto"`, `"full"` or `"lite"`: low-power mode for small computers. Lite caps the frame rate at 30 fps, sends the preview and phones 15 times a second and status twice a second, and the live analyser works out chroma every second frame and the vocal estimate at half rate. Auto picks lite on a Raspberry Pi Zero, 1, 2 or 3, a 32-bit ARM processor, one core or two slow ones, or when the frame loop can't keep up for 10 seconds. `status.perf` is `{mode, setting, why, fps, frameMs, cpu}` |
 | `ambient` | an effect id or `"off"` |
 | `capture` | `{enabled, source: "auto"\|<id>, command}` |
