@@ -5,6 +5,16 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-04
+
+### The sync feels right again
+- Automatic shows are what the live director would play: the same effects, changing every 2 bars in drops and as soon as the song moves to a new part. Before, a song played once got a show that changed effect only every 8 bars, so replays (and the demo track) felt flat. Old automatic shows are planned again by themselves; shows edited by hand are kept.
+- Steadier song parts: a moment is "silent" only after 0.6 s of quiet, and a bar lasts until the next one starts, so build-ups no longer flicker to a calm effect between hits or at bar lines.
+
+### Fixed
+- DMX: the manual fog pad works right after fog is turned on (it used to read the settings of the frame before).
+- Firmware CI: the usermod smoke test finds the WLED checkout again; Windows checkouts keep LF line endings (`.gitattributes`), so the API route checks pass there.
+
 ### Hearing the music, and the docs
 - "How should Tempolight hear your music?": a guided panel on the Music page (and a setup wizard step) with three ways: this computer's sound (macOS with BlackHole and a live checklist; Linux output monitor; Windows Stereo Mix), the microphone (remembered, starts by itself when an unlearned song plays), or automatic on a Raspberry Pi. After the Mac setup you just play Spotify: no tab, no mic.
 - Bluetooth speakers are detected and the light timing is kept per speaker, switching by itself when the output changes.
@@ -128,5 +138,7 @@ versions follow [Semantic Versioning](https://semver.org/).
 - Room layouts, WLED segments, DDP output, WLED audio-sync packets.
 - Browser playground.
 
+[Unreleased]: https://github.com/D4RKGEEK/tempolight/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/D4RKGEEK/tempolight/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/D4RKGEEK/tempolight/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/D4RKGEEK/tempolight/releases/tag/v0.1.0

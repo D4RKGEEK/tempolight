@@ -488,7 +488,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       case "cancel": rt.forced = null; Object.assign(o, { strobe: false, blackout: false, freeze: false, hold: null, boost: 1 }); break;
       case "tap": tap(); break;
       case "identify": identify(a); break;
-      case "fog": { const r = fixtures.manualFog(on ?? true, wall); if (!r.ok && on !== false) note(`Fog: ${r.why}`, "warn"); break; } // the manual fog pad (DMX)
+      case "fog": { const r = fixtures.manualFog(on ?? true, wall, data().settings.dmx); if (!r.ok && on !== false) note(`Fog: ${r.why}`, "warn"); break; } // the manual fog pad (DMX)
       default: throw new Error(`Unknown action "${a.type}"`);
     }
     return overlayState();

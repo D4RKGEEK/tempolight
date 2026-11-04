@@ -44,7 +44,7 @@ test("DTLS: a wrong PSK or identity fails with a clear error, and nothing answer
 });
 
 const haveOpenssl = spawnSync("openssl", ["version"]).status === 0;
-test("DTLS: interoperates with OpenSSL's s_server (PSK-AES128-GCM-SHA256, cookie exchange)", { skip: !haveOpenssl && "openssl isn't installed" }, async () => {
+test("DTLS: interoperates with OpenSSL's s_server (PSK-AES128-GCM-SHA256, cookie exchange)", { skip: !haveOpenssl ? "openssl isn't installed" : process.platform === "win32" && "the OpenSSL that comes with Git for Windows doesn't serve DTLS over -listen" }, async () => {
   const psk = crypto.randomBytes(16), port = 20000 + Math.floor(Math.random() * 30000);
   const p = spawn("openssl", ["s_server", "-dtls1_2", "-listen", "-nocert", "-psk", psk.toString("hex"), "-psk_identity", "tempolight", "-cipher", "PSK-AES128-GCM-SHA256", "-accept", `127.0.0.1:${port}`, "-quiet"], { stdio: ["pipe", "pipe", "pipe"] });
   let out = "", err = ""; p.stdout.on("data", d => out += d); p.stderr.on("data", d => err += d);

@@ -129,7 +129,10 @@ jobs:
             gh release upload "$GITHUB_REF_NAME" release/* --clobber
           else
             flags=""; [ "$PRERELEASE" = "true" ] && flags="--prerelease"
-            gh release create "$GITHUB_REF_NAME" release/* --verify-tag --title "Tempolight $VER" --generate-notes $flags
+            # the notes: this version's section of CHANGELOG.md (or GitHub's generated notes when there is none)
+            awk -v v="$VER" '$0 ~ "^## \\[" v "\\]" {on=1; next} on && /^## \[/ {exit} on' CHANGELOG.md > notes.md
+            if [ -s notes.md ]; then notes="--notes-file notes.md"; else notes="--generate-notes"; fi
+            gh release create "$GITHUB_REF_NAME" release/* --verify-tag --title "Tempolight $VER" $notes $flags
           fi
       - name: Homebrew tap and Scoop bucket
         if: env.HOMEBREW_TAP_TOKEN != '' && env.PRERELEASE != 'true'

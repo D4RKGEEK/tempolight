@@ -126,7 +126,7 @@ director takes from every source:
 | --- | --- |
 | `g` | `gridAt(pre, t)`: `{has, P, phase (0-1 within the beat), idx (beat number), beatInBar (0-3), env (decay since the beat, 0.18 s), barPhase (0-1 within the bar), beatT (time of this beat)}` |
 | `bpm`, `style` | from the analysis |
-| `state` | the bar's part, or `silent` where the envelope is under 0.1 |
+| `state` | the bar's part (a bar lasts until the next one starts, across gaps under 1 s), or `silent` once the envelope has stayed under 0.1 for 0.6 s (the gaps between the hits of a build-up aren't silence) |
 | `buildP` | 0-1 progress through the current run of build bars |
 | `loud` | mean envelope over the last 300 ms |
 | `level` | `low` / `mid` / `peak` from the bar's level and the loudness |

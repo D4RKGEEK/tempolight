@@ -155,9 +155,12 @@ A remembered song can carry a **show**: a timeline the director plays instead of
 `settings.shows` on and automatic mode).
 
 `planShow(pre, fx, {seed, prefs, barsPer})` ([`show.js`](../../packages/engine/src/show.js)) makes one from the
-analysis: runs of bars of the same part (at most 8 bars, 4 in drops) get an effect from the style's pool, chosen
-by a seed hashed from the song name, so the same song always gets the same show; repeats are merged. The first block
-starts at 0 and the last ends at the song's end.
+analysis by playing the song through the director's own `choose()` on `songView` in quarter-beat steps: the same
+pools, preferences, "change every N beats" (halved in hot parts, so drops change every 2 bars) and the switch as
+soon as the part changes. So an automatic show is exactly what the live director would have played, only fixed: the
+same song always gets the same show. Blocks shorter than a second (or two beats) and equal neighbours are merged;
+the first block starts at 0 and the last ends at the song's end. Shows are versioned (`showV`): an automatic show
+made by an older version is planned again when it's next read, while a show edited by hand is kept.
 
 [`timeline.js`](../../packages/engine/src/timeline.js) adds what the show editor makes, all in seconds on the song's
 clock, kept to the millisecond:

@@ -245,7 +245,7 @@ export const schemas = {
     latency: obj({ audioMs: num(), analysisMs: num(), networkMs: num(), frameMs: num(), offsetMs: num() }), latencyLevel: en(["good", "ok", "slow", "none"]),
     warnings: arr(obj({ kind: en(["offline", "wifi", "frames", "notlive", "power", "slow"]), text: str() })),
   }, { description: "One device in the status; also has its DeviceHealth fields." }),
-  Health: obj({ ok: bool(), version: str(), uptime: num(), fps: int(), leds: int() }, { required: ["ok"], example: { ok: true, version: "0.2.0", uptime: 3600, fps: 60, leds: 240 } }),
+  Health: obj({ ok: bool(), version: str(), uptime: num(), fps: int(), leds: int() }, { required: ["ok"], example: { ok: true, version: "0.3.0", uptime: 3600, fps: 60, leds: 240 } }),
   LogEntry: obj({ t: num(), level: en(["info", "warn", "error"]), msg: str() }, { example: { t: 1762200000000, level: "info", msg: "Scene: Party mode" } }),
 
   // ------------------------------------------------------------ the rest: loosely, as the code builds them
@@ -273,5 +273,5 @@ export const schemas = {
   Wifi: obj({ available: bool(), mode: en(["watch", "hotspot", "connecting", "retry"]), ssid: nullable(str()), hotspot: { description: "The setup hotspot." }, lastResult: { description: "How the last connection went." } },
     { required: ["available"], example: { available: false } }),
   Backup: obj({ tempolight: str("The version that made it."), savedAt: iso, data: loose("Everything except the PIN: devices, room, scenes, schedules, settings, songs (saved passwords and tokens too).") },
-    { required: ["data"], example: { tempolight: "0.2.0", savedAt: "2026-11-04T12:00:00.000Z", data: { devices: [], room: { name: "My room", shapes: [], zones: [] }, scenes: [] } } }),
+    { required: ["data"], example: { tempolight: "0.3.0", savedAt: "2026-11-04T12:00:00.000Z", data: { devices: [], room: { name: "My room", shapes: [], zones: [] }, scenes: [] } } }),
 };

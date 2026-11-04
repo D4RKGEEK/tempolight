@@ -310,6 +310,7 @@ test("song memory: a song played once is recognised later when heard live, and i
     assert.ok(found, "recognised"); assert.equal(found.name, "Synth anthem");
     const heard = i / 22050, truth = start + s.app.runtime.rt.live.an.t;
     assert.ok(Math.abs(found.pos - truth) < 0.15, `position ${found.pos} vs ${truth}`); assert.ok(heard < 20, `took ${heard} s`);
+    await until(() => /Synth anthem \(recognised\)/.test(s.app.runtime.status().sourceLabel), 2000); // the label follows on the next frame
     assert.match(s.app.runtime.status().sourceLabel, /Synth anthem \(recognised\)/);
     assert.equal((await s.call("DELETE", `/api/songs/${list[0].id}`)).status, 200); assert.equal((await s.call("GET", "/api/songs")).body.length, 0);
     assert.equal(s.app.runtime.status().recognised, null, "forgetting a song stops following it");

@@ -6,6 +6,7 @@ on:
 jobs:
   test:
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
@@ -16,7 +17,7 @@ jobs:
       - uses: actions/setup-node@v5
         with:
           node-version: ${{ matrix.node }}
-      - run: npm test
+      - run: node --test --test-timeout=180000
         env:
           CI: "true"
       - name: Server starts and answers

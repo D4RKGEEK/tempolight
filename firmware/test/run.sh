@@ -6,6 +6,7 @@
 #   WLED_DIR=../WLED npm run test:firmware
 # Needs a C++17 compiler (g++ or clang++; set CXX to choose).
 set -euo pipefail
+[ -n "${WLED_DIR:-}" ] && WLED_DIR="$(cd "$WLED_DIR" && pwd)"   # relative to where it was run, before the cd below
 cd "$(dirname "${BASH_SOURCE[0]}")/.."
 CXX="${CXX:-$(command -v g++ || command -v clang++ || true)}"
 if [ -z "$CXX" ] || ! command -v "$CXX" >/dev/null; then echo "firmware tests: no C++ compiler found (install g++ or clang++, or set CXX)" >&2; exit 1; fi

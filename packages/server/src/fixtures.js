@@ -67,7 +67,7 @@ export function createFixtures() {
     const strobeOK = live && !overlay.blackout && !safe && !night;
     const strobe = strobeOK ? (overlay.strobe ? 0.85 : V && V.state === "drop" && S.sinceDrop < 2 ? 0.6 : 0) : 0;
     fogTick(wall, cfg, S, V, live);
-    F = { cfg, S, V, t, wall, live, dark: !live || !!overlay.blackout, lasers: !laserWhy, laserWhy, strobe, strobePad: strobeOK && !!overlay.strobe, bri };
+    F = { cfg, S, V, t, wall, live, power, dark: !live || !!overlay.blackout, lasers: !laserWhy, laserWhy, strobe, strobePad: strobeOK && !!overlay.strobe, bri };
   }
 
   function headState(f, prof, hi, nh, r, g, b, pt) {
@@ -114,8 +114,10 @@ export function createFixtures() {
   }
 
   /** The manual fog pad: on starts fog (up to FOG_MANUAL_MAX seconds, within the duty cycle), off stops it. */
-  function manualFog(on, wall) {
-    const cfg = F.cfg || DMX_DEFAULTS;
+  // settings: the current DMX settings (a change made a moment ago may not have reached a frame yet)
+  function manualFog(on, wall, settings = null) {
+    const cfg = settings ? { ...DMX_DEFAULTS, ...settings } : F.cfg || DMX_DEFAULTS;
+    if (settings && F.cfg) { F.cfg = cfg; F.live = !!(cfg.enabled && F.power !== false); }
     if (!on) { if (fog.manual) { fog.manual.end = Math.min(fog.manual.end, wall); fog.lastEnd = fog.manual.end; fog.manual = null; } return { ok: true }; }
     if (!(F.live && cfg.fog)) return { ok: false, why: !cfg.fog ? "Fog is off in the DMX settings" : "DMX output or the lights are off" };
     if (fog.manual) return { ok: true };

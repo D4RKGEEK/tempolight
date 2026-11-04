@@ -1,6 +1,6 @@
 {
   "name": "tempolight",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Music-reactive lighting for WLED that understands the song: beats, build-ups, drops and mood.",
   "license": "MIT",
   "type": "module",
