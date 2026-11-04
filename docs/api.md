@@ -46,6 +46,26 @@ the public address in `TEMPOLIGHT_ALLOWED_ORIGINS` (comma-separated, for example
 | `POST /api/schedules` | admin | `{name, time: "19:00", days: [1,2,3,4,5], action: {type: "scene", scene: "<id>"}}`; action types `scene`, `on`, `off`, `brightness` (`value`) |
 | `PUT /api/schedules/:id`, `DELETE /api/schedules/:id`, `POST /api/schedules/:id/run` | admin | |
 
+## Home & sleep
+
+Sunrise alarm, sleep timer and the ambient plan for the day; see [wake-up.md](wake-up.md) for phone automations.
+The wake and sleep calls work for guests when the brightness area is allowed, or with the link key
+(`?key=<key>`, header `x-tempolight-key`, or `key` in the body), which opens these calls only.
+
+| Call | Area | Body |
+| --- | --- | --- |
+| `GET /api/home` | | `{wake, sleep, plan, status}`; `wake.key` only when unlocked |
+| `PUT /api/home` | admin | any of `{wake: {enabled, source: "times"\|"phone", days: ["", "07:00", ...] (7, Sunday first), duration: 10–40, target: "all"\|"zone:<id>"\|"dev:<id>", endColor, endBrightness, holdMin, snoozeMin}, sleep: {minutes}, plan: {enabled, fade, reset: true, rows: [{name, from, to, look: "white"\|"night"\|<effect>, palette, kelvin, brightness}]}}` |
+| `POST /api/wake` | brightness or key | `{inMinutes?, at?: "07:00"\|ISO date\|ms, duration?}`: full light at that time (none: start now). 409 when wake-up is off |
+| `POST /api/wake/snooze` | brightness or key | `{minutes?}` |
+| `POST /api/wake/stop` | brightness or key | stops the running sunrise |
+| `DELETE /api/wake` | brightness or key | cancels the next sunrise, or skips the next weekly alarm |
+| `POST /api/sleep`, `DELETE /api/sleep` | brightness or key | `{minutes?}` (1–180): fade out and turn off; cancelled by a brightness or power change |
+| `POST /api/wake/key` | admin | makes a new link key |
+
+`GET /api/status` has `home: {wake: {phase: "pending"|"rising"|"snoozed"|"holding"|"ending", start, end, progress, snoozeUntil} | null, nextWake, sleep: {end, progress, left} | null, plan: {name, night, fading} | null}`.
+The Home Assistant device also gets the buttons Sleep timer, Snooze wake-up and Stop wake-up (`tempolight/action/set` with `sleep`, `wake_snooze`, `wake_stop`).
+
 ## Devices and room
 
 | Call | Area | Body |

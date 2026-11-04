@@ -119,6 +119,7 @@ export function createDirector(layout, fx) {
   }
 
   function renderAmbient(t, out) {
+    if (settings.ambientHook && settings.ambientHook(t, out)) return true; // the ambient plan for this hour (Home & sleep)
     if (settings.ambient === "off" || !ids.has(settings.ambient)) { out.fill(0); return false; }
     renderFx(settings.ambient, idleSignals(t * settings.speed, palette(), settings.palette !== "auto"), out); return true;
   }
@@ -201,6 +202,7 @@ export function createDirector(layout, fx) {
         const b = brightAt(TL.bright, t); if (b != null && b !== 1) for (let i = 0; i < COL.length; i++) COL[i] *= b;
       }
     }
+    if (settings.post) settings.post(COL, wall); // sunrise alarm and sleep timer (Home & sleep): on top of the show, under the pads
     overlays(wall);
     if (settings.safe) limiter(wall);
     for (let i = 0; i < COL.length; i++) { const v = COL[i]; COL[i] = v === v ? Math.max(0, v) : 0; }
