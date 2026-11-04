@@ -4,6 +4,7 @@ import { createAudio } from "/audio.js";
 import { createRenderer } from "/preview.js";
 import { homeStrip, bindHomeStrip, updateHomeStrip } from "/homestrip.js";
 import { latencyChip, warnIcons, homeBadge, latencyPanel } from "/latency.js";
+import { hearLine, wantsAutoMic } from "/hearline.js";
 // Loaded the first time they are needed, so the first visit downloads only what the Home page uses: the Room, Camera
 // mapping, Show editor and Home & sleep pages, the DMX panels, the MIDI clock and the setup wizard (see lazyPage below;
 // sw.js keeps them all for offline use).
@@ -23,6 +24,7 @@ export const DEMO = !!document.querySelector('meta[name="tempolight-demo"]') || 
 let demo = null;
 let NP = null; // "now playing" from music apps on the server's computer (nowplaying.js; not in the demo)
 let SP = null; // the "Sync with Spotify" panel (spotify.js; in the demo it only explains)
+let HR = null; // the "How should Tempolight hear your music?" panel on the Music page (hearing.js)
 
 // ---------------------------------------------------------------- server access
 export async function api(method, path, body) {
@@ -72,7 +74,24 @@ function onStatus(m) {
   $("#power").setAttribute("aria-checked", m.power);
   const bri = $("#bri"); if (document.activeElement !== bri) { bri.value = Math.round(m.brightness * 100); $("#bri-out").textContent = bri.value + "%"; }
   const off = m.devices.filter(d => d.online === false).length; const cd = $("#c-devices"); cd.textContent = off ? `${off} offline` : (m.devices.length || ""); cd.className = "count" + (off ? " warn" : "");
-  app.page?.onStatus?.(m); wizardStatus(m);
+  app.page?.onStatus?.(m); wizardStatus(m); autoMic(m);
+}
+// The microphone, when it was chosen as the way to hear music (hearing.js): started by itself when Spotify (or another
+// player) plays a song Tempolight hasn't learned and nothing else sends its sound; stopped a minute after the music stops.
+const mic = { lastTry: 0, auto: false, playedAt: 0 };
+function autoMic(m) {
+  const A = app.audio; if (!A) return; const now = Date.now(), method = store.get("hear") === "mic" ? "mic" : app.state?.settings.hearing?.method || "";
+  const playing = !!(m.spotify?.track?.playing || m.nowPlaying?.playing); if (playing) mic.playedAt = now;
+  if (wantsAutoMic(m, { method, mode: A.state.mode, now, lastTry: mic.lastTry })) {
+    mic.lastTry = now; A.listen("mic", store.get("input") || "").then(() => { if (A.state.mode === "mic") { mic.auto = true; toast("Listening with the microphone: keep this tab open"); } }).catch(() => {});
+  } else if (mic.auto && A.state.mode === "mic" && !playing && now - mic.playedAt > 60000) { mic.auto = false; A.stopLive(); }
+  if (A.state.mode !== "mic") mic.auto = false;
+}
+/** The status line ("Hearing Spotify ✓ · song · learning 42%", or "Can't hear anything → Fix") into `el`. */
+export function paintHearLine(el, m) {
+  if (!el) return; const l = hearLine(m);
+  el.className = `hearline ${l.ok === true ? "ok" : l.ok === false ? "bad" : ""}`; el.title = l.why || "";
+  el.innerHTML = `<span>${esc(l.text)}</span>${l.fix ? ` <a href="#/music/hear" class="hear-fix">${l.ok === false ? "Fix" : "Set up"} →</a>` : ""}`;
 }
 function chrome() {
   const st = app.state; $("#ver").textContent = "v" + st.version; $("#c-effects").textContent = st.effects.length;
@@ -136,6 +155,7 @@ function homePage(el) {
       </div><p class="faint" id="s-msg"></p></div>`) : ""}
     ${panel("Live preview", `<span id="h-fx"></span>`, `<span class="badge" id="h-leds"></span><button class="btn" id="h-rec" type="button" title="Record 15 seconds of the preview with the music">Record clip</button><a class="btn" href="#/room">Edit room</a>`, `<div class="stage" id="h-stage">${noDevices ? '<div class="empty">No lights yet</div>' : ""}</div>`, "span-8")}
     ${panel("Now playing", `<span id="h-src"></span>`, `<span class="badge acc" id="h-style"></span>`, `<div class="pb np stack">
+      <div class="hearline" id="h-hear"></div>
       <div><div class="song" id="h-song">Nothing playing</div><div class="meta" id="h-meta">Play a song or listen to your computer on the Music page.</div></div>
       <div class="kv"><div><span>Tempo</span><b id="h-bpm">–</b></div><div><span>Part</span><b id="h-part">–</b></div><div><span>Level</span><b id="h-level">–</b></div></div>
       <div class="row" style="justify-content:space-between"><div class="beat" id="h-beat"><i></i><i></i><i></i><i></i></div><a class="btn" href="#/music">Music</a></div>
@@ -191,6 +211,7 @@ function homePage(el) {
       $("#h-song").textContent = m.song ? m.song.name : m.source === "idle" ? "Nothing playing" : m.sourceLabel;
       $("#h-meta").textContent = m.song ? `${Math.round(m.song.bpm)} BPM · ${app.state.styles[m.song.style] || m.song.style}${m.song.drops?.length ? ` · ${m.song.drops.length} drop${m.song.drops.length > 1 ? "s" : ""}` : ""}` : m.source === "idle" ? "Play a song or listen to your computer on the Music page." : "Listening live";
       const np = NP?.homeText(m); if (np) { $("#h-song").textContent = np.song; $("#h-meta").textContent = np.meta; }
+      paintHearLine($("#h-hear"), m);
       $("#h-transport").hidden = !(a.mode === "song" && a.song);
       if (a.song) { const d = A.duration, p = A.pos(); $("#h-fill").style.width = (p / d * 100) + "%"; $("#h-pos").textContent = fmtTime(p); $("#h-dur").textContent = fmtTime(d); $("#h-play").textContent = a.song.playing ? "Pause" : "Play"; }
       $("#h-black").setAttribute("aria-pressed", m.overlay.blackout); updateHomeStrip(m);
@@ -209,9 +230,10 @@ function homePage(el) {
 }
 
 // ---------------------------------------------------------------- Music
+const namedInput = id => String(id || "").includes(":") ? opt(id, id.slice(id.indexOf(":") + 1), true) : ""; // "avf:BlackHole 2ch", chosen by the hearing panel
 function musicPage(el) {
   const st = app.state, A = app.audio, s = st.settings;
-  el.innerHTML = `
+  el.innerHTML = `<div id="m-hear"></div>
     ${panel("Play songs", "Best timing: songs are analysed first, so the lights know where the drops are", `<label class="btn primary" for="m-files">Add songs…</label><input type="file" id="m-files" accept="audio/*" multiple hidden><button class="btn" id="m-demo" type="button">Play the demo track</button>`,
       `<div class="pb stack"><div id="m-now"></div><div class="tablewrap"><table><thead><tr><th>#</th><th>Song</th><th class="num">Tempo</th><th>Style</th><th class="num">Drops</th><th></th></tr></thead><tbody id="m-queue"></tbody></table></div></div>`, "span-8")}
     ${panel("Listen live", "For music you play anywhere else: Spotify, YouTube, a DJ app", "", `<div class="pb stack">
@@ -227,8 +249,10 @@ function musicPage(el) {
       <div class="kv"><div><span>Tempo</span><b id="m-bpm">–</b></div><div><span>Part</span><b id="m-part">–</b></div><div><span>Style</span><b id="m-style">–</b></div><div><span>Singing</span><b id="m-voc" title="An estimate from the sound: a clear tone whose pitch moves like a voice">–</b></div><div style="grid-column: span 2"><span>Key · mood</span><b id="m-key" title="The key from which notes sound most; the mood from major or minor, brightness, drums and tempo">–</b></div></div>
       <div class="row"><button class="btn" id="m-tap" type="button">Tap the beat</button><span class="faint" style="font-size:12.5px">Tap 4 times on the beat to fix the tempo and line up the beat.</span></div></div>`, "span-6")}
     ${panel("Timing", "", "", `<div class="pb stack">
-      <div class="field"><label for="m-off">Light timing <output id="m-off-o">${s.syncOffsetMs} ms</output></label><input type="range" id="m-off" min="-300" max="300" step="5" value="${s.syncOffsetMs}">
-        <span class="help">If the lights come after the beat, move this to the right; if they come before it, move it left. Bluetooth speakers often need +150 to +250.</span></div>
+      <div class="callout warn" id="m-btcal" hidden><b>Bluetooth speakers play late — fix the timing.</b> <span id="m-btname"></span></div>
+      <div class="field"><label for="m-off">Light timing <span class="faint" id="m-offfor"></span> <output id="m-off-o">${app.status?.offsetMs ?? s.syncOffsetMs} ms</output></label><input type="range" id="m-off" min="-300" max="300" step="5" value="${app.status?.offsetMs ?? s.syncOffsetMs}">
+        <span class="help">If the lights come after the beat, move this to the right; if they come before it, move it left. Bluetooth speakers play late, so they often need −150 to −250. Each speaker keeps its own timing, and it switches by itself when the Mac's (or PC's) output changes.</span></div>
+      <div class="field" id="m-offs" hidden><span class="lbl">Timing per speaker</span><div class="tablewrap"><table><tbody id="m-offrows"></tbody></table></div></div>
       <div class="row"><button class="btn" id="m-cal" type="button">Fix the timing automatically</button><span class="faint" id="m-cal-msg" style="font-size:12.5px">Plays a few clicks and listens with the microphone, so turn the speakers up and keep quiet for 5 seconds.</span></div>
       <label class="check"><input type="checkbox" id="m-pred" ${s.predict ? "checked" : ""}> Predict beats when listening live (lights land on the beat instead of just after it)</label>
       <div class="field"><label>Metronome when nothing plays</label><div class="row"><label class="check"><input type="checkbox" id="m-met" ${s.metronome.enabled ? "checked" : ""}> On</label><input type="number" id="m-bpmset" min="40" max="220" value="${s.metronome.bpm}" style="width:90px"> <span class="faint">BPM</span></div></div>
@@ -243,11 +267,13 @@ function musicPage(el) {
       <p class="muted">Share a film, a game or a music video and the room takes its colours, like a big ambilight. Turns on the Screen Sync effect; pick another effect to go back.</p>
       <span class="help" id="m-scrhelp">${navigator.mediaDevices?.getDisplayMedia ? "Works in Chrome, Edge and Firefox on a computer. Keep the shared tab or window visible." : "This browser can't share its screen. Use a computer."}</span></div>`, "span-6")}
     ${DEMO ? "" : panel("Listen on the server", "For a Raspberry Pi or PC next to the speakers, with no browser open", `<button class="btn" id="m-cap" type="button"></button>`, `<div class="pb stack">
-      <div class="field"><label for="m-capsrc">Sound input</label><select id="m-capsrc">${opt("auto", "Automatic", s.capture.source === "auto")}${st.captureSources.map(c => opt(c.id, c.label, c.id === s.capture.source)).join("")}</select>
+      <div class="field"><label for="m-capsrc">Sound input</label><select id="m-capsrc">${opt("auto", "Automatic", s.capture.source === "auto")}${st.captureSources.map(c => opt(c.id, c.label, c.id === s.capture.source)).join("")}${namedInput(s.capture.source)}</select>
       ${st.captureSources.length ? "" : '<span class="help">No capture tool found on the server. Install ffmpeg (or PulseAudio/ALSA tools on Linux), or enter a command below.</span>'}</div>
       <div class="field"><label for="m-capcmd">Custom command (optional)</label><input id="m-capcmd" class="mono" placeholder='ffmpeg -f pulse -i default -ac 1 -ar 22050 -f s16le -' value="${esc(s.capture.command)}"><span class="help">Any command that writes 16-bit mono 22,050 Hz audio to its output.</span></div>
       <div id="m-capst" class="faint"></div></div>`, "span-12")}`;
   const canShare = !!navigator.mediaDevices?.getDisplayMedia;
+  import("/hearing.js").then(mod => { if (!$("#m-hear")) return; HR = mod.mountHearing($("#m-hear")); if (app.status) HR?.status(app.status);
+    if (/^#\/music\/hear/.test(location.hash)) { const h = $("#hear"); h?.scrollIntoView({ block: "start" }); h?.classList.add("flash"); } }).catch(() => {});
   if (!DEMO) import("/nowplaying.js").then(mod => { NP = mod; mod.mount($("#m-np")); if (app.status) mod.status(app.status); }).catch(() => {});
   import("/spotify.js").then(mod => { SP = mod; mod.mount($("#m-sp"), { demo: DEMO }); if (app.status) mod.status(app.status); }).catch(() => {});
   const fmtT = v => `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, "0")}`;
@@ -291,14 +317,21 @@ function musicPage(el) {
       if (!r.ok) { msg.textContent = r.heard ? `The clicks were hard to hear (${r.heard} of ${r.sent}). Turn the speakers up, move the phone or computer closer, and try again.` : "The microphone didn't hear the clicks. Turn the speakers up and try again."; return; }
       const { offsetFromDelay } = await import("/calibrate.js"), off = offsetFromDelay(r.delayMs, r.reportedOutputMs);
       await api("PATCH", "/api/settings", { syncOffsetMs: off }); await refreshState();
-      $("#m-off").value = off; $("#m-off-o").textContent = off + " ms";
-      msg.textContent = `Speakers to microphone: ${Math.round(r.delayMs)} ms. Light timing set to ${off > 0 ? "+" : ""}${off} ms.`;
+      $("#m-off").value = off; $("#m-off-o").textContent = off + " ms"; offRows();
+      const o = app.status?.hearing?.output;
+      msg.textContent = `Speakers to microphone: ${Math.round(r.delayMs)} ms. Light timing set to ${off > 0 ? "+" : ""}${off} ms${o ? ` for ${o.name}` : ""}.`;
     } catch (e) { msg.textContent = e.name === "NotAllowedError" ? "Microphone permission was refused." : `Couldn't measure: ${e.message}`; }
     finally { b.disabled = !unlocked(); }
   };
   $("#m-tap").onclick = () => api("POST", "/api/action", { type: "tap" }).catch(e => toast(e.message, true));
   const setS = b => act(() => api("PATCH", "/api/settings", b)).then(refreshState).catch(() => {});
-  $("#m-off").oninput = e => $("#m-off-o").textContent = e.target.value + " ms"; $("#m-off").onchange = e => setS({ syncOffsetMs: Number(e.target.value) });
+  $("#m-off").oninput = e => $("#m-off-o").textContent = e.target.value + " ms"; $("#m-off").onchange = e => setS({ syncOffsetMs: Number(e.target.value) }).then(offRows);
+  // the timing each speaker keeps (settings.syncOffsets), with the one playing now marked
+  function offRows() { const list = Object.entries(app.state.settings.syncOffsets || {}), box = $("#m-offs"); if (!box) return; box.hidden = !list.length; const cur = app.status?.hearing?.output?.key;
+    $("#m-offrows").innerHTML = list.map(([k, o]) => `<tr><td>${esc(o.name)}${o.bt ? ' <span class="badge">Bluetooth</span>' : ""}${k === cur ? ' <span class="badge live">playing now</span>' : ""}</td><td class="num mono">${o.ms > 0 ? "+" : ""}${o.ms} ms</td><td>${lockedOut ? "" : `<button class="btn sm" type="button" data-offdel="${esc(k)}">Forget</button>`}</td></tr>`).join("")
+      + `<tr><td class="faint">Any other output</td><td class="num mono faint">${app.state.settings.syncOffsetMs > 0 ? "+" : ""}${app.state.settings.syncOffsetMs} ms</td><td></td></tr>`;
+    $$("[data-offdel]").forEach(b => b.onclick = () => setS({ syncOffsets: { [b.dataset.offdel]: null } }).then(offRows)); }
+  offRows();
   $("#m-pred").onchange = e => setS({ predict: e.target.checked });
   $("#m-moodc").onchange = e => setS({ moodColours: e.target.checked });
   $("#m-met").onchange = e => setS({ metronome: { enabled: e.target.checked } }); $("#m-bpmset").onchange = e => setS({ metronome: { bpm: Number(e.target.value) } });
@@ -346,8 +379,10 @@ function musicPage(el) {
   }
   renderQueue(); songs(); requests();
   const partName = { calm: "Calm", build: "Build-up", drop: "Drop", silent: "Quiet", idle: "–" };
+  let offFor;
   return {
-    onAudio: renderQueue, onLog(e) { if (/^Remembered|^Song memory|^Spotify: (learned|got)/.test(e.msg)) songs(); }, onChanged(w) { if (w.has("requests")) requests(); if (w.has("songs")) songs(); },
+    destroy() { HR?.destroy(); HR = null; },
+    onAudio: renderQueue, onLog(e) { if (/^Remembered|^Song memory|^Spotify: (learned|got)/.test(e.msg)) songs(); }, onChanged(w) { if (w.has("requests")) requests(); if (w.has("songs")) songs(); if (w.has("settings") || w.has("output")) offRows(); },
     onStatus(m) {
       $("#m-src").textContent = m.sourceLabel; $("#m-bpm").textContent = m.bpm ? m.bpm.toFixed(0) : "–"; $("#m-part").textContent = partName[m.part] || m.part; $("#m-style").textContent = m.source === "idle" ? "–" : m.styleName; $("#m-voc").textContent = m.vocal == null ? "–" : m.vocal > 0.35 ? "Yes" : m.vocal > 0.15 ? "A little" : "No";
       $("#m-key").textContent = m.source === "idle" || !m.hears ? "–" : m.hears;
@@ -355,6 +390,11 @@ function musicPage(el) {
       const lv = A.level(); $("#m-lvl").style.width = Math.round(lv * 100) + "%"; $("#m-lvl-o").textContent = A.state.stream ? (lv < 0.02 ? "very quiet: turn it up or move closer" : Math.round(lv * 100) + "%") : "not listening";
       if (m.song?.memId && m.song.memId !== showFor) showLine();
       if (A.state.song && $("#m-fill")) { const p = A.pos(); $("#m-fill").style.width = (p / A.duration * 100) + "%"; $("#m-pos").textContent = fmtTime(p); }
+      HR?.status(m);
+      const o = m.hearing?.output, bt = $("#m-btcal"); $("#m-offfor").textContent = o ? `for ${o.name}` : "";
+      bt.hidden = !(o && o.bluetooth && !o.own); if (!bt.hidden) $("#m-btname").textContent = `${o.name}: press Fix the timing automatically below (it keeps the timing for this speaker).`;
+      if (m.offsetMs != null && document.activeElement !== $("#m-off") && Number($("#m-off").value) !== m.offsetMs) { $("#m-off").value = m.offsetMs; $("#m-off-o").textContent = m.offsetMs + " ms"; }
+      if (o?.key !== offFor) { offFor = o?.key; offRows(); }
       if (DEMO) return;
       NP?.status(m); SP?.status(m);
       const c = app.state.settings.capture; $("#m-cap").textContent = c.enabled ? "Stop listening on the server" : "Start listening on the server";

@@ -2,7 +2,10 @@
 export const DEFAULTS = () => ({
   version: 2,
   settings: {
-    brightness: 0.8, fps: 60, safe: false, syncOffsetMs: 0, predict: true,
+    brightness: 0.8, fps: 60, safe: false, predict: true,
+    syncOffsetMs: 0, // light timing (ms) when the sound output isn't known or has no timing of its own
+    syncOffsets: {}, // light timing per sound output (hearing.js finds which one plays): {key: {ms, name, bt}}
+    hearing: { method: "" }, // how Tempolight hears music: "computer" (server capture of this computer's sound), "mic" (a browser's microphone), "pi" (automatic, Linux), or "" (not chosen)
     performance: "auto", // auto, full or lite: low-power mode for small computers (Pi Zero 2 W, Pi 3), see perf.js
     ambient: "northern", idleBrightness: 0.5, idleAfterSec: 8, dropFlash: true,
     audioSync: false, osc: { enabled: false, port: 9000 }, autoDiscover: true,

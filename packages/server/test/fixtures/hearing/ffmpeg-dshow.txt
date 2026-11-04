@@ -1,0 +1,8 @@
+[dshow @ 000001f4c8a0e8c0] "Integrated Webcam" (video)
+[dshow @ 000001f4c8a0e8c0]   Alternative name "@device_pnp_\\?\usb#vid_0bda&pid_5521&mi_00#6&2b1c1f4b&0&0000#{65e8773d-8f56-11d0-a3b9-00a0c9223196}\global"
+[dshow @ 000001f4c8a0e8c0] "Microphone Array (Realtek(R) Audio)" (audio)
+[dshow @ 000001f4c8a0e8c0]   Alternative name "@device_cm_{33D9A762-90C8-11D0-BD43-00A0C911CE86}\wave_{8F4E1A2B-0000-0000-0000-000000000001}"
+[dshow @ 000001f4c8a0e8c0] "Stereo Mix (Realtek(R) Audio)" (audio)
+[dshow @ 000001f4c8a0e8c0]   Alternative name "@device_cm_{33D9A762-90C8-11D0-BD43-00A0C911CE86}\wave_{8F4E1A2B-0000-0000-0000-000000000002}"
+[in#0 @ 000001f4c8a0d840] Error opening input: Immediate exit requested
+Error opening input file dummy.

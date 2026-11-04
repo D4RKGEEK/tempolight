@@ -18,7 +18,7 @@ export function explain(m) {
   if (t.remembered && !t.posKnown) return `${t.app} doesn't say where in the song it is, so Tempolight can't follow its saved beat map. Listening live works instead.`;
   const live = ["browser", "capture"].includes(m.source) || /\(quiet\)$/.test(m.sourceLabel || "");
   if (live) return `This song isn't remembered yet, so the lights react to what Tempolight hears (${m.sourceLabel}). Play the song's file once on this page and next time they follow its beat map.`;
-  return `This song isn't remembered and Tempolight hears nothing, so the lights can't follow it. Listen live (above), or play the song's file once on this page so it's remembered.`;
+  return `This song isn't remembered and Tempolight hears nothing, so the lights can't follow it. Set up How should Tempolight hear your music? (top of this page), or play the song's file once on this page so it's remembered.`;
 }
 
 /** For the Home page's "Now playing" card when no song plays in the app: {song, meta} or null. */

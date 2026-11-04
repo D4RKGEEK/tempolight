@@ -1,0 +1,85 @@
+{
+  "SPAudioDataType" : [
+    {
+      "_items" : [
+        {
+          "_name" : "BlackHole 2ch",
+          "coreaudio_device_input" : 2,
+          "coreaudio_device_manufacturer" : "Existential Audio Inc.",
+          "coreaudio_device_output" : 2,
+          "coreaudio_device_srate" : 48000,
+          "coreaudio_device_transport" : "coreaudio_device_type_virtual",
+          "coreaudio_input_source" : "spaudio_default",
+          "coreaudio_output_source" : "spaudio_default"
+        },
+        {
+          "_name" : "MacBook Pro Microphone",
+          "coreaudio_default_audio_input_device" : "spaudio_yes",
+          "coreaudio_device_input" : 1,
+          "coreaudio_device_manufacturer" : "Apple Inc.",
+          "coreaudio_device_srate" : 48000,
+          "coreaudio_device_transport" : "coreaudio_device_type_builtin",
+          "coreaudio_input_source" : "MacBook Pro Microphone"
+        },
+        {
+          "_name" : "MacBook Pro Speakers",
+          "coreaudio_device_manufacturer" : "Apple Inc.",
+          "coreaudio_device_output" : 2,
+          "coreaudio_device_srate" : 48000,
+          "coreaudio_device_transport" : "coreaudio_device_type_builtin",
+          "coreaudio_output_source" : "MacBook Pro Speakers"
+        },
+        {
+          "_name" : "JBL Flip 5",
+          "coreaudio_device_manufacturer" : "Harman",
+          "coreaudio_device_output" : 2,
+          "coreaudio_device_srate" : 48000,
+          "coreaudio_device_transport" : "coreaudio_device_type_bluetooth",
+          "coreaudio_output_source" : "spaudio_default"
+        },
+        {
+          "_name" : "Multi-Output Device",
+          "coreaudio_default_audio_output_device" : "spaudio_yes",
+          "coreaudio_default_audio_system_device" : "spaudio_yes",
+          "coreaudio_device_manufacturer" : "Apple Inc.",
+          "coreaudio_device_output" : 2,
+          "coreaudio_device_srate" : 48000,
+          "coreaudio_device_transport" : "coreaudio_device_type_aggregate"
+        }
+      ],
+      "_name" : "coreaudio_device"
+    }
+  ],
+  "SPBluetoothDataType" : [
+    {
+      "controller_properties" : {
+        "controller_address" : "F0:18:98:00:00:01",
+        "controller_chipset" : "BCM_4387",
+        "controller_state" : "attrib_on"
+      },
+      "device_connected" : [
+        {
+          "JBL Flip 5" : {
+            "device_address" : "B8:F6:53:00:00:02",
+            "device_minorType" : "Speaker",
+            "device_services" : "0x800019 < HFP AVRCP A2DP ACL >"
+          }
+        },
+        {
+          "Magic Mouse" : {
+            "device_address" : "AC:49:DB:00:00:03",
+            "device_minorType" : "Mouse"
+          }
+        }
+      ],
+      "device_not_connected" : [
+        {
+          "AirPods Pro" : {
+            "device_address" : "60:93:16:00:00:04",
+            "device_minorType" : "Headphones"
+          }
+        }
+      ]
+    }
+  ]
+}

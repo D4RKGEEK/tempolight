@@ -15,7 +15,7 @@ const DEFAULT_PORT = { govee: 4003, openrgb: 6742, nanoleaf: 60222, hue: 80 }; /
 /**
  * @param {{data:object, save:()=>void}} store
  * @param {{io:object, logger?:Console|null, now?:()=>Date, host?:object|null, cpuUsage?:()=>{user:number, system:number}}} opts now: the wall clock (night mode); io: DDPSender, AudioSyncSender, getInfo, setState, setSegments, ipOf,
- *   discoverWled, startCapture, listSources, splitCommand, RATE, hostInfo (optional: the computer, for the performance mode);
+ *   discoverWled, startCapture, listSources, sourceFor (optional: named inputs, "avf:BlackHole 2ch"), splitCommand, RATE, hostInfo (optional: the computer, for the performance mode);
  *   host: what to use instead of io.hostInfo() (tests); cpuUsage: process.cpuUsage, for the CPU figure in the status
  */
 export function createRuntime(store, { io, logger = console, now = () => new Date(), host, cpuUsage = null } = {}) {
@@ -31,7 +31,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   const fixtures = createFixtures(), beats = createBeatSources(); // DMX fixtures; MIDI clock and Ableton Link beat grids
   const health = new Map(); // device id -> {online, rssi, version, ledsReported, lastSeen, error}
   const rt = {
-    frames: 0, fps: 0, perf, startedAt: Date.now(), source: "idle", sourceLabel: "Nothing playing", mem: { lock: null, cand: null },
+    frames: 0, fps: 0, perf, startedAt: Date.now(), startedAtPerf: performance.now(), source: "idle", sourceLabel: "Nothing playing", mem: { lock: null, cand: null },
     live: null,      // {an, kind, label, lastPush, clientId}
     capture: null,   // {proc, sourceId, label, error}
     song: null,      // {name, pre, pos, playing, rate, at, clientId}
@@ -39,6 +39,9 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     taps: [], view: null, powerOffAt: 0, mapEndAt: -1e9,
     nowPlaying: null, // set by nowplaying.js on a PC: {follow(now), memId, info()}: what the music apps here play
     spotify: null,    // set by spotify.js on a PC: {info(), paused(), dim(), timeline(tl)}; and pcmTap(samples, rate, kind, inMs): what is heard, to learn songs
+    hearing: null,    // set by hearing.js on a PC: {info()}: the guided set-up's view (method, what's detected, problems)
+    heardBy: {},      // kind ("browser", "capture") -> {rms, at, soundAt, label}: how loud each live source is, even one not in use
+    output: null,     // the sound output this computer plays to, from hearing.js: {key, name, bluetooth}; its own light timing in settings.syncOffsets
   };
 
   function rebuild() {
@@ -85,6 +88,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
 
   // ---------------------------------------------------------------- music sources
   function pushPcm(samples, kind, label, clientId, rate = RATE, inMs = 0) { // inMs: the browser's estimate of its capture delay (latency meter)
+    heard(samples, kind, label);
     if (!rt.live || rt.live.kind !== kind || rt.live.clientId !== clientId || rt.live.rate !== rate) {
       if (rt.live && rt.live.kind === "browser" && kind === "capture" && performance.now() - rt.live.lastPush < 1500) return; // a browser that is sending wins
       rt.live = { an: new LiveAnalyser(rate), kind, label, clientId, rate, lastPush: 0, started: performance.now() }; rt.mem.lock = null; rt.mem.cand = null; memT = 0; memJob = null;
@@ -93,6 +97,37 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     const t0 = performance.now(); rt.live.an.push(samples); perf.add("analysis", performance.now() - t0); rt.live.lastPush = performance.now(); rt.live.inMs = inMs; rt.live.chunkMs = samples.length / rate * 1000;
     if (rt.pcmTap) rt.pcmTap(samples, rate, kind, inMs);
   }
+  // how loud each kind of live source is (BlackHole sends exact zeros when nothing reaches it), for "Tempolight hears it"
+  const SOUND_RMS = 0.0015; // about -56 dBFS: a quiet room through a microphone is more, digital silence is 0
+  function heard(samples, kind, label) {
+    const isInt = samples instanceof Int16Array, k = isInt ? 1 / 32768 : 1; let e = 0;
+    for (let i = 0; i < samples.length; i++) { const v = samples[i] * k; e += v * v; }
+    const rms = Math.sqrt(e / Math.max(1, samples.length)), now = performance.now(), h = rt.heardBy[kind] || (rt.heardBy[kind] = { rms: 0, at: 0, soundAt: -1e9, label });
+    h.rms = h.at && now - h.at < 1000 ? h.rms * 0.7 + rms * 0.3 : rms; h.at = now; h.label = label; if (rms > SOUND_RMS) h.soundAt = now;
+  }
+  /** What Tempolight hears right now, for the status line and the guided set-up. */
+  function hearingInfo() {
+    const now = performance.now(), fresh = h => !!h && now - h.at < 1500, br = rt.heardBy.browser, cap = rt.heardBy.capture;
+    const via = fresh(br) ? "browser" : fresh(cap) ? "capture" : null, h = via === "browser" ? br : via === "capture" ? cap : null;
+    const lv = x => fresh(x) ? Math.round(Math.min(1, Math.sqrt(x.rms) * 2.2) * 100) / 100 : 0;
+    return { via, label: h ? h.label : null, sound: !!h && now - h.soundAt < 3000, level: lv(h), silentSec: h ? Math.round(Math.min(600, (now - Math.max(h.soundAt, rt.startedAtPerf)) / 1000)) : null,
+      capture: rt.capture ? { label: rt.capture.label, source: rt.capture.sourceId || null, running: !!rt.capture.proc, error: rt.capture.error || null, sound: fresh(cap) && now - cap.soundAt < 3000, level: lv(cap) } : null,
+      method: data().settings.hearing?.method || "", output: outputInfo(), ...(rt.hearing ? rt.hearing.info() : {}) };
+  }
+  // ---------------------------------------------------------------- light timing, per sound output
+  // settings.syncOffsetMs is the timing used when the output isn't known (or has no timing of its own yet); each output
+  // that was timed (a Bluetooth speaker plays ~200 ms late, the laptop's own speakers don't) keeps its own in
+  // settings.syncOffsets {key: {ms, name, bt}}, and it switches by itself when the output changes.
+  function syncOffset() { const s = data().settings, k = rt.output?.key, o = k && s.syncOffsets ? s.syncOffsets[k] : null; return o && Number.isFinite(o.ms) ? o.ms : s.syncOffsetMs || 0; }
+  function outputInfo() { const o = rt.output; if (!o) return null; const own = data().settings.syncOffsets?.[o.key]; return { ...o, offsetMs: syncOffset(), own: !!own }; }
+  /** hearing.js: the output now playing (null: not known). A change is noted, with the timing it brings. */
+  function setOutput(o) {
+    const next = o && o.key ? { key: String(o.key).slice(0, 160), name: String(o.name || o.key).slice(0, 120), bluetooth: !!o.bluetooth, ...(o.guess ? { guess: true } : {}) } : null;
+    if (JSON.stringify(next) === JSON.stringify(rt.output)) return false;
+    const had = rt.output; rt.output = next;
+    if (next && had) note(`Sound output is now ${next.name}${next.bluetooth ? " (Bluetooth)" : ""}: light timing ${syncOffset() > 0 ? "+" : ""}${syncOffset()} ms`);
+    return true;
+  }
   function liveFresh() { return rt.live && performance.now() - rt.live.lastPush < 1500; }
   function stopLive(clientId) { if (rt.live && (clientId == null || rt.live.clientId === clientId)) { note(`Stopped listening to ${rt.live.label}`); rt.live = null; rt.mem.lock = null; rt.mem.cand = null; } }
 
@@ -100,9 +135,12 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     stopCaptureSource();
     const c = data().settings.capture; let src;
     if (c.command) src = { id: "custom", label: "Custom capture command", cmd: splitCommand(c.command) };
+    else if (/^\w+:/.test(c.source || "")) { // a named input (BlackHole 2ch, Stereo Mix, a sink's monitor): that one or none, never the microphone instead
+      src = io.sourceFor?.(c.source) || null; // (capture.js; the demo has none)
+      if (!src) { rt.capture = { sourceId: c.source, label: c.source.replace(/^\w+:/, ""), error: `The sound input “${c.source.replace(/^\w+:/, "")}” can't be used here.` }; note(rt.capture.error, "warn"); return rt.capture; } }
     else { const all = listSources(); src = (c.source && c.source !== "auto" && all.find(s => s.id === c.source)) || all[0]; }
     if (!src) { rt.capture = { error: "No audio capture tool found on this computer (install ffmpeg, or use a browser as the audio source)." }; note(rt.capture.error, "warn"); return rt.capture; }
-    const cap = { sourceId: src.id, label: src.label, error: null };
+    const cap = { sourceId: src.id, label: src.label, error: null, startedAt: performance.now() };
     cap.proc = startCapture(src.cmd, a => pushPcm(a, "capture", src.label, "capture"), why => {
       if (rt.capture !== cap) return;
       cap.error = why === "ended" ? null : why; cap.proc = null; if (why !== "ended") note(`Audio capture: ${why}`, "warn");
@@ -238,7 +276,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   const previewClients = new Set(), phones = new Set(), syncSender = { s: null };
 
   function currentView(now) {
-    const s = data().settings, off = (s.syncOffsetMs || 0) / 1000;
+    const s = data().settings, off = syncOffset() / 1000;
     if (rt.song && rt.song.playing && now - rt.song.at < 4000) {
       const t = rt.song.pos + (now - rt.song.at) / 1000 * rt.song.rate + off;
       rt.source = "song"; rt.sourceLabel = rt.song.name;
@@ -473,7 +511,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, key: V && V.key ? { key: V.key, mode: V.mode, name: `${V.key} ${V.mode}`, confidence: V.keyConf ?? 0 } : null, mood: V && V.mood ? { ...V.mood, name: moodName(V.mood) } : null, hears: V ? hearsLabel(V.key, V.mode, V.mood) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, mapping: rt.mapping ? { device: rt.mapping.dev, led: rt.mapping.led } : null, djlink: djFresh(performance.now()) ? { name: rt.dj.name, bpm: rt.dj.bpm, beatInBar: rt.dj.beatInBar } : null, recognised: rt.mem.lock && liveFresh() ? { id: rt.mem.lock.id, name: rt.mem.lock.name, pos: Math.round(lockPos(rt.mem.lock, rt.live.an.t) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, home: rt.home ? rt.home.status() : null, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
       song: rt.song ? { memId: rt.song.memId || null, name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
       nowPlaying: rt.nowPlaying ? rt.nowPlaying.info() : null, spotify: rt.spotify ? rt.spotify.info() : null,
-      capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null,
+      capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null, hearing: hearingInfo(), offsetMs: syncOffset(),
       overlay: overlayState(), devices: data().devices.map(d => { const o = outs.get(d.id), { rtts, ...h } = health.get(d.id) || {}; void rtts;
         return { id: d.id, ...h, sent: o?.sender.sent || 0, used: o?.used || 0, amps: Math.round((o?.amps || 0) * 100) / 100, limited: !!o?.limited, ...latencyOf(d, h, o) }; }),
       uptime: Math.round((Date.now() - rt.startedAt) / 1000), perf: { ...perf.status(), fps: perf.fps || Math.round(rt.fps) },
@@ -484,7 +522,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   // the latency meter: sound-to-light delay per device and what may be wrong (see latency.js)
   function latencyOf(d, h, o) {
     const s = data().settings, since = Math.max(rt.startedAt, rt.powerOnAt || 0, o?.createdAt || 0);
-    return deviceLatency({ dev: d, health: h, out: o || {}, fps: rt.fps || s.fps, offsetMs: s.syncOffsetMs || 0, audio: audioDelay({ source: rt.source, live: liveFresh() ? rt.live : null }),
+    return deviceLatency({ dev: d, health: h, out: o || {}, fps: rt.fps || s.fps, offsetMs: syncOffset(), audio: audioDelay({ source: rt.source, live: liveFresh() ? rt.live : null }),
       streaming: !!(data().show.power && d.enabled && o), streamingFor: ((h.lastSeen || 0) - since) / 1000 }); // how long we had been sending when it was last checked
   }
   function layoutInfo() {
@@ -503,7 +541,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
 
   return {
     get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, perf, rt, log, listeners, previewClients, phones, health,
-    rebuild, rebuildEffects, syncDirector, startLoop, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
+    rebuild, rebuildEffects, syncDirector, startLoop, syncOffset, setOutput, hearingInfo, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
     fixtures, beats, identify, syncSegments, setPower, action, status, setScreen, clearScreen, remember, forget, djBeat, djOnAir, planFor, setDraft, mapLight, endMap, layoutInfo, checkDevice, note,
     close() { for (const [id, o] of outs) if (data().devices.find(d => d.id === id)?.kind === "dmx") try { o.sender.send(new Uint8Array(512)); } catch {} // DMX: leave everything at zero
       clearInterval(timer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },

@@ -8,7 +8,7 @@ export function createAudio({ ws, api, onChange }) {
 
   async function ensureCtx() {
     if (!ctx) { ctx = new (window.AudioContext || window.webkitAudioContext)({ latencyHint: "interactive" }); }
-    if (ctx.state === "suspended") await ctx.resume();
+    if (ctx.state === "suspended") await Promise.race([ctx.resume(), new Promise(r => setTimeout(r, 600))]); // with no tap yet (the microphone starting by itself) it waits for one: see listen()
     if (!tapReady) tapReady = ctx.audioWorklet.addModule("/pcm-worklet.js").then(() => {
       // the tap has one silent output to the speakers: browsers only run nodes that lead to the destination
       tap = new AudioWorkletNode(ctx, "pcm-tap", { numberOfInputs: 1, numberOfOutputs: 1 });
@@ -114,7 +114,12 @@ export function createAudio({ ws, api, onChange }) {
     meter = c.createAnalyser(); meter.fftSize = 1024; src.connect(meter);
     S.stream = { stream, src }; S.mode = kind; S.label = kind === "system" ? "This computer's sound" : (stream.getAudioTracks()[0]?.label || "Microphone");
     stream.getAudioTracks()[0].addEventListener("ended", () => { if (S.stream && S.stream.stream === stream) stopLive(); });
-    startStream(S.label); emit();
+    startStream(S.label);
+    if (c.state !== "running") { // started by itself (hearing.js) before any tap on the page: the browser needs one to run audio
+      S.error = "Tap or click anywhere on this page to start listening (the browser asks for one tap first).";
+      const go = () => { c.resume().then(() => { if (S.error && /Tap or click/.test(S.error)) { S.error = null; emit(); } }).catch(() => {}); };
+      addEventListener("pointerdown", go, { once: true }); addEventListener("keydown", go, { once: true }); }
+    emit();
   }
   function stopLive() { if (!S.stream) return; meter = null; try { S.stream.src.disconnect(); } catch {} S.stream.stream.getTracks().forEach(t => t.stop()); S.stream = null; if (S.mode !== "song") { S.mode = null; stopStream(); } emit(); }
 

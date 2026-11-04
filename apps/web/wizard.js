@@ -1,8 +1,9 @@
 // The setup wizard: five big, picture-first steps that get a new user from nothing to lights moving with music.
-//   1 find the lights   2 pick a room   3 fix the timing   4 play a test song   5 done (and an optional PIN)
+//   1 find the lights   2 pick a room   3 how Tempolight hears your music (not in the online demo)   4 fix the timing
+//   5 play a test song   6 done (and an optional PIN)
 // It opens by itself on a first start with no lights, and again from Settings ("Run setup again"). Finishing or
 // skipping it sets settings.setupDone, so it doesn't come back by itself. Works in the online demo too.
-import { app, api, act, toast, ws, refreshState, loadLayout, createPreview, unlocked, route, esc } from "/app.js";
+import { app, api, act, toast, ws, refreshState, loadLayout, createPreview, unlocked, route, esc, DEMO } from "/app.js";
 import { buildPreset } from "/engine/presets.js";
 import { buildLayout } from "/engine/layout.js";
 import { createRenderer } from "/preview.js";
@@ -16,16 +17,18 @@ const I = { // icons, 24 x 24 strokes
   wifi: "M2 9a15 15 0 0 1 20 0M5.5 12.5a10 10 0 0 1 13 0M9 16a5 5 0 0 1 6 0M12 19.5h.01", plus: "M12 5v14M5 12h14",
   eye: "M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12zM12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z", play: "M7 4l13 8-13 8z", stop: "M6 6h12v12H6z",
   lock: "M6 11h12v10H6zM8.5 11V7.5a3.5 3.5 0 0 1 7 0V11", mic: "M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zM5 11a7 7 0 0 0 14 0M12 18v3",
+  ear: "M6 9a6 6 0 0 1 12 0c0 3-2 4-3 5.5S14 18 12 19.5a2.5 2.5 0 0 1-4-1M9 9a3 3 0 0 1 6 0c0 1.5-1.5 2-1.5 3.5",
   x: "M6 6l12 12M18 6L6 18", back: "M15 5l-7 7 7 7", next: "M9 5l7 7-7 7", search: "M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM20 20l-4.8-4.8",
 };
 const ic = (n, cls = "") => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="${I[n]}"/></svg>`;
 const STEPS = [
   { id: "lights", icon: "lights", title: "Find your lights" },
   { id: "room", icon: "room", title: "Pick your room" },
+  { id: "hear", icon: "ear", title: "How should Tempolight hear your music?" },
   { id: "timing", icon: "timing", title: "Fix the timing" },
   { id: "song", icon: "music", title: "Play a test song" },
   { id: "done", icon: "done", title: "All set" },
-];
+].filter(s => !(DEMO && s.id === "hear")); // the demo can't record this computer's sound: the Music page explains
 
 let W = null; // the open wizard
 
@@ -74,7 +77,7 @@ function show(i) {
   $("#wz-back").style.visibility = i === 0 ? "hidden" : "";
   $("#wz-skip").hidden = i === STEPS.length - 1;
   $("#wz-next").querySelector("span").textContent = i === STEPS.length - 1 ? "Start the show" : "Next";
-  W.step = ({ lights: stepLights, room: stepRoom, timing: stepTiming, song: stepSong, done: stepDone })[s.id]($("#wz-content")) || {};
+  W.step = ({ lights: stepLights, room: stepRoom, hear: stepHear, timing: stepTiming, song: stepSong, done: stepDone })[s.id]($("#wz-content")) || {};
   body.scrollTop = 0; $("#wz-title").focus?.();
 }
 const setNext = (on, label) => { const b = $("#wz-next"); if (!b) return; b.disabled = !on; if (label) b.querySelector("span").textContent = label; };
@@ -145,7 +148,17 @@ function thumb(cv, id, devs) {
 function hsv(h, s, v) { const i = Math.floor(h * 6), f = h * 6 - i, p = v * (1 - s), q = v * (1 - f * s), t = v * (1 - (1 - f) * s);
   const [r, g, b] = [[v, t, p], [q, v, p], [p, v, t], [p, q, v], [t, p, v], [v, p, q]][i % 6]; return [r * 230, g * 230, b * 230].map(Math.round); }
 
-// ---------------------------------------------------------------- 3. timing
+// ---------------------------------------------------------------- 3. hearing the music (hearing.js, also at the top of the Music page)
+function stepHear(el) {
+  el.innerHTML = `<p class="wz-say">For Spotify and other apps, Tempolight needs to hear the music the first time a song plays.</p><div id="wz-hear"></div>`;
+  const me = { hr: null }; setNext(true);
+  import("/hearing.js").then(mod => { if (!W || W.step !== me || !$("#wz-hear")) return; me.hr = mod.mountHearing($("#wz-hear"), { bare: true, onFixTiming: () => show(STEPS.findIndex(s => s.id === "timing")) }); if (app.status) me.hr?.status(app.status); }).catch(() => {});
+  W.cleanup.push(() => me.hr?.destroy()); W.step = me;
+  me.onStatus = m => me.hr?.status(m);
+  return me;
+}
+
+// ---------------------------------------------------------------- 4. timing
 function stepTiming(el) {
   const can = !!navigator.mediaDevices?.getUserMedia;
   el.innerHTML = `<p class="wz-say">${ic("music", "inline")} Turn the speakers up. ${ic("mic", "inline")} Stay quiet for 5 seconds.</p>
@@ -167,7 +180,7 @@ function stepTiming(el) {
   return {};
 }
 
-// ---------------------------------------------------------------- 4. test song
+// ---------------------------------------------------------------- 5. test song
 function stepSong(el) {
   const A = app.audio;
   el.innerHTML = `<div class="stage wz-stage" id="wz-stage">${app.state.devices.length ? "" : '<div class="empty">No lights yet</div>'}</div>
@@ -200,7 +213,7 @@ function stepSong(el) {
   };
 }
 
-// ---------------------------------------------------------------- 5. done
+// ---------------------------------------------------------------- 6. done
 function stepDone(el) {
   const locked = app.state.locked;
   el.innerHTML = `<p class="wz-say">Your lights now follow the music.</p>
