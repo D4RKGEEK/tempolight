@@ -2,7 +2,8 @@
 
 Say "Hey Google, activate Party mode" or "Alexa, turn on Chill mode" and the room changes. Tempolight has no voice
 assistant of its own: it goes through **Home Assistant**, which already talks to Google Assistant and Alexa. If you
-don't use Home Assistant, see [Without Home Assistant](#without-home-assistant) at the end.
+don't use Home Assistant, see [Without Home Assistant](#without-home-assistant) at the end. For Siri, Tempolight is an
+Apple Home accessory by itself: [smart-home.md](guides/smart-home.md#apple-home).
 
 ```
  "Hey Google, activate Party mode"
@@ -38,7 +39,7 @@ a Hue scene with that name.
    the **MQTT** integration when Home Assistant offers it (Settings → Devices & services).
 2. Create a Home Assistant user for Tempolight (Settings → People → Users, e.g. `tempolight`), or use any user: the
    Mosquitto add-on accepts Home Assistant users.
-3. In Tempolight, open **Settings → Home Assistant**, tick **Connect**, enter the broker
+3. In Tempolight, open **Settings → Home Assistant**, tick **Connect to Home Assistant through MQTT**, enter the broker
    (`mqtt://homeassistant.local:1883`, or the IP address of your Home Assistant) and the user name and password, then
    **Save**. The panel says *Connected*.
 4. In Home Assistant, Settings → Devices & services → MQTT now lists a **Tempolight** device, and the scenes are

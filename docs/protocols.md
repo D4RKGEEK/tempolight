@@ -1,5 +1,8 @@
 # Protocols Tempolight uses
 
+The wire details, for developers and network admins. How to set each kind of light up, step by step:
+[connect-lights.md](guides/connect-lights.md).
+
 | Protocol | Port | Used for | Notes |
 | --- | --- | --- | --- |
 | DDP | UDP 4048 | Streaming pixels | Header: flags `0x40` (version 1), `0x41` on the last packet of a frame (push); sequence 1-15; type `0x0B` (RGB, 8 bits); id 1; 32-bit byte offset; 16-bit length; up to 1,440 bytes (480 pixels) per packet |

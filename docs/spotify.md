@@ -1,50 +1,166 @@
 # Sync with Spotify
 
-With **Sync with Spotify** on (Music page, on by default), the lights follow the Spotify track that is playing with
-its whole beat map: beats, bars, build-ups and drops are known ahead, as if the song were played in Tempolight. This works
-for Spotify on the computer Tempolight runs on, and (with your Spotify account connected) for Spotify on your phone, a
-smart speaker or any other device.
+With **Sync with Spotify** on (Music page, on by default), the lights follow the Spotify track that's playing with its
+whole beat map: beats, bars, build-ups and drops are known ahead, as if the song were played in Tempolight. It works
+for Spotify on the computer Tempolight runs on (no set-up) and, once you connect your Spotify account, for Spotify on
+your phone, a smart speaker or any other device.
 
-Spotify no longer gives new apps its audio analysis (since 27 November 2024 the Audio Analysis and Audio Features
-endpoints answer 403 to apps created after that date). So Tempolight learns each song itself, by listening the first
-time it plays, and keeps the map in song memory under the track's Spotify ID. From the second play on, the lights follow
-the map exactly and nothing needs to be heard. A Spotify app made before that date may still have the analysis: then
-Tempolight uses it straight away.
+![The Sync with Spotify panel](images/guides/spotify-panel.png)
 
-The Spotify panel says which mode is active:
+## How a song gets its beat map
 
-| Mode | What drives the lights |
+Spotify doesn't give new apps its audio analysis any more (since 27 November 2024). So Tempolight **learns each song
+itself, by listening the first time it plays**, and keeps the map in song memory. From the second play on, the lights
+follow the map exactly and nothing needs to be heard.
+
+```mermaid
+flowchart TD
+  P["A track plays in Spotify"] --> K{"Does Tempolight know it?"}
+  K -- "learned before, or the song's file was played in Tempolight" --> EX["Exact (learned)"]
+  K -- "shared map that two installs agree on" --> SH["Exact (shared map)"]
+  K -- "old Spotify app with audio analysis" --> AN["Spotify analysis"]
+  K -- "no" --> H{"Does Tempolight hear it?<br/>Listen live or Listen on the server"}
+  H -- "yes" --> L["Learning this song… 42%"]
+  H -- "no" --> LV["Live: the lights can only react to what they hear,<br/>so set up listening: hearing-music.md"]
+  L --> E{"Track ends or changes"}
+  E -- "90% or more heard" --> OK["Learned ✓<br/>exact from the next play on"]
+  E -- "less" --> PART["Partly learned: the rest is learned on later plays"]
+  PART --> P
+  OK --> P
+```
+
+The badge at the top right of the panel says which it is:
+
+| Badge | What drives the lights |
 | --- | --- |
-| **Exact (learned)** | a beat map in song memory (learned by listening, or the song's file played in Tempolight), at Spotify's position |
-| **Exact (shared map)** | a map other Tempolight installs learned and agree on (optional, see [Shared beat maps](#shared-beat-maps)) |
-| **Spotify analysis** | Spotify's own audio analysis, converted to a beat map (older Spotify apps only) |
-| **Learning this song… 42%** | live listening, while Tempolight records what it hears to build the map; **Learned ✓** when it's saved |
-| **Live** | no map and not learning: what Tempolight hears, if it listens |
+| **Exact (learned)** | a beat map in song memory, at Spotify's position |
+| **Exact (shared map)** | a map other Tempolight installs learned and agree on ([shared beat maps](#shared-beat-maps)) |
+| **Spotify analysis** | Spotify's own analysis (only Spotify apps made before 27 November 2024) |
+| **Learning this song… 42%** | Tempolight is listening while it plays, to build the map |
+| **Learned ✓** | the map has just been saved |
+| **Live** | no map and not learning: what Tempolight hears, if it hears anything |
 | **Paused** | the lights rest on the ambient look |
+| **Nothing playing** | no track in Spotify (or the account isn't connected) |
+
+The sentence under the track always says, in words, what's happening and what to do next.
 
 ## Set up
 
-**Spotify on this computer**: nothing to set up. Tempolight reads the Spotify app's track, ID and position (macOS:
-osascript, which asks once under Privacy & Security → Automation; Linux: MPRIS through playerctl or dbus-send; Windows:
-the media controls, which don't give the track ID, so songs are matched by title, artist and length there).
+```mermaid
+flowchart LR
+  Q{"Where does Spotify play?"}
+  Q -- "On the computer running Tempolight" --> A["Nothing to set up:<br/>keep the Spotify app open"]
+  Q -- "Phone, speaker, another computer" --> B["Connect your Spotify account<br/>(below, about 5 minutes)"]
+  A --> C["To learn new songs: let Tempolight hear them<br/>hearing-music.md"]
+  B --> C
+```
 
-**Spotify on other devices** (your phone, a speaker): connect your Spotify account with your own free Spotify app.
+### Spotify on this computer
 
-1. Open [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard) and **Create app**. Any name;
-   tick **Web API**.
-2. Add the **Redirect URI** Tempolight shows (Music page → Sync with Spotify → Set up Spotify), for example
-   `http://127.0.0.1:8080/api/nowplaying/spotify/callback`. Spotify allows plain `http` only for `127.0.0.1`, so sign in
-   from a browser on the Tempolight computer, or paste the address back as the panel explains.
-3. Copy the app's **Client ID** into Music → Now playing on this computer → Spotify on other devices, and press
-   **Connect Spotify**. Tempolight uses PKCE (no client secret) and asks only for `user-read-playback-state` and
-   `user-read-currently-playing`. The tokens stay in `spotify-token.json` next to the settings and are never sent to a
-   browser or put in backups.
+Nothing to do: Tempolight reads the Spotify app's track and position. On a Mac, macOS asks once whether Tempolight may
+control Spotify (System Settings → Privacy & Security → Automation): allow it. On Linux it uses MPRIS (playerctl or
+dbus-send). On Windows it reads the media controls, which don't give the track ID, so songs are matched by title,
+artist and length.
 
-Since February 2026 a Spotify app in development mode needs its owner to have Spotify Premium, and it can have at most 5
-users ([Spotify's migration guide](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide)).
-For one household that's enough: each Tempolight uses its owner's own Client ID.
+### Spotify on other devices: connect your account
 
-## How it stays in sync
+You make a free "app" in Spotify's developer dashboard. It's only a key for your own Tempolight; nothing is published.
+
+```mermaid
+sequenceDiagram
+  participant You
+  participant Dash as developer.spotify.com
+  participant TL as Tempolight (Music page)
+  participant Sp as Spotify sign-in
+  You->>Dash: Create app, tick Web API
+  You->>Dash: Redirect URI http://127.0.0.1:8080/api/nowplaying/spotify/callback
+  Dash-->>You: Client ID
+  You->>TL: paste the Client ID, Connect Spotify
+  TL->>Sp: opens the sign-in page
+  You->>Sp: Agree
+  Sp->>TL: back to 127.0.0.1 with a code
+  TL-->>You: "Spotify is connected. You can close this tab."
+```
+
+1. Open [developer.spotify.com/dashboard](https://developer.spotify.com/dashboard), sign in with your Spotify account
+   and press **Create app**.
+2. Fill in any **App name** and **App description**. Under **Redirect URIs** add exactly the address Tempolight shows
+   (Music → Now playing on this computer → Spotify on other devices → *Redirect address*), with port 8080:
+
+   ```
+   http://127.0.0.1:8080/api/nowplaying/spotify/callback
+   ```
+
+   - It must be `127.0.0.1`, **not** `localhost`: Spotify allows plain `http` only for that address.
+   - The port is Tempolight's port. If you started it with `--port 8081`, the address says `8081`.
+   - Press **Add** next to the field, so it shows in the list below it.
+3. Under **Which API/SDKs are you planning to use?** tick **Web API**. Agree to the terms and **Save**.
+4. Open the app's **Settings**: copy the **Client ID**.
+5. In Tempolight: **Music → Now playing on this computer → Spotify on other devices (optional)**. Paste the Client ID
+   and press **Connect Spotify**. (The Spotify panel's **Set up Spotify → Go to Connect Spotify** button takes you
+   there.)
+6. A Spotify page opens: **Agree**. It returns to a page that says *Spotify is connected. You can close this tab.*,
+   and the panel says *Connected*.
+
+**Signing in from a phone or another computer?** After you agree, that browser tries to open `127.0.0.1`, which is
+itself, not Tempolight, so the page fails to load. That's expected: copy the whole address from its address bar
+(`http://127.0.0.1:8080/api/nowplaying/spotify/callback?code=…`), paste it into the box Tempolight shows (*Signing in
+on another device?*) and press **Finish**. Signing in on the computer that runs Tempolight avoids this.
+
+**Spotify's limits for your app.** Since February 2026 an app in development mode needs its owner to have
+**Spotify Premium**, and it can have at most **5 users**
+([Spotify's migration guide](https://developer.spotify.com/documentation/web-api/tutorials/february-2026-migration-guide)).
+Someone other than the owner signs in only after the owner adds them in the app's settings (**User Management**, by
+their Spotify e-mail). For one household that's enough: each Tempolight uses its owner's own Client ID.
+
+Tempolight uses PKCE (no client secret) and asks only for `user-read-playback-state` and
+`user-read-currently-playing`. The tokens stay in `spotify-token.json` next to the settings, and are never sent to a
+browser or put in backups. **Disconnect** forgets them.
+
+### Let Tempolight hear new songs
+
+Learning a song needs Tempolight to hear it once, while it plays: **Music → Listen live → Listen to this computer's
+sound** (best: it's exactly what Spotify plays), **Listen with a microphone**, or **Listen on the server**. On a Mac
+the Spotify app's sound can't be shared from the browser directly; [hearing-music.md](hearing-music.md) shows how to
+set up listening on each system. While learning, the Home page's **Level** moves with the music; if it stays at 0%,
+Tempolight hears silence (see [Troubleshooting](#troubleshooting)).
+
+## The panel's switches
+
+| Switch | Default | What it does |
+| --- | --- | --- |
+| Sync with Spotify | on | the whole feature |
+| Learn songs while they play | on | listening builds beat maps |
+| Use Spotify's analysis when available | on | for old Spotify apps; says *(not available to your Spotify app)* after the first 403 |
+| Fade to ambient on pause | on | pause fades to the ambient look |
+| Dim when muted | on | volume 0 dims the lights |
+| Album cover colours | off | 2 or 3 colours from the cover become the palette while it's *Automatic* |
+| Shared beat maps (optional) | off | see [Shared beat maps](#shared-beat-maps) |
+
+Song memory (Music → Song memory) lists learned songs with a **Spotify · learned** badge, and the percentage for songs
+learned only in part. **Forget** removes one, so it's learned again.
+
+## Troubleshooting
+
+| What you see | Why | Fix |
+| --- | --- | --- |
+| Spotify's page says **INVALID_CLIENT: Invalid redirect URI** or **redirect_uri: Not matching configuration** | the redirect URI in the dashboard isn't exactly Tempolight's | copy the *Redirect address* from Tempolight into the dashboard: `127.0.0.1` (not `localhost`), the same port, `/api/nowplaying/spotify/callback`, no slash at the end; press **Add** and **Save** in the dashboard, then **Connect Spotify** again |
+| Spotify says the app is in development mode, or the user isn't registered | development-mode limits | the app's owner needs Premium; add other people under **User Management** (5 at most) |
+| After **Agree**, the page doesn't load (on a phone) | `127.0.0.1` is the phone itself | paste the address into *Signing in on another device?* and press **Finish** |
+| *Spotify signed Tempolight out. Connect again.* | the token was revoked or the Client ID changed | **Connect again** |
+| *Spotify asked Tempolight to slow down: asking again in 30 s* | Spotify's rate limit | nothing: Tempolight waits as asked |
+| Badge stays on **Live**, Home shows **Level 0%** and part **Quiet** | Tempolight isn't hearing anything, so it can't learn the song | start **Listen live** (or **Listen on the server**) and check the input level moves; on a Mac set up a capture device: [hearing-music.md](hearing-music.md) |
+| **Learning** never reaches 100% | you skipped or seeked, or the song is long | it continues on the next play (stretches of 15 s or more count); a song is learned at 90% |
+| Badge says **Nothing playing** while Spotify plays on the phone | the account isn't connected, or another account plays | connect (above); check *Spotify on …* shows the right device |
+| **Docker on a Mac or Windows doesn't see the Spotify app** | the container can't see the apps on the computer around it | connect your Spotify account (above) instead: the Web API works from Docker. Learning still needs Tempolight to hear the music: a browser's *Listen live* on that computer (opened as `http://localhost:8080`). Or run Tempolight natively: [docker.md](guides/docker.md) |
+| The lights are a little early or late | speaker delay | Music → Timing → **Fix the timing automatically**; while Tempolight also hears the music, the map locks to the kicks by itself |
+| *Use Spotify's analysis* says *(not available to your Spotify app)* | your Client ID was made after 27 November 2024 | normal: songs are learned instead |
+
+More problems and fixes: [guides/troubleshooting.md](guides/troubleshooting.md).
+
+## Advanced: how it works
+
+### How it stays in sync
 
 - **Position.** When Spotify plays on this computer, its own player gives the position (read every second, exact to a
   few milliseconds); the Web API then only adds the track ID, the cover and the volume (asked every 5 s). Otherwise the
@@ -67,7 +183,7 @@ For one household that's enough: each Tempolight uses its owner's own Client ID.
   allows it), takes 2 or 3 dominant colours on a small canvas and sends them to Tempolight, which uses them as the
   palette while the track plays and the palette is Automatic. No image is decoded on the server.
 
-## Learning songs
+### Learning songs
 
 When a track with no map plays and Tempolight hears it (a browser sharing this computer's sound or using a microphone,
 or the server's sound card), it keeps the sound as it comes, in stretches of continuous listening. For each 100 ms chunk,
@@ -86,7 +202,7 @@ beat grid, fitted through all the kicks). A track counts as learned when 90% of 
 - Learning keeps up to 15 minutes of sound in memory for the track that is playing (about 40 MB) and analyses it in
   slices between frames.
 
-## Spotify's own analysis (older apps)
+### Spotify's own analysis (older apps)
 
 If your Client ID can still read `GET /v1/audio-analysis/{id}`, Tempolight converts it: the beat grid is fitted through
 Spotify's beats and its bars set beat 1; kicks are segments that start on a beat with a hard attack and a dark timbre,
@@ -96,7 +212,22 @@ it has kicks, and the 2, 4 or 8 rising bars before a drop are its build-up; key,
 the segments' pitches. The first 403 is remembered for that Client ID and the endpoint isn't asked again (turning
 "Use Spotify's analysis" off and on tries once more). Maps made from Spotify's analysis are never shared.
 
-## Shared beat maps
+### Shared beat maps
+
+```mermaid
+sequenceDiagram
+  participant A as Your Tempolight
+  participant W as Beat map service (your Worker)
+  participant B as A friend's Tempolight
+  A->>W: GET /v1/maps/:spotifyId (a track with no map)
+  W-->>A: 404: nobody has it yet
+  A->>A: learns it by listening
+  A->>W: POST the map (if sharing is on)
+  B->>W: POST its own map of the same track
+  W->>W: the two agree? tempo within 1%, beats within 30 ms, drops within 2 s
+  A->>W: GET /v1/maps/:spotifyId (another track, or next time)
+  W-->>A: the confirmed map
+```
 
 Optional and off by default. A small service (a Cloudflare Worker with a D1 database, in `worker/beatmaps/`) where
 Tempolight installs share the maps they learned, so a song someone else learned follows its full map the first time it
@@ -113,7 +244,7 @@ plays here.
   matching the tempo. Rate limits: 200 maps a day per install, 400 per IP address, 3000 reads an hour per IP (in
   `wrangler.jsonc`).
 
-### Deploy the service
+#### Deploy the service
 
 You need a free Cloudflare account and Node.js. From the Tempolight folder:
 

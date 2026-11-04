@@ -10,12 +10,12 @@ in the same place (`~/.tempolight`, or `%USERPROFILE%\.tempolight` on Windows), 
 | [winget](#winget-windows) (Windows) | Windows 10/11 | `winget upgrade D4RKGEEK.Tempolight` |
 | [Scoop](#scoop-windows) (Windows) | Scoop | `scoop update tempolight` |
 | [npx / npm](#npx-and-npm) | Node.js 20+ | `npx` always runs the latest |
-| [Docker](#docker) | Docker | `docker compose pull && docker compose up -d` |
+| [Docker](#docker) | Docker | rebuild or pull the image ([docker.md](guides/docker.md#update)) |
 | [Installer scripts](#installer-scripts) | nothing (installs Node.js) | one click in Settings |
 | [From source](#from-source) | Node.js 20+, git | `git pull`, or one click in Settings |
 
 Whichever you choose: when Windows or macOS asks whether Tempolight may accept incoming connections, allow it (on
-private networks), so your phone can open it and your lights can be found.
+private networks), so your phone can open it and your lights can be found. Then follow [Your first show](guides/first-run.md).
 
 ## One-file app
 
@@ -110,6 +110,9 @@ The image is built for `amd64` and `arm64` (Raspberry Pi 4/5 with a 64-bit OS). 
 WLED controllers and stream to them. With Docker Compose, use [docker-compose.yml](../docker-compose.yml) (Linux,
 Raspberry Pi) or [docker-compose.desktop.yml](../docker-compose.desktop.yml) (Docker Desktop on Windows or Mac, where
 host networking is off by default: add controllers by IP on the Devices page). Tags: `latest`, `0.3`, `0.3.0`.
+
+Every command, updating, and what doesn't work in Docker Desktop (discovery, Apple Home, now playing) and why:
+[docker.md](guides/docker.md).
 
 ## Installer scripts
 
