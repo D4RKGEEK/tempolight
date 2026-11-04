@@ -128,5 +128,6 @@ test("shows: an automatic show is what the live director would play (as many cha
   const strip = a => a.filter((x, i) => x !== a[i - 1]);
   assert.ok(Math.abs(strip(plan).length - strip(live).length) <= 3, `changes: show ${plan.length}, live ${live.length}`);
   const common = plan.filter(x => live.includes(x)).length; assert.ok(common >= plan.length - 2, `same effects: ${plan} vs ${live}`);
-  assert.ok(drops >= 3, `drops change effect every 2 bars (${drops} blocks)`);
+  // drops change effect every 4 bars (on the phrase grid) and change look in between with a variation
+  assert.ok(drops >= 2, `drops change effect every 4 bars (${drops} blocks)`);
 });

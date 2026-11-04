@@ -54,6 +54,11 @@ beat (1.2 s, punch 0.2, loudness 0.35, no hits).
 | `pulseT`, `pulses`, `pulseN` | number, number[], number | the last kick (or the grid beat when no kick for 1.6 s), the kicks of the last second, a running kick count |
 | `pulse` | number | `exp(-(t - pulseT) / 0.2) * punch`: the main beat envelope |
 | `kickE`, `snareE`, `hatE` | number | envelopes of the last kick (τ 0.25 s), snare (0.15 s), hi-hat (0.12 s), times punch |
+
+The kick and snare decays follow the tempo: at 128 BPM and slower they are as above; faster songs get shorter ones
+(down to 55%), so one kick doesn't smear into the next. When the view knows how hard a kick was played (`V.kickS`,
+0.3 to 1, from the analysis' optional `kickStrength`; or a live `V.kickStrength`), `pulse` and `kickE` are scaled by
+it. Without it every kick counts as 1.
 | `snare`, `snares`, `hat` | number, number[], number | time of the last snare, snares of the last 0.7 s, last hi-hat (-9 = none) |
 | `bassL` | number | bass level 0-1 (live); 0.9 in drops, 0.3 otherwise for songs |
 | `bands` | `Float32Array(24)` | live spectrum, 40 Hz to 10 kHz (zeros for songs without a live stream) |
@@ -106,30 +111,63 @@ an optional left-right mirror (each LED takes its mirror image's colour).
 
 A **style** says how the director listens and which effects it picks:
 
-| Style | Mode | Pools | Crossfade | `every` | Brightness floor |
-| --- | --- | --- | --- | --- | --- |
-| `party` (Party / EDM) | `sections`: by song part | `calm`, `build`, `drop` | 0.3 s | 1 | 0.06 |
-| `poprock` (Pop / Rock) | `levels`: by loudness | `low`, `mid`, `peak` | 0.4 s | 1 | 0.07 |
-| `hiphop` (Hip-hop / Trap) | `levels` | `low`, `mid`, `peak` | 0.3 s | 1 | 0.07 |
-| `chill` (Chill / Lo-fi) | `levels` | `low`, `mid`, `peak` | 1.2 s | 2 | 0.1 |
-| `emotional` (Emotional / Ballad) | `levels` | `low`, `mid`, `peak` | 2.0 s | 2 | 0.12 |
+| Style | Mode | Pools | Crossfade | `every` | Brightness floor | `pump` | `moment` | `dyn` |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `party` (Party / EDM) | `sections`: by song part | `calm`, `build`, `drop` | 0.3 s | 1 | 0.06 | 1 | 1 | 1 |
+| `poprock` (Pop / Rock) | `levels`: by loudness | `low`, `mid`, `peak` | 0.4 s | 1 | 0.07 | 0.8 | 0.85 | 0.85 |
+| `hiphop` (Hip-hop / Trap) | `levels` | `low`, `mid`, `peak` | 0.3 s | 1 | 0.07 | 1 | 1 | 1 |
+| `chill` (Chill / Lo-fi) | `levels` | `low`, `mid`, `peak` | 1.2 s | 2 | 0.1 | 0.3 | 0.4 | 0.5 |
+| `emotional` (Emotional / Ballad) | `levels` | `low`, `mid`, `peak` | 2.0 s | 2 | 0.12 | 0 | 0.25 | 0.4 |
+
+`pump`, `moment` and `dyn` scale the feel layer for the style (see below).
 
 The style is the view's (from the analysis or the live estimate) unless `show.style` fixes one. `choose()` each frame:
 
 1. Manual mode: the chosen effect (`show.effect`).
 2. A show timeline for this song: the block at `t` (an effect banned since is skipped).
-3. Otherwise the pool for the current part (`sections`: `V.state`; `levels`: `V.level`). Banned effects
-   (`settings.effectPrefs[id] === -1`) are left out, liked ones (`1`) appear twice; if everything is banned the whole
-   pool is used. The effect changes when it isn't in the pool for this part, or on beat 1 of a bar once
-   `show.everyBeats` (default 8) x `every` beats have passed (twice that outside drops and peaks). Each change crossfades, and moves
-   to the next pair of the automatic palette.
+3. Otherwise `chooseStep()` in [`show.js`](../../packages/engine/src/show.js). It picks the pool for the current part
+   (`sections`: `V.state`; `levels`: the loudness level). Banned effects (`settings.effectPrefs[id] === -1`) are left
+   out, liked ones (`1`) appear twice; if everything is banned the whole pool is used. Then:
+   - A drop changes effect at once, as a hard cut (no crossfade). It opens with a high-impact effect from the pool
+     (`fx.impact`: effects that hit on every kick), not one that played a moment ago.
+   - Every other change waits for the next downbeat. An effect always lasts at least a bar.
+   - In `levels` styles a level counts once it held most of a bar. A new song part (from the analysis) counts at
+     once on its first downbeat, so level changes land with the part.
+   - Effects change on the phrase grid: every `swapBars()` bars, counted from where the part started. The pace comes
+     from `show.everyBeats` (default 8) x `every`: 4 bars at the default. In drops and peaks the look changes twice as
+     often, but every other change is a variation (the palette's two colours swap and the room is mirrored, for
+     `varyBars()` bars), not a new effect. `settings.variations: false` turns the variations off.
+   - A banned effect leaves at once. A silence doesn't change the effect unless the effect is wrong for calm music.
 
-After rendering: in a silence the room dims (the planned pause right before a drop, or the first 1.5 s of quiet) or
-fades to the ambient effect; otherwise `keepAlive()` mixes the ambient effect in when the room falls under the
-style's floor, so quiet music never goes dark. In `sections` styles the first 0.7 s of a drop gets a white flash
-(`settings.dropFlash`). Then the accent **layer** (`show.layer: {effect, amount}`) is added on top, and **zones**
+   Each change moves to the next pair of the automatic palette.
+
+After rendering comes the feel layer, then: in a silence the room dims (the planned pause right before a drop, or the
+first 1.5 s of quiet) or fades to the ambient effect; otherwise `keepAlive()` mixes the ambient effect in when the room
+falls under the style's floor (lowered as much as the feel layer dimmed the effect), so quiet music never goes dark.
+Then the moments (below). Then the accent **layer** (`show.layer: {effect, amount}`) is added on top, and **zones**
 apply: each zone (`room.zones`, shapes join with `shape.zone`) follows the show, shows its own effect or the ambient
 effect, gets its own brightness, or is off.
+
+## The feel layer
+
+The feel layer works on the whole frame, on top of any effect. The effects themselves don't change.
+
+- **Energy contour** (automatic mode). Each song part has a brightness to aim for: calm 0.08, a build-up rising from
+  0.12 to 0.32, a drop 0.34 (mean brightness after the LED roll-off). In `levels` styles calm parts aim at 0.085, 0.13
+  or 0.2 by level. The aim eases in over 0.6 s and out over 0.4 s, and jumps at a drop.
+- **Evening out** (automatic mode). Each effect has a usual brightness (`fx.lum`, measured in the example room). The
+  director learns what it really is in this room while it plays (6 s average), and brings it toward the part's aim.
+  It also learns how much the LED roll-off keeps a bright effect from its aim. The gain stays between 0.1 and 3.
+  `settings.dynamics` (0 to 1, default 0.8) times the style's `dyn` sets how far: 0 leaves effects as they are.
+- **Kick pump** (drops, any mode; `levels` styles also at their peak level). The frame dips between kicks and comes
+  back on each one: `1 - depth * (1 - hit * exp(-age / τ))`, τ about a quarter beat (80 to 160 ms). The depth is
+  `0.8 * settings.punch` (default 0.7) times the style's `pump`. An effect that doesn't light up on the kick by itself
+  gets a deeper pump, up to 0.85 (learnt per effect). Kicks on the beat grid pump on the grid's beat, so a kick
+  detected a little late still lands on time. The floor and the middle of the room pump a little more than the
+  ceiling and the edges. Night mode (`settings.night`) makes it 0.4 x as deep. Safe mode caps it at 0.1.
+- **Moments** (every style, as big as its `moment`). The last beat before a known next drop (`V.nextDrop`) dims, by
+  up to 75%, without needing a silence. The first 0.7 s of a drop flash white (`settings.dropFlash`; 0.6 x in safe
+  mode). The drop itself is a hard cut.
 
 ## Custom effects
 
@@ -154,13 +192,14 @@ one removes every reference to it (`forgetEffect`: the shown effect, layer, ambi
 A remembered song can carry a **show**: a timeline the director plays instead of choosing on the fly (with
 `settings.shows` on and automatic mode).
 
-`planShow(pre, fx, {seed, prefs, barsPer})` ([`show.js`](../../packages/engine/src/show.js)) makes one from the
-analysis by playing the song through the director's own `choose()` on `songView` in quarter-beat steps: the same
-pools, preferences, "change every N beats" (halved in hot parts, so drops change every 2 bars) and the switch as
-soon as the part changes. So an automatic show is exactly what the live director would have played, only fixed: the
-same song always gets the same show. Blocks shorter than a second (or two beats) and equal neighbours are merged;
-the first block starts at 0 and the last ends at the song's end. Shows are versioned (`showV`): an automatic show
-made by an older version is planned again when it's next read, while a show edited by hand is kept.
+`planShow(pre, fx, {seed, prefs, everyBeats})` ([`show.js`](../../packages/engine/src/show.js)) makes one from the
+analysis. It plays the song through `chooseStep()`, the same function the live director uses, on `songView` in
+quarter-beat steps. So an automatic show is exactly what the live director would have played, only fixed: the same
+song always gets the same show. Variations and the feel layer are not stored in the show: the director adds them
+while it plays (a block's `part` of `drop` counts as hot). Blocks shorter than a second (or two beats) and equal neighbours are merged;
+the first block starts at 0 and the last ends at the song's end. Shows are versioned (`showV`; the planner's
+current version is `SHOW_VERSION` in `show.js`): an automatic show made by an older version is planned again when
+it's next read, while a show edited by hand is kept.
 
 [`timeline.js`](../../packages/engine/src/timeline.js) adds what the show editor makes, all in seconds on the song's
 clock, kept to the millisecond:
@@ -209,5 +248,7 @@ down. Night mode also turns the drop flash off, and DMX strobes and lasers never
 
 `packages/engine/test/engine.test.js` (every effect finite, the time budget, custom effects, Text Scroller, Screen Sync),
 `live.test.js` (quiet music never goes dark, blackout/flash/limiter, banned effects, zones, settings),
+`director.test.js` (the feel layer: pump, drop moments, phrase grid, level hold, variations, kick strength),
+`feel.test.js` (the feel scoreboard, `npm run eval:feel`, must not get worse than its baseline),
 `timeline.test.js` (validation, lookups, the cue firer, cues in the director, a clock that jumps back) and
 `tonal.test.js` (mood colours). See [testing](testing.md).

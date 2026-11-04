@@ -1,8 +1,8 @@
 // The director decides what the room shows each frame: which effect fits the song right now (by style and song
 // part), crossfades between effects, keeps quiet music from going dark, plays the ambient effect when nothing is
 // playing, and applies live overlays (flash, strobe, blackout, colour hold) and the photosensitivity limiter.
-import { showAt } from "./show.js";
-import { buildSignals } from "./signals.js";
+import { showAt, chooseStep, swapBars, varyBars } from "./show.js";
+import { buildSignals, kickHit } from "./signals.js";
 import { rangeAt, brightAt, cuesAt, createCueFirer, blockPalette } from "./timeline.js";
 import { moodPalette } from "./tonal.js";
 
@@ -27,7 +27,7 @@ export function createDirector(layout, fx) {
   const st = {
     cur: "aurora", prev: null, xfadeT: -9, lastSwitchBeat: -99, poolIdx: {}, palIdx: 0, lastState: "silent",
     flashes: [], lastLum: 0, overlay: { flashT: -9, flashColor: [1, 1, 1], strobe: false, blackout: false, hold: null, boost: 1, freeze: false },
-    identify: null, styleName: "party",
+    identify: null, styleName: "party", fxLum: {}, fxCorr: {}, fxKick: {}, tgt: null,
   };
   /** Settings the app can change at any time. */
   const settings = { mode: "auto", effect: "shock", style: "auto", palette: "auto", ambient: "northern", everyBeats: 8, safe: false, dropFlash: true, speed: 1,
@@ -37,6 +37,11 @@ export function createDirector(layout, fx) {
     layer: null,  // {effect, amount}: an accent effect added on top of whatever is showing
     // plan: the song's effect blocks (show.js); timeline: its {colors, cues, bright} (timeline.js), both on the song's clock
     moodColours: true, // palette "auto": colours from the music's mood when it is known (palette "mood": always, for every effect)
+    // the feel (frame-level, on top of any effect): punch 0..1 = how hard the kick pumps the room in drops;
+    // dynamics 0..1 = how much brightness follows the song part (and evens effects out, automatic mode only);
+    // variations: drops change look every 2 bars (colour flip and mirror) between effect changes;
+    // night: night mode (a gentler pump; the runtime also turns the drop flash off and safe mode on)
+    punch: 0.7, dynamics: 0.8, variations: true, night: false,
   };
   const cueFirer = createCueFirer();
   const ZBUF = new Float32Array(N * 3);
@@ -69,9 +74,6 @@ export function createDirector(layout, fx) {
     return out;
   }
   const ZTMP = new Float32Array(N * 3);
-  const withPrefs = list => { const out = []; for (const id of list) { const p = settings.prefs[id]; if (p === -1) continue; out.push(id); if (p === 1) out.push(id); }
-    // liked effects come round twice as often; if everything in a list is banned, fall back to the list
-    return out.length ? out : list; };
 
   // ---- zones: parts of the room with their own effect, the ambient effect, their own brightness, or off
   const zoneIdx = new Map(); layout.LF && layout.shapes && (() => { for (let i = 0; i < N; i++) { const z = layout.shapes[layout.LF[i]]?.zone; if (!z) continue; if (!zoneIdx.has(z)) zoneIdx.set(z, []); zoneIdx.get(z).push(i); } })();
@@ -107,29 +109,61 @@ export function createDirector(layout, fx) {
     const k = 1 - Math.exp(-dt / 2.5); for (let c = 0; c < 2; c++) for (let i = 0; i < 3; i++) st.moodPal[c][i] += (target[c][i] - st.moodPal[c][i]) * k;
   }
 
+  // the bar the music is in, as a beat number (2 s bars when there is no beat grid), for phrase lines and variations
+  const barOf = (g, t) => { if (g && g.has) return g.idx - g.beatInBar; const b = Math.floor(t / 0.5); return b - (((b % 4) + 4) % 4); };
   function choose(t, V) {
     const g = V.g;
     // the music's clock jumped back (a seek, a recognised song's position replacing the live clock, the next song):
     // a crossfade or bar count from the old clock would run backwards (or wait minutes), so start them afresh
     if (t < st.xfadeT) st.xfadeT = t - 99;
     if (g.has && g.idx < st.lastSwitchBeat) st.lastSwitchBeat = g.idx;
-    if (settings.mode !== "auto") { const want = ids.has(settings.effect) ? settings.effect : "shock"; if (st.cur !== want) { st.prev = st.cur; st.cur = want; st.xfadeT = t; } return; }
+    if (settings.mode !== "auto") { const want = ids.has(settings.effect) ? settings.effect : "shock"; if (st.cur !== want) { st.prev = st.cur; st.cur = want; st.xfadeT = t; } st.hot = false; return; }
     // a show timeline for this song: play it (an effect banned since the show was made is skipped)
     if (settings.plan && settings.plan.length) { const b = showAt(settings.plan, t);
-      if (b && ids.has(b.effect) && settings.prefs[b.effect] !== -1) { if (st.cur !== b.effect) { st.prev = st.cur; st.cur = b.effect; st.xfadeT = t; st.palIdx++; } return; } }
-    const ST = style(V);
-    if (g.has && g.idx < st.lastSwitchBeat) st.lastSwitchBeat = g.idx; // the beat count restarted (another music source): count from here
-    const sec = ST.mode === "sections" ? (V.state === "silent" ? "calm" : V.state) : V.level, pool = withPrefs(ST.pools[sec] || ST.pools.calm || ST.pools.low);
-    const wrongPool = !pool.includes(st.cur), hot = sec === "drop" || sec === "peak";
-    const barReady = g.has && g.beatInBar === 0 && g.idx - st.lastSwitchBeat >= settings.everyBeats * ST.every * (hot ? 1 : 2);
-    if (!st.poolIdx[sec]) st.poolIdx[sec] = 0;
-    if (V.state === "silent" && !wrongPool) return;
-    if (wrongPool || barReady) {
-      if (sec === "build" && wrongPool) st.poolIdx.build = 0;
-      const next = pool[st.poolIdx[sec] % pool.length]; st.poolIdx[sec]++;
-      if (next !== st.cur) { st.prev = st.cur; st.cur = next; st.xfadeT = t; st.palIdx++; }
-      st.lastSwitchBeat = g.has ? g.idx : st.lastSwitchBeat;
-    }
+      if (b && ids.has(b.effect) && settings.prefs[b.effect] !== -1) {
+        st.hot = b.part === "drop";
+        if (st.cur !== b.effect) { const P = g.has ? g.P : 0.5, hard = b.part === "drop" && V.dropT > -9 && t - V.dropT >= -0.05 && t - V.dropT < 2 * P;
+          st.prev = st.cur; st.cur = b.effect; st.xfadeT = hard ? -99 : t; st.palIdx++; st.switchBar = barOf(g, t); }
+        return; } }
+    // the automatic choice (show.js, the same as a show's): song part → pool, drops cut at once, the rest on phrase lines
+    const was = st.cur, d = chooseStep(st, fx, style(V), { prefs: settings.prefs, everyBeats: settings.everyBeats }, t, V);
+    if (d) { st.prev = was; st.xfadeT = d.hard ? -99 : t; st.palIdx++; }
+  }
+
+  // ---- the feel: a frame-level layer on top of whatever effect is showing (the effects themselves are unchanged)
+  // spatial accent: the kick pumps the floor and the middle of the room a little more than the ceiling and the edges
+  const KW = (() => { const { PX, PY } = layout, w = new Float32Array(N); if (!PX || !PY || !N) return w.fill(1);
+    let x0 = 1e9, x1 = -1e9; for (let i = 0; i < N; i++) { x0 = Math.min(x0, PX[i]); x1 = Math.max(x1, PX[i]); }
+    let s = 0; for (let i = 0; i < N; i++) { const u = x1 > x0 ? (PX[i] - x0) / (x1 - x0) : 0.5, low = 1 - Math.max(0, Math.min(1, PY[i])), cen = 1 - Math.abs(2 * u - 1); w[i] = 0.6 + 0.5 * low + 0.3 * cen; s += w[i]; }
+    s /= N; for (let i = 0; i < N; i++) w[i] = Math.max(0.5, Math.min(1.5, w[i] / s)); return w; })();
+  const STRIDE = N * 3 > 3000 ? 7 : 1;
+  /** How bright a frame looks (mean after the LED roll-off), from every LED or a sample of them. */
+  function seen(buf) { let m = 0, n = 0; for (let i = 0; i < buf.length; i += STRIDE) { const v = buf[i]; if (v > 0) m += 1 - Math.exp(-1.28 * v); n++; } return n ? m / n : 0; }
+  const clamp01 = (v, d) => { const x = typeof v === "number" && Number.isFinite(v) ? v : d; return Math.max(0, Math.min(1, x)); };
+  // energy contour: the brightness each song part aims for (calm low, a build-up rising, a drop full)
+  function contour(V) {
+    if (V.state === "drop") return 0.34;
+    if (V.state === "build") return 0.12 + 0.2 * Math.max(0, Math.min(1, V.buildP || 0));
+    if (style(V).mode !== "levels") return 0.08;
+    const lv = st.lvl || V.level; return lv === "peak" ? 0.2 : lv === "mid" ? 0.13 : 0.085; // loud parts of a song without drops
+  }
+  /** The brightness an effect should land on: its usual brightness (learnt, starting from fx.lum) brought toward the
+   *  song part's target, all the way at e = 1. */
+  const fxL = id => Math.max(0.02, st.fxLum[id] ?? (fx.lum && fx.lum[id]) ?? 0.15);
+  const aimOf = (id, e) => { const L = fxL(id); return L * Math.exp(e * Math.log(Math.max(0.2, Math.min(3, st.tgt / L)))); };
+  /** Gain for one effect: aim / usual brightness, corrected by what the LED roll-off does to this effect (learnt). */
+  function gainOf(id, e) {
+    if (!(e > 0) || st.tgt == null) return 1;
+    return Math.max(0.1, Math.min(3, aimOf(id, e) / fxL(id) * (st.fxCorr[id] ?? 1)));
+  }
+  const lin = m => -Math.log(1 - Math.min(0.98, Math.max(1e-4, m))) / 1.28; // the light level that rolls off to m
+  /** Kick pump: the whole frame dips between kicks and comes back on each one. 1 = no change. */
+  function pumpDepth(V, ST) {
+    const hot = V.state === "drop" ? 1 : ST.mode === "levels" && settings.mode === "auto" && st.lvl === "peak" ? 0.6 : 0;
+    let d = 0.8 * clamp01(settings.punch, 0.7) * (ST.pump ?? 1) * hot;
+    if (settings.night) d *= 0.4;
+    if (settings.safe) d = Math.min(d, 0.1); // photosensitive-safe: a gentle sway, not a flicker
+    return d;
   }
 
   function renderAmbient(t, out) {
@@ -196,18 +230,55 @@ export function createDirector(layout, fx) {
       choose(t, V);
       const S = buildSignals(st.styleName === V.style ? V : { ...V, style: st.styleName }, t, { pal: cpal || palette(), fixed: !!cpal || settings.palette !== "auto", ...extra });
       S.text = extra.text || ""; S.screen = extra.screen || null;
-      renderFx(st.cur, S, COL);
-      if (st.prev && t - st.xfadeT < ST.xfade) {
-        const k = Math.max(0, (t - st.xfadeT) / ST.xfade); PREV.set(COL); renderFx(st.prev, S, COL);
-        for (let i = 0; i < COL.length; i++) COL[i] = PREV[i] * k + COL[i] * (1 - k);
+      const g = V.g || {}, auto = settings.mode === "auto", dt = Math.max(0, Math.min(0.1, t - (st.frameT ?? t))); st.frameT = t;
+      // variation: in a drop, every other 2-bar line flips the colours and mirrors the room instead of a new effect
+      const vb = auto && settings.variations !== false ? varyBars(swapBars(settings.everyBeats, ST, st.hot), st.hot) : 0;
+      const vary = vb > 0 && st.switchBar != null && Math.floor((barOf(g, t) - st.switchBar) / 4 / vb) % 2 === 1;
+      st.vary = vary;
+      if (vary) { renderFx(st.cur, { ...S, pal: [S.pal[1], S.pal[0]] }, COL); const m = mirrorMap(); ZTMP.set(COL); for (let i = 0; i < N; i++) { const j = m[i] * 3; COL[i * 3] = ZTMP[j]; COL[i * 3 + 1] = ZTMP[j + 1]; COL[i * 3 + 2] = ZTMP[j + 2]; } }
+      else renderFx(st.cur, S, COL);
+      // energy contour and evening out (automatic mode): each effect is brought toward the song part's brightness
+      const e = auto ? clamp01(settings.dynamics, 0.8) * (ST.dyn ?? 1) : 0, fading = st.prev && t - st.xfadeT < ST.xfade; let gain = 1;
+      if (e > 0) {
+        const want = V.state === "silent" ? (st.tgt ?? contour(V)) : contour(V), justDropped = V.state === "drop" && t - V.dropT >= 0 && t - V.dropT < 0.1;
+        st.tgt = st.tgt == null || justDropped ? want : st.tgt + (want - st.tgt) * (1 - Math.exp(-dt / (want > st.tgt ? 0.6 : 0.4)));
+        const p = settings.params[st.cur], raw = seen(COL) / ((p && p.intensity) || 1);
+        if (!fading && V.state !== "silent" && dt > 0) { const L0 = st.fxLum[st.cur] ?? (fx.lum && fx.lum[st.cur]) ?? raw; st.fxLum[st.cur] = L0 + (raw - L0) * (1 - Math.exp(-dt / 6)); }
+        const k = gain = gainOf(st.cur, e); if (k !== 1) for (let i = 0; i < COL.length; i++) COL[i] *= k;
+        if (!fading && V.state !== "silent" && dt > 0 && raw > 0.003) { // learn how far the roll-off keeps this effect from its aim
+          const post = seen(COL), c = st.fxCorr[st.cur] ?? 1, r = lin(aimOf(st.cur, e)) / lin(post);
+          st.fxCorr[st.cur] = Math.max(0.3, Math.min(3, c * Math.exp(Math.log(Math.max(0.5, Math.min(2, r))) * (1 - Math.exp(-dt / 2))))); }
+      }
+      if (fading) {
+        const k = Math.max(0, (t - st.xfadeT) / ST.xfade), gp = gainOf(st.prev, e); PREV.set(COL); renderFx(st.prev, S, COL);
+        for (let i = 0; i < COL.length; i++) COL[i] = PREV[i] * k + COL[i] * gp * (1 - k);
+      }
+      // kick pump in drops: dips between kicks and comes back on each one (as hard as the kick was played)
+      // kicks that sit on the beat grid pump on the grid's beat: a detected kick can land a frame or three late
+      const onGrid = g.has && V.kick > -9 && t - V.kick < 2 * P && Math.abs(V.kick - (g.beatT - Math.round((g.beatT - V.kick) / P) * P)) < 0.07;
+      let depth = pumpDepth(V, ST); const ka = t - (onGrid ? g.beatT : V.kick);
+      if (depth > 0.001 && ka >= -0.02 && ka < 3 * P) {
+        // an effect that doesn't light up on the kick by itself (a wave that peaks between kicks) gets a deeper pump:
+        // learn how bright it is just after kicks against just before the next one
+        if (!fading && dt > 0 && ka < P) { const r = seen(COL), kp = st.fxKick[st.cur] || (st.fxKick[st.cur] = { n: r, l: r }), a = 1 - Math.exp(-dt / 1.5);
+          if (ka < 0.1) kp.n += (r - kp.n) * a; else if (ka > 0.6 * P) kp.l += (r - kp.l) * a; }
+        const kp = st.fxKick[st.cur], kr = kp && kp.l > 0.005 ? kp.n / kp.l : 1.3;
+        depth = Math.min(Math.max(depth, 0.85 * Math.min(1, depth / 0.4)), depth * (1 + 0.8 * Math.max(0, Math.min(1, (1.3 - kr) / 0.7))));
+        const tau = Math.max(0.08, Math.min(0.16, 0.27 * P)), hit = kickHit(V), q = depth * (1 - hit * Math.exp(-Math.max(0, ka) / tau)) * Math.max(0, Math.min(1, (3 * P - ka) / P));
+        if (q > 0.001) for (let i = 0; i < N; i++) { const s = Math.max(0, 1 - q * KW[i]); COL[i * 3] *= s; COL[i * 3 + 1] *= s; COL[i * 3 + 2] *= s; }
       }
       // never let the room go dark: quiet parts fade to the ambient effect; only the planned pause before a drop is a blackout
-      const preDrop = ST.mode === "sections" && V.nextDrop != null && V.nextDrop >= t && V.nextDrop - t < 1.4;
+      const preDrop = V.nextDrop != null && V.nextDrop >= t && V.nextDrop - t < 1.4;
       const quietFor = V.quietFor != null ? V.quietFor : 99;
       if (V.state === "silent" && (preDrop || quietFor < 1.5)) { for (let i = 0; i < COL.length; i++) COL[i] *= 0.12; }
       else if (V.state === "silent") { renderAmbient(t, AMB); for (let i = 0; i < COL.length; i++) COL[i] = COL[i] * 0.2 + AMB[i] * 0.8; }
-      else keepAlive(t, ST.floor * Math.max(0, Math.min(1, 1.3 - (V.loud || 0) * 1.6)));
-      const df = t - V.dropT; if (settings.dropFlash && ST.mode === "sections" && df >= 0 && df < 0.7) { const e = Math.exp(-df / 0.17) * 2.3; for (let i = 0; i < COL.length; i++) COL[i] += e; }
+      else keepAlive(t, ST.floor * Math.min(1, gain) * Math.max(0, Math.min(1, 1.3 - (V.loud || 0) * 1.6))); // dimmed on purpose: a lower floor
+      // moments, in every style (as big as the style's "moment"): the last beat before a known drop dims (no silence
+      // needed), then the drop flashes
+      const mo = ST.moment ?? 1, dIn = V.nextDrop != null ? V.nextDrop - t : 99;
+      if (dIn > 0 && dIn <= P && V.state !== "silent") { const k = Math.min(1, (P - dIn) / 0.05) * 0.75 * mo * Math.min(1, clamp01(settings.dynamics, 0.8) * 1.25);
+        if (k > 0) for (let i = 0; i < COL.length; i++) COL[i] *= 1 - k; }
+      const df = t - V.dropT; if (settings.dropFlash && df >= 0 && df < 0.7) { const f = Math.exp(-df / 0.17) * 2.3 * mo * (settings.safe ? 0.6 : 1); for (let i = 0; i < COL.length; i++) COL[i] += f; }
       st.lastState = V.state; st.showing = st.cur;
       applyLayer(S, t); applyZones(S, t);
       if (TL) { // flashes fire once as the clock passes them; strobe (sixteenth notes), blackout and brightness follow the clock

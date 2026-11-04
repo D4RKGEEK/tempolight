@@ -17,6 +17,15 @@ function quietFor(env, t, sec = 0.6) {
   return true;
 }
 
+// how hard a kick hit, 0.3..1, from the analysis' optional kickStrength (one number per kick, any scale): a kick as
+// strong as the song's usual strong kick (90th percentile) is 1
+const P90 = new WeakMap();
+function kickStrength(pre, ki) {
+  const a = pre.kickStrength; if (!a || ki < 0 || !(ki < a.length)) return 1;
+  let p = P90.get(a); if (p == null) { const s = Array.from(a).filter(Number.isFinite).sort((x, y) => x - y); p = s.length ? s[Math.floor(s.length * 0.9)] || 0 : 0; P90.set(a, p); }
+  const v = a[ki]; return p > 0 && Number.isFinite(v) ? Math.max(0.3, Math.min(1, v / p)) : 1;
+}
+
 /** What the music is doing at time t: song part, loudness, last hits, next drop. */
 export function songView(pre, t) {
   const g = gridAt(pre, t), ki = lastLE(pre.kicks, t), si = lastLE(pre.snares, t), hi = lastLE(pre.hats, t);
@@ -38,7 +47,7 @@ export function songView(pre, t) {
   return { g, bpm: pre.bpm, style: pre.style, loud, level: lvl < 0.35 ? "low" : lvl < 0.72 ? "mid" : "peak",
     state: quietFor(pre.env, t) ? "silent" : state, buildP,
     dropT: di >= 0 ? pre.drops[di] : -9, nextDrop: di + 1 < pre.drops.length ? pre.drops[di + 1] : null,
-    kick, snare: si >= 0 ? pre.snares[si] : -9, hat: hi >= 0 ? pre.hats[hi] : -9, pulses, snares, pulseN: ki,
+    kick, snare: si >= 0 ? pre.snares[si] : -9, hat: hi >= 0 ? pre.hats[hi] : -9, pulses, snares, pulseN: ki, kickS: kickStrength(pre, ki),
     key: pre.key || null, mode: pre.mode || null, keyConf: pre.keyConfidence ?? 0, mood: pre.mood || null }; // key and mood: whole-song (tonal.js)
 }
 
@@ -52,6 +61,11 @@ export function metronomeView(t, bpm = 128, grid = null) {
     kick, snare, hat: kick + P / 2 <= t ? kick + P / 2 : kick - P / 2, pulses, snares: [snare], pulseN: idx };
 }
 
+/** How hard the last kick hit, 0.3..1 (1 when nobody knows). */
+export function kickHit(V) {
+  const v = V.kickS ?? V.kickStrength; return typeof v === "number" && Number.isFinite(v) ? Math.max(0.3, Math.min(1, v)) : 1;
+}
+
 /**
  * Turn a view into the signals object effects read.
  * @param {ReturnType<typeof songView>} V
@@ -60,11 +74,14 @@ export function metronomeView(t, bpm = 128, grid = null) {
 export function buildSignals(V, t, opts) {
   const g = V.g, punch = PUNCH[V.style] ?? 1, kickRecent = t - V.kick < 1.6;
   const pulseT = kickRecent ? V.kick : g.beatT, pulses = kickRecent ? V.pulses : [0, 1, 2].map(k => pulseT - k * g.P);
+  // decays follow the tempo, so fast songs don't smear one kick into the next (as tuned at 128 BPM, never longer);
+  // a kick hits as hard as it was played when the analysis knows (kickS / live kickStrength, 0..1)
+  const tk = g.has && g.P > 0 ? Math.max(0.55, Math.min(1, g.P / 0.469)) : 1, hit = kickHit(V);
   return {
     t, g, pal: opts.pal, fixed: !!opts.fixed, punch, loud: V.loud, wave: opts.wave || null,
     hat: V.hat, snare: V.snare, snares: V.snares, pulseT, pulses, pulseN: kickRecent ? V.pulseN : g.idx,
-    pulse: Math.exp(-(t - pulseT) / 0.2) * punch, kickE: Math.exp(-(t - V.kick) / 0.25) * punch,
-    snareE: Math.exp(-(t - V.snare) / 0.15) * punch, hatE: Math.exp(-(t - V.hat) / 0.12) * punch,
+    pulse: Math.exp(-(t - pulseT) / (0.2 * tk)) * punch * (kickRecent ? hit : 1), kickE: Math.exp(-(t - V.kick) / (0.25 * tk)) * punch * hit,
+    snareE: Math.exp(-(t - V.snare) / (0.15 * tk)) * punch, hatE: Math.exp(-(t - V.hat) / 0.12) * punch,
     bassL: opts.bassL ?? (V.state === "drop" ? 0.9 : 0.3), bands: opts.bands || new Float32Array(24), vocal: V.vocal ?? null, // null: no live estimate (Vocal Glow uses the mid bands)
     buildP: V.state === "build" ? V.buildP : ((((g.idx - g.beatInBar) / 4) % 4 + 4) % 4 + g.barPhase) / 4,
     // seconds until the next known drop (whole-song analysis or a forced build-up) and since the last one; 99 = none
