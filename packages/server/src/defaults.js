@@ -28,6 +28,7 @@ export const DEFAULTS = () => ({
   ],
   schedules: [],
   songs: [],
+  customEffects: [], // effects made in the Effects page from parts (see createEffects' customEffect)
   requests: [], // guest song requests: {id, title, by, votes, at, done} // song memory: compact analyses of songs played through Tempolight (see engine/src/memory.js)
   lock: null,
 });

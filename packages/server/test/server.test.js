@@ -406,3 +406,21 @@ test("Philips Hue: pairs with the link button, each light gets its colour (rate-
     assert.ok(puts.every(p => p.on === false || (p.xy && p.bri > 0)));
   } finally { await s.done(); await new Promise(r => bridge.close(r)); }
 });
+
+test("your own effects: create, play, change, delete", async () => {
+  const wled = await startFakeWled({ leds: 60 }), s = await setup();
+  try {
+    const add = await s.call("POST", "/api/devices", { host: wled.host }); await s.call("PATCH", `/api/devices/${add.body.id}`, { ddpPort: wled.ddpPort });
+    assert.equal((await s.call("POST", "/api/custom-effects", { pattern: "nope" })).status, 400);
+    assert.equal((await s.call("POST", "/api/custom-effects", { pattern: "wave", colors: ["red", "blue"] })).status, 400);
+    const e = (await s.call("POST", "/api/custom-effects", { name: "Pink waves", pattern: "wave", axis: "x", drive: "time", colors: ["#ff0066", "#ff99cc"], speed: 2 })).body;
+    assert.match(e.id, /^u-/); assert.ok((await s.call("GET", "/api/state")).body.effects.some(x => x.id === e.id && x.custom));
+    assert.equal((await s.call("PATCH", "/api/show", { effect: e.id })).status, 200);
+    const rgb = () => { const f = wled.lastFrame; let r = 0, g = 0, b = 0; for (let i = 0; i < f.length; i += 3) { r += f[i]; g += f[i + 1]; b += f[i + 2]; } return [r, g, b]; };
+    assert.ok(await until(() => { const [r, g, b] = rgb(); return r > 500 && r > g * 2; }), "pink waves reach the LEDs");
+    await s.call("PUT", `/api/custom-effects/${e.id}`, { ...e, colors: ["#00ff44", "#00aa22"] });
+    assert.ok(await until(() => { const [r, g] = rgb(); return g > r * 2; }), "changing it changes the light");
+    assert.equal((await s.call("DELETE", `/api/custom-effects/${e.id}`)).status, 200);
+    const st = (await s.call("GET", "/api/state")).body; assert.ok(!st.effects.some(x => x.id === e.id)); assert.equal(st.show.mode, "auto", "deleting the playing effect goes back to automatic");
+  } finally { await s.done(); wled.close(); }
+});

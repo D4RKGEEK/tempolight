@@ -117,6 +117,15 @@ await step("effects: like, ban and tune an effect", async () => {
   await until(() => app.store.data.show.params.laser?.intensity === 2, 3000, "effect setting not saved");
   await page.selectOption("#e-layer", "stars"); await until(() => app.store.data.show.layer?.effect === "stars", 3000, "accent layer not saved"); await shot("07b-effects");
 });
+await step("effects: make your own effect, show it, share it, delete it", async () => {
+  await go("effects"); await page.fill("#u-name", "E2E waves"); await page.selectOption("#u-pattern", "chase"); await page.selectOption("#u-drive", "time");
+  await page.uncheck("#u-pal"); await page.fill("#u-c1", "#ff0000"); await page.click("#u-save");
+  await until(() => app.store.data.customEffects.length === 1 && app.store.data.show.effect === app.store.data.customEffects[0].id, 4000, "not saved and shown");
+  await page.waitForSelector("#u-del:not([hidden])", { timeout: 4000 }); await sleep(600); ok(lum(A) > 1, "custom effect is dark");
+  await page.click("#u-share"); ok((await page.inputValue("#u-code")).startsWith("TL1:"), "no share code");
+  await page.click('#e-tags [data-tag="mine"]'); ok(/E2E waves/.test(await page.textContent("#e-grid")), "not under Mine"); await shot("07d-custom");
+  await page.click("#u-del"); await until(() => app.store.data.customEffects.length === 0, 4000, "not deleted");
+});
 await step("room: a zone switched off goes dark on its controller", async () => {
   await go("room"); await page.click("#z-add"); await until(() => (app.store.data.room.zones || []).length === 1, 3000, "zone not created");
   const zid = app.store.data.room.zones[0].id;

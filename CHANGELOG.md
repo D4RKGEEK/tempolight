@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Make your own effects (Effects page): pick a pattern (waves, a moving dot, pulse, sparkles, level meter, breathing, gradient), a direction, what moves it (beat, kicks, bass, loudness or time), colours, speed and size. They play in automatic mode like the built-in ones, and share codes (`TL1:…`) let friends import them.
+
 - Philips Hue (basic): pair the bridge with its link button; each colour light becomes one light in the room. Hue's bridge takes about 10 commands a second, so Tempolight sends the light that changed most first; best for calm effects. Hue Entertainment streaming isn't supported (it needs DTLS, which Node.js doesn't include).
 
 - Camera LED mapping (Room → Map with the camera): Tempolight lights the LEDs one at a time, a phone or laptop camera finds each one, and the strip's real shape becomes a room shape. Mirrors and reflections are skipped; missed points are filled in.

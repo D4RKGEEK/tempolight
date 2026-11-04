@@ -230,6 +230,23 @@ export function createCore({ store, runtime, env }) {
   route("DELETE", "/api/requests/:id", "admin", (ctx, p) => { const l = data().requests, i = l.findIndex(x => x.id === p.id); if (i < 0) throw new HttpError(404, "No such request"); l.splice(i, 1); changed("requests"); return { ok: true }; });
   route("DELETE", "/api/requests", "admin", () => { data().requests = []; changed("requests"); return { ok: true }; });
   route("POST", "/api/map", "admin", (ctx) => { const b = ctx.body; if (b.end) runtime.mapLight(null); else { if (!data().devices.some(d => d.id === b.device)) throw new HttpError(404, "No such device"); runtime.mapLight(b.device, b.led ?? -1, b.level); } return { ok: true }; });
+  // your own effects, made from parts
+  const PATTERNS = ["wave", "chase", "pulse", "sparkle", "fill", "breathe", "gradient"], AXES = ["along", "x", "y", "around", "centre"], DRIVES = ["beat", "kick", "bass", "loud", "time"];
+  function cleanCustom(b, id) {
+    const pick = (v, list, def) => list.includes(v) ? v : def, num = (v, lo, hi, def) => v === undefined || v === null || v === "" ? def : Math.max(lo, Math.min(hi, Number(v) || def));
+    const hexOk = c => /^#[0-9a-f]{6}$/i.test(c);
+    if (!b || !PATTERNS.includes(b.pattern)) throw new HttpError(400, `Pattern is one of: ${PATTERNS.join(", ")}`);
+    const colors = Array.isArray(b.colors) ? (b.colors.length === 2 && b.colors.every(hexOk) ? b.colors.map(c => c.toLowerCase()) : (() => { throw new HttpError(400, "Colours are two like #ff0066"); })()) : "palette";
+    return { id, name: String(b.name || "My effect").trim().slice(0, 40) || "My effect", tag: pick(b.tag, ["calm", "build", "drop", "home"], "drop"), pattern: b.pattern, axis: pick(b.axis, AXES, "along"),
+      drive: pick(b.drive, DRIVES, "beat"), colors, speed: num(b.speed, 0.1, 8, 1), width: num(b.width, 0.01, 1, 0.15), bg: num(b.bg, 0, 0.5, 0.05), cycles: num(b.cycles, 0.25, 8, 1) };
+  }
+  route("GET", "/api/custom-effects", null, () => data().customEffects);
+  route("POST", "/api/custom-effects", "effects", (ctx) => { const l = data().customEffects; if (l.length >= 100) throw new HttpError(400, "That's 100 of your own effects already: delete some first");
+    const e = cleanCustom(ctx.body, "u-" + env.newId("")); l.push(e); runtime.rebuild(); runtime.note(`New effect: ${e.name}`); changed("effects"); return e; });
+  route("PUT", "/api/custom-effects/:id", "effects", (ctx, p) => { const l = data().customEffects, i = l.findIndex(e => e.id === p.id); if (i < 0) throw new HttpError(404, "No such effect");
+    l[i] = cleanCustom(ctx.body, p.id); runtime.rebuild(); changed("effects"); return l[i]; });
+  route("DELETE", "/api/custom-effects/:id", "effects", (ctx, p) => { const l = data().customEffects, i = l.findIndex(e => e.id === p.id); if (i < 0) throw new HttpError(404, "No such effect");
+    l.splice(i, 1); if (data().show.effect === p.id) { data().show.effect = "shock"; data().show.mode = "auto"; } runtime.rebuild(); changed("effects"); return { ok: true }; });
   route("GET", "/api/network", null, () => ({ addresses: env.lan ? env.lan() : [] })); // for the phone QR code
   route("GET", "/api/log", null, () => runtime.log.slice(-100));
 

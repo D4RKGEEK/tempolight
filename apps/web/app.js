@@ -92,7 +92,7 @@ export const ago = t => { const s = (Date.now() - t) / 1000; return s < 60 ? `${
 export const panel = (title, sub, act, body, cls = "span-12") => `<section class="panel ${cls}"><header><h2>${title}</h2>${sub ? `<span class="sub">${sub}</span>` : ""}${act ? `<div class="act">${act}</div>` : ""}</header>${body}</section>`;
 export const opt = (v, label, sel) => `<option value="${esc(v)}"${sel ? " selected" : ""}>${esc(label)}</option>`;
 const STYLE_NAMES = () => ({ auto: "Automatic (from the music)", ...app.state.styles });
-const tagName = { calm: "Calm", build: "Build-up", drop: "Drop", home: "Everyday", any: "Any", "LedFx-like": "Classic" };
+const tagName = { calm: "Calm", build: "Build-up", drop: "Drop", home: "Everyday", any: "Any", "LedFx-like": "Classic", mine: "Mine" };
 function logRow(e) { const d = new Date(e.t); return `<div><time>${d.toTimeString().slice(0, 8)}</time><span class="${e.level}">${e.level === "info" ? "info" : e.level}</span><span>${esc(e.msg)}</span></div>`; }
 function lockScreen(el, why = "This page") {
   el.innerHTML = panel("Locked", "", "", `<div class="lockbox pb"><p>${esc(why)} is locked with a PIN. Enter it to make changes.</p><input id="pin" type="password" inputmode="numeric" autocomplete="off" maxlength="8" aria-label="PIN"><button class="btn primary" id="unlock" type="button">Unlock</button></div>`);
@@ -345,7 +345,7 @@ function effectsPage(el) {
   const st = app.state; let tag = "all", q = "", sel = null;
   const prefs = () => app.state.settings.effectPrefs || {}, params = () => app.state.show.params || {};
   el.innerHTML = `${panel("Effects", `${st.effects.length} effects, all of them work on any layout`, `<button class="btn" id="e-auto" type="button">Back to automatic</button>`, `<div class="pb stack">
-      <div class="row"><input id="e-q" placeholder="Search effects" style="max-width:240px"><div class="chips" id="e-tags">${["all", "calm", "build", "drop", "home", "LedFx-like", "liked", "banned"].map(t => `<button class="chip" data-tag="${t}" aria-pressed="${t === "all"}" type="button">${t === "all" ? "All" : t === "liked" ? "♥ Liked" : t === "banned" ? "Banned" : tagName[t]}</button>`).join("")}</div></div>
+      <div class="row"><input id="e-q" placeholder="Search effects" style="max-width:240px"><div class="chips" id="e-tags">${["all", "calm", "build", "drop", "home", "LedFx-like", "mine", "liked", "banned"].map(t => `<button class="chip" data-tag="${t}" aria-pressed="${t === "all"}" type="button">${t === "all" ? "All" : t === "liked" ? "♥ Liked" : t === "banned" ? "Banned" : tagName[t]}</button>`).join("")}</div></div>
       <p class="faint" style="font-size:12.5px">Tap an effect to show it. ♥ makes automatic mode pick it more often; ⊘ means automatic mode never picks it.</p>
       <div class="grid-fx" id="e-grid"></div></div>`, "span-8")}
     ${panel("Preview", `<span id="e-now"></span>`, "", `<div class="stage" id="e-stage"></div>`, "span-4")}
@@ -363,12 +363,26 @@ function effectsPage(el) {
       <div class="field"><label for="e-speed">Ambient speed <output id="e-speed-o">${st.show.speed}×</output></label><input type="range" id="e-speed" min="0.25" max="3" step="0.25" value="${st.show.speed}"></div>
       <div class="field"><label for="e-layer">Accent layer</label><select id="e-layer">${opt("", "None", !st.show.layer)}${st.effects.map(e => opt(e.id, e.name, st.show.layer?.effect === e.id)).join("")}</select><span class="help">An extra effect added on top, for example Hi-hat Starfield over a calm background.</span></div>
       <div class="field"><label for="e-lamt">Accent amount <output id="e-lamt-o">${Math.round((st.show.layer?.amount ?? 0.6) * 100)}%</output></label><input type="range" id="e-lamt" min="0.1" max="1.5" step="0.05" value="${st.show.layer?.amount ?? 0.6}"></div>
-    </div>`, "span-8")}`;
+    </div>`, "span-8")}
+    ${panel("Make your own", `<span id="u-editing">New effect</span>`, "", `<div class="pb controls" id="u-form">
+      <div class="field"><label for="u-name">Name</label><input id="u-name" maxlength="40" value="My effect"></div>
+      <div class="field"><label for="u-pattern">Pattern</label><select id="u-pattern">${[["wave", "Waves"], ["chase", "A moving dot"], ["pulse", "Pulse from the middle"], ["sparkle", "Sparkles"], ["fill", "Level meter"], ["breathe", "Breathing"], ["gradient", "Colour gradient"]].map(([k, v]) => opt(k, v)).join("")}</select></div>
+      <div class="field"><label for="u-axis">Direction</label><select id="u-axis">${[["along", "Along each strip"], ["x", "Left to right"], ["y", "Floor to ceiling"], ["around", "Around each shape"], ["centre", "Out from the middle"]].map(([k, v]) => opt(k, v)).join("")}</select></div>
+      <div class="field"><label for="u-drive">Moves with</label><select id="u-drive">${[["beat", "The beat"], ["kick", "Kick drums"], ["bass", "The bass"], ["loud", "Loudness"], ["time", "Time (no music needed)"]].map(([k, v]) => opt(k, v)).join("")}</select></div>
+      <div class="field"><label for="u-tag">Plays in automatic mode during</label><select id="u-tag">${[["drop", "Drops"], ["build", "Build-ups"], ["calm", "Calm parts"], ["home", "Never (pick it by hand)"]].map(([k, v]) => opt(k, v)).join("")}</select></div>
+      <div class="field"><span class="lbl">Colours</span><div class="row"><label class="check"><input type="checkbox" id="u-pal" checked> From the palette</label><input type="color" id="u-c1" value="#ff2bd6" aria-label="First colour" disabled><input type="color" id="u-c2" value="#16e0ff" aria-label="Second colour" disabled></div></div>
+      <div class="field"><label for="u-speed">Speed <output id="u-speed-o">1×</output></label><input type="range" id="u-speed" min="0.25" max="4" step="0.25" value="1"></div>
+      <div class="field"><label for="u-width">Size <output id="u-width-o">15%</output></label><input type="range" id="u-width" min="0.02" max="0.8" step="0.01" value="0.15"></div>
+      <div class="field"><label for="u-cyc">Repeats <output id="u-cyc-o">1</output></label><input type="range" id="u-cyc" min="0.5" max="6" step="0.5" value="1"></div>
+      <div class="field"><label for="u-bg">Background glow <output id="u-bg-o">5%</output></label><input type="range" id="u-bg" min="0" max="0.4" step="0.01" value="0.05"></div>
+      <div class="row"><button class="btn primary" id="u-save" type="button">Save and show it</button><button class="btn" id="u-new" type="button" hidden>New</button><button class="btn danger" id="u-del" type="button" hidden>Delete</button></div>
+      <div class="row"><button class="btn sm" id="u-share" type="button">Copy share code</button><input id="u-code" placeholder="Paste a share code" style="max-width:260px"><button class="btn sm" id="u-import" type="button">Import</button></div>
+    </div>`, "span-12")}`;
   const prev = createPreview($("#e-stage"));
   const can = guestOk("effects");
   function grid() {
     const showing = app.status?.effect, pr = prefs();
-    $("#e-grid").innerHTML = st.effects.filter(e => (tag === "all" || e.tag === tag || (tag === "liked" && pr[e.id] === 1) || (tag === "banned" && pr[e.id] === -1)) && (!q || e.name.toLowerCase().includes(q))).map(e =>
+    $("#e-grid").innerHTML = st.effects.filter(e => (tag === "all" || e.tag === tag || (tag === "mine" && e.custom) || (tag === "liked" && pr[e.id] === 1) || (tag === "banned" && pr[e.id] === -1)) && (!q || e.name.toLowerCase().includes(q))).map(e =>
       `<div class="fx ${e.id === showing ? "showing" : ""} ${pr[e.id] === -1 ? "banned" : ""}" aria-pressed="${app.state.show.mode === "manual" && app.state.show.effect === e.id}">
         <button class="fx-main" data-fx="${e.id}" type="button"${can ? "" : " disabled"}><b>${esc(e.name)}</b><span>${tagName[e.tag] || e.tag}${params()[e.id] ? " · tuned" : ""}</span></button>
         <div class="fx-tools"><button class="fx-pref" data-like="${e.id}" aria-pressed="${pr[e.id] === 1}" title="Like: automatic mode picks it more" aria-label="Like ${esc(e.name)}" type="button"${can ? "" : " disabled"}>♥</button><button class="fx-pref" data-ban="${e.id}" aria-pressed="${pr[e.id] === -1}" title="Ban: automatic mode never picks it" aria-label="Ban ${esc(e.name)}" type="button"${can ? "" : " disabled"}>⊘</button></div></div>`).join("");
@@ -379,8 +393,9 @@ function effectsPage(el) {
   }
   // effect settings: shown for the chosen effect (the one playing, until you pick another)
   const P = [["p-speed", "speed", 1, v => v + "×"], ["p-int", "intensity", 1, v => Math.round(v * 100) + "%"], ["p-hue", "hue", 0, v => (v > 0 ? "+" : "") + v + "°"], ["p-sat", "saturation", 1, v => Math.round(v * 100) + "%"]];
+  let customSel = null; // set below: fills the Make your own form when a custom effect is chosen
   function selectFx(id) {
-    sel = id; $("#e-sel").value = id; $("#e-selname").textContent = st.effects.find(e => e.id === id)?.name || id; const cur = params()[id] || {};
+    sel = id; $("#e-sel").value = id; customSel && customSel(id); $("#e-selname").textContent = st.effects.find(e => e.id === id)?.name || id; const cur = params()[id] || {};
     for (const [eid, key, def, fmt] of P) { const v = cur[key] ?? def; $("#" + eid).value = v; $(`#${eid}-o`).textContent = fmt(v); }
     $("#p-mirror").checked = !!cur.mirror;
   }
@@ -392,7 +407,7 @@ function effectsPage(el) {
   $("#e-sel").onchange = e => selectFx(e.target.value);
   $("#e-reset").onclick = () => act(() => api("PATCH", `/api/effects/${sel}`, { params: null })).then(() => refreshState()).then(() => selectFx(sel)).catch(() => {});
   if (!can) $$("#e-params input, #e-reset").forEach(x => x.disabled = true);
-  grid(); selectFx(app.status?.effect || st.show.effect);
+  grid(); selectFx(st.show.mode === "manual" ? st.show.effect : app.status?.effect || st.show.effect);
   $("#e-q").oninput = e => { q = e.target.value.toLowerCase(); grid(); };
   $$("#e-tags [data-tag]").forEach(b => b.onclick = () => { tag = b.dataset.tag; $$("#e-tags .chip").forEach(c => c.setAttribute("aria-pressed", c === b)); grid(); });
   const show = b => act(() => api("PATCH", "/api/show", b)).catch(() => {});
@@ -403,12 +418,35 @@ function effectsPage(el) {
   const layer = () => show({ layer: $("#e-layer").value ? { effect: $("#e-layer").value, amount: Number($("#e-lamt").value) } : null });
   $("#e-layer").onchange = layer; $("#e-lamt").oninput = e => $("#e-lamt-o").textContent = Math.round(e.target.value * 100) + "%"; $("#e-lamt").onchange = layer;
   if (!can) $$("#e-style, #e-pal, #e-every, #e-speed, #e-auto, #e-layer, #e-lamt").forEach(x => x.disabled = true);
+  // make your own: a form over the parts of a custom effect; editing a custom effect fills it in
+  let editing = null; const U = id => $("#u-" + id);
+  const outFmt = { speed: v => v + "×", width: v => Math.round(v * 100) + "%", cyc: v => String(v), bg: v => Math.round(v * 100) + "%" };
+  for (const k of Object.keys(outFmt)) U(k).oninput = e => U(k + "-o").textContent = outFmt[k](Number(e.target.value));
+  U("pal").onchange = e => { U("c1").disabled = U("c2").disabled = e.target.checked; };
+  const readForm = () => ({ name: U("name").value, pattern: U("pattern").value, axis: U("axis").value, drive: U("drive").value, tag: U("tag").value,
+    colors: U("pal").checked ? "palette" : [U("c1").value, U("c2").value], speed: Number(U("speed").value), width: Number(U("width").value), cycles: Number(U("cyc").value), bg: Number(U("bg").value) });
+  function fillForm(d) { editing = d ? d.id : null; d = d || { name: "My effect", pattern: "wave", axis: "along", drive: "beat", tag: "drop", colors: "palette", speed: 1, width: 0.15, cycles: 1, bg: 0.05 };
+    for (const k of ["name", "pattern", "axis", "drive", "tag"]) U(k).value = d[k]; U("pal").checked = !Array.isArray(d.colors); U("c1").disabled = U("c2").disabled = U("pal").checked;
+    if (Array.isArray(d.colors)) { U("c1").value = d.colors[0]; U("c2").value = d.colors[1]; }
+    for (const [k, key] of [["speed", "speed"], ["width", "width"], ["cyc", "cycles"], ["bg", "bg"]]) { U(k).value = d[key]; U(k + "-o").textContent = outFmt[k](d[key]); }
+    U("editing").textContent = editing ? `Editing ${d.name}` : "New effect"; U("new").hidden = U("del").hidden = !editing; U("save").textContent = editing ? "Save changes" : "Save and show it"; }
+  let customs = []; const loadCustoms = () => api("GET", "/api/custom-effects").then(l => { customs = l; }).catch(() => {});
+  customSel = id => { const c = customs.find(x => x.id === id); if (c && editing !== c.id) fillForm(c); };
+  loadCustoms().then(() => customSel(sel));
+  U("save").onclick = async () => { const body = readForm(), r = await act(() => editing ? api("PUT", `/api/custom-effects/${editing}`, body) : api("POST", "/api/custom-effects", body), editing ? "Effect updated" : "Effect saved").catch(() => null);
+    if (!r) return; await api("PATCH", "/api/show", { effect: r.id, mode: "manual" }).catch(() => {}); await refreshState(); route(); };
+  U("new").onclick = () => fillForm(null);
+  U("del").onclick = async () => { if (!editing || !confirm("Delete this effect?")) return; await act(() => api("DELETE", `/api/custom-effects/${editing}`), "Deleted").catch(() => {}); await refreshState(); route(); };
+  U("share").onclick = async () => { const code = "TL1:" + btoa(unescape(encodeURIComponent(JSON.stringify(readForm())))); U("code").value = code; try { await navigator.clipboard.writeText(code); toast("Share code copied"); } catch { U("code").select(); toast("Copy the code from the box"); } };
+  U("import").onclick = () => { const c = U("code").value.trim(); try { if (!c.startsWith("TL1:")) throw 0; const d = JSON.parse(decodeURIComponent(escape(atob(c.slice(4))))); fillForm(null); fillForm({ ...readForm(), ...d }); editing = null; U("editing").textContent = "Imported: press Save"; U("new").hidden = U("del").hidden = true; U("save").textContent = "Save and show it"; }
+    catch { toast("That isn't a Tempolight share code", true); } };
+  if (!can) $$("#u-form input, #u-form select, #u-form button").forEach(x => x.disabled = true);
   let lastFx = null, followed = true;
   $("#e-sel").addEventListener("change", () => { followed = false; });
   return { preview: true,
     onStatus(m) { $("#e-now").textContent = `${m.effectName}${app.state.show.mode === "auto" ? " (automatic)" : ""}`;
       if (m.effect !== lastFx) { lastFx = m.effect; grid(); if (followed && !el.contains(document.activeElement)) selectFx(m.effect); } },
-    onChanged(w) { if (w.has("show")) { Object.assign(st, app.state); grid(); } },
+    onChanged(w) { if (w.has("show")) { Object.assign(st, app.state); grid(); } if (w.has("effects") && !el.contains(document.activeElement)) route(); },
     destroy() { prev.destroy(); } };
 }
 

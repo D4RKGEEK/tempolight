@@ -82,3 +82,16 @@ test("Text Scroller writes readable letters on a matrix", async () => {
   const lit = []; for (let i = 0; i < L.N; i++) if (out[i * 3] + out[i * 3 + 1] + out[i * 3 + 2] > 1) lit.push(i);
   assert.ok(lit.length >= 7 && lit.length <= 12, `an "I" is 9 pixels in this font (lit ${lit.length})`);
 });
+
+test("your own effects: every pattern, axis and drive renders, and they join the automatic pools", () => {
+  const P = ["wave", "chase", "pulse", "sparkle", "fill", "breathe", "gradient"], A = ["along", "x", "y", "around", "centre"], D = ["beat", "kick", "bass", "loud", "time"];
+  const custom = P.flatMap((pattern, i) => A.map((axis, j) => ({ id: `u-${i}-${j}`, name: `${pattern} ${axis}`, tag: ["calm", "build", "drop"][(i + j) % 3], pattern, axis, drive: D[(i + j) % 5], colors: j % 2 ? ["#ff0066", "#00ccff"] : "palette", speed: 1.5, width: 0.2, bg: 0.05 })));
+  const f = createEffects(layout, { custom }), col = new Float32Array(layout.N * 3);
+  assert.equal(f.list.length, 95 + custom.length); assert.ok(f.list.find(e => e.id === "u-0-0").custom);
+  assert.ok(f.pools.drop.includes(custom.find(c => c.tag === "drop").id), "drop pool"); assert.ok(f.styles.poprock.pools.peak.includes(custom.find(c => c.tag === "drop").id), "pop/rock peak pool");
+  for (const c of custom) { let lit = 0;
+    for (const t of [0.1, 1.3, 4.7]) { const S = buildSignals(metronomeView(t, 128), t, { pal: f.palettes.neon, fixed: true }); f.render(c.id, S, col);
+      for (let i = 0; i < col.length; i++) { assert.ok(Number.isFinite(col[i]) && col[i] >= 0, `${c.id} gave ${col[i]}`); lit += col[i]; } }
+    assert.ok(lit > 0, `${c.id} is dark`); }
+  assert.equal(createEffects(layout).list.length, 95, "custom effects don't leak into other rooms");
+});

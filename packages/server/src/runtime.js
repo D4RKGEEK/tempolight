@@ -32,7 +32,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
     const shapes = data().room.shapes;
     const keep = D ? { ...D.settings } : null;
     L = buildLayout(shapes.map(s => ({ ...s })));
-    fx = createEffects(L); D = createDirector(L, fx); if (keep) Object.assign(D.settings, keep);
+    fx = createEffects(L, { custom: data().customEffects || [] }); D = createDirector(L, fx); if (keep) Object.assign(D.settings, keep);
     ranges = segmentRanges(shapes);
     const ids = new Set(data().devices.map(d => d.id));
     for (const [id, o] of outs) if (!ids.has(id)) { o.sender.close(); outs.delete(id); }

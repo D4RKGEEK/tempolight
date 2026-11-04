@@ -22,6 +22,9 @@ Calls marked with a guest area (effects, scenes, pads, brightness) work without 
 | `POST /api/brightness` | brightness | `{value: 0.6}` (0 to 1) |
 | `PATCH /api/show` | effects | any of `{mode: "auto"\|"manual", effect, style, palette, everyBeats, speed, layer: {effect, amount} \| null}`. Setting `effect` alone switches to manual |
 | `PATCH /api/effects/:id` | effects | `{pref: 1}` like, `{pref: -1}` ban, `{pref: 0}` neither; `{params: {speed, intensity, hue, saturation, mirror}}` or `{params: null}` to reset |
+| `GET /api/custom-effects` | | your own effects |
+| `POST /api/custom-effects` | effects | `{name, pattern: "wave"\|"chase"\|"pulse"\|"sparkle"\|"fill"\|"breathe"\|"gradient", axis: "along"\|"x"\|"y"\|"around"\|"centre", drive: "beat"\|"kick"\|"bass"\|"loud"\|"time", tag: "calm"\|"build"\|"drop"\|"home", colors: "palette" \| ["#ff0066", "#00ccff"], speed, width, cycles, bg}`; returns it with an id (`u-…`) to use like any effect |
+| `PUT /api/custom-effects/:id`, `DELETE /api/custom-effects/:id` | effects | |
 | `PUT /api/zones` | effects | `{zones: [{id, name, mode: "follow"\|"effect"\|"ambient"\|"off", effect, brightness}]}`; shapes join a zone with their `zone` field |
 | `POST /api/action` | pads | `{type: "flash", color: "#ff0000"}`, `{type: "strobe", on: true}`, `blackout`, `freeze`, `hold` (`color` or none to release), `boost` (`value` 0–2), `next`, `drop`, `build` (`seconds`), `tap`, `cancel`, `identify` (`device` or `shape`) |
 

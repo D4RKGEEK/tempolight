@@ -2,7 +2,7 @@
 // Extracted from the playground (apps/playground). Each effect reads per-LED arrays from the layout
 // and a signals object S (see signals.js) and writes linear RGB into COL.
 /* eslint-disable */
-export function createEffects(layout) {
+export function createEffects(layout, opts = {}) {
   const { N, LX, LY, LS, LA, LU, LH, LR, LF, LL, LD, PX, PY, LG, shapes } = layout;
   let COL = new Float32Array(N * 3);
   const hex = h => [parseInt(h.slice(1, 3), 16) / 255, parseInt(h.slice(3, 5), 16) / 255, parseInt(h.slice(5, 7), 16) / 255];
@@ -16,6 +16,29 @@ export function createEffects(layout) {
   function rainbow(x) { x = ((x % 1) + 1) % 1; return [Math.min(1, Math.max(0, Math.abs(x * 6 - 3) - 1)), Math.min(1, Math.max(0, 2 - Math.abs(x * 6 - 2))), Math.min(1, Math.max(0, 2 - Math.abs(x * 6 - 4)))]; }
   function add(i, c, k) { const j = i * 3; COL[j] += c[0] * k; COL[j + 1] += c[1] * k; COL[j + 2] += c[2] * k; }
   const hash = n => { const x = Math.sin(n * 127.1) * 43758.5453; return x - Math.floor(x); };
+
+  /** A user-made effect: {id, name, tag, pattern, axis, drive, colors: "palette"|[hex, hex], speed, width, bg, cycles} */
+  function customEffect(d) {
+    if (!d || !d.id || !d.pattern) return null;
+    const AX = { along: LS, x: Float32Array.from(PX, v => v / 1.7778), y: PY, around: LA, centre: LD }[d.axis] || LS;
+    const speed = d.speed ?? 1, w = Math.max(0.01, d.width ?? 0.15), bg = d.bg ?? 0.05, cyc = d.cycles ?? 1, fixed = Array.isArray(d.colors) ? d.colors.map(hex) : null;
+    const drive = S => d.drive === "kick" ? S.kickE : d.drive === "bass" ? S.bassL : d.drive === "loud" ? S.loud : d.drive === "time" ? 1 : S.pulse;
+    const phase = S => d.drive === "time" ? S.t * speed * 0.25 : (S.g.idx + S.g.phase) * speed / 4; // beat-driven patterns move one step a bar at speed 1
+    return { id: d.id, name: d.name || "My effect", tag: ["calm", "build", "drop", "home"].includes(d.tag) ? d.tag : "drop", custom: true, run(S) {
+      const [A, B] = fixed || S.pal, dv = Math.max(0, Math.min(1.5, drive(S))), ph = phase(S);
+      for (let i = 0; i < N; i++) { const u = AX[i]; let k = 0;
+        switch (d.pattern) {
+          case "wave": k = (0.5 + 0.5 * Math.sin(2 * Math.PI * (u * cyc - ph))) * (0.35 + 0.65 * dv); break;
+          case "chase": { const pos = ((ph % 1) + 1) % 1; k = G(Math.min(Math.abs(u - pos), 1 - Math.abs(u - pos)), w) * (0.5 + 0.7 * dv); break; }
+          case "pulse": k = dv * (1 - Math.min(1, Math.abs(u - 0.5) * 2 * (1 - w))); break;
+          case "sparkle": k = hash(i * 13.7 + Math.floor(S.t * 12 * speed)) < w * (0.3 + dv) ? 1.2 * (0.4 + dv) : 0; break;
+          case "fill": { const lvl = Math.min(1, dv); k = u <= lvl ? 0.9 : G(u - lvl, 0.03) * 0.8; break; }
+          case "breathe": k = (0.5 + 0.5 * Math.sin(2 * Math.PI * S.t * speed * 0.2)) * (0.6 + 0.4 * dv); break;
+          default: k = 0.5 * (0.4 + 0.6 * dv); // gradient
+        }
+        add(i, lerp3(A, B, ((u * cyc + (d.pattern === "gradient" ? ph * 0.25 : 0)) % 1 + 1) % 1), bg + (1 - bg) * k);
+      } } };
+  }
 
   const FX = [
     { id: "aurora", name: "Aurora Drift", tag: "calm", run(S) { const a = hex("#2a10a0"), b = hex("#00b3a5");
@@ -480,6 +503,9 @@ export function createEffects(layout) {
 
 
   FX.push(...FX2);
+  // ---- your own effects, built from parts in the Effects page (no code): a pattern, what moves it, a direction, colours
+  const customs = (opts.custom || []).map(customEffect).filter(Boolean);
+  FX.push(...customs);
   const FXI = Object.fromEntries(FX.map((f, i) => [f.id, i]));
   const POOLS = { calm: ["northern", "galaxy", "vocal", "aurora", "embers", "neon", "colorchord", "fireflies", "stars", "lavablobs", "ocean", "hypno", "lava", "twinkle", "plasma", "flow"],
     build: ["fill", "rewind", "countdown", "pillars", "collision", "helix", "comets", "storm", "vortex", "riser", "tstrobe", "implode", "mrain", "spiral", "scanner"],
@@ -498,6 +524,8 @@ export function createEffects(layout) {
       peak: ["sunrise", "northern", "swell", "aurora"] }, punch: 0.1, xfade: 2.0, every: 2, floor: 0.12 },
   };
 
+  for (const c of customs) { if (c.tag === "home") continue; (POOLS[c.tag] ||= []).push(c.id); const lv = c.tag === "calm" ? "low" : c.tag === "build" ? "mid" : "peak";
+    for (const st of Object.values(STYLES)) if (st.mode === "levels" && st.pools[lv] && !st.pools[lv].includes(c.id)) st.pools[lv].push(c.id); }
   function render(id, S, out) {
     if (out) COL = out;
     COL.fill(0);
@@ -506,6 +534,6 @@ export function createEffects(layout) {
     fx.run(S);
     return COL;
   }
-  const list = FX.map(f => ({ id: f.id, name: f.name, tag: f.tag }));
+  const list = FX.map(f => ({ id: f.id, name: f.name, tag: f.tag, ...(f.custom ? { custom: true } : {}) }));
   return { render, list, pools: POOLS, styles: STYLES, palettes: { auto: PAL, ...Object.fromEntries(Object.entries(PALSETS).map(([k, v]) => [k, v.map(hex)])) } };
 }
