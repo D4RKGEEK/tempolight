@@ -98,7 +98,7 @@ test("WebSocket: a browser can stream audio, get status and preview frames", { s
     const song = edm(22050), x = song.x;
     for (let i = Math.floor(15 * 22050); i < Math.floor(27 * 22050); i += 2048) { // drop section, faster than real time
       const n = Math.min(2048, x.length - i), b = new Int16Array(n); for (let k = 0; k < n; k++) b[k] = Math.round(x[i + k] * 32000); ws.send(b.buffer); if ((i / 2048) % 8 === 0) await sleep(5); }
-    await sleep(400);
+    await until(() => got.hello && got.status > 0 && got.frames > 0, 8000); // slow CI machines need a moment
     const st = s.app.runtime.status();
     assert.ok(got.hello && got.status > 0 && got.frames > 0, JSON.stringify(got));
     assert.equal(st.source, "browser"); assert.ok(Math.abs(st.bpm - 128) < 3, `bpm ${st.bpm}`); assert.ok(st.bands.some(v => v > 0));
