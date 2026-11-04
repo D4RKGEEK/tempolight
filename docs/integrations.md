@@ -2,7 +2,7 @@
 
 Tempolight's **Integrations** page connects the lights to OBS Studio, your games (Counter-Strike 2, Dota 2), Twitch
 and Discord, and has the [Stream Deck plugin](streamdeck.md). These need Tempolight running on your computer or Pi
-(not the online demo). The API is in [api.md](api.md#integrations-obs-games-twitch-discord-stream-deck).
+(not the online demo). A quick start for each is in [creators.md](guides/creators.md). The API is in [api.md](api.md#integrations-obs-games-twitch-discord-stream-deck).
 
 **Security.** Only someone with the PIN (when Tempolight is locked) can see or change these settings. Passwords, the
 Twitch sign-in and the Discord webhook stay in Tempolight's settings file and are never sent to a browser; the page

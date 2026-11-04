@@ -1,5 +1,8 @@
 # Tempolight Lite: music-reactive lights without a computer
 
+**Beta.** The analysis is tested on a computer with synthetic songs; it hasn't been tuned in real rooms yet (see
+[Status](#status)).
+
 Tempolight normally runs on a computer or a Raspberry Pi: it listens to the music, works out the beat, the build-ups
 and the drops, and streams every pixel to your WLED controllers. **Tempolight Lite** puts a small version of that
 listening on the controller itself. An ESP32 running WLED, with a cheap I2S microphone (an INMP441 costs a couple of
@@ -16,7 +19,7 @@ microphone and computes the spectrum, and Lite reads that spectrum and adds the 
 | Tempo and beat grid | Yes, 60 to 180 BPM, locked to the kicks; bars start on the drop | Yes, with half/double-time checks and song style |
 | Song part | Calm, build-up, drop, silent. Lite notices a drop about a beat after it starts | Same live; with a song file it knows where every drop is before it plays |
 | Build-up countdown to the exact drop | No: Lite shows how long the build-up has been running | Yes, with song files and beat maps |
-| Effects | 9 (below), on the segment's palette | 93, across a whole room layout |
+| Effects | 9 (below), on the segment's palette | over 90 ([effects.md](effects.md)), across a whole room layout |
 | Several controllers as one show | No: each Lite controller listens on its own. You can share one microphone with WLED's audio sync | Yes, one show over every controller, Hue, DMX, Nanoleaf and more |
 | Key, mood colours, vocals, song memory, styles | No | Yes |
 | Scenes, schedules, live pads, phone remote, Home Assistant | WLED's own presets, playlists, schedules and app | Yes |

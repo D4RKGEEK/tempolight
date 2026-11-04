@@ -48,7 +48,8 @@ A sunrise asked for while another one runs (your phone sends tomorrow's alarm, s
 cut the running one short.
 
 **Security.** Without a PIN lock anyone on your network can use the API, as with everything else in Tempolight. With
-a PIN lock these calls work for guests only if guests may change brightness (Settings → PIN lock). Otherwise add the
+a PIN lock these calls work for guests only if guests may change brightness (Settings → Lock → **Brightness and
+power**). Otherwise add the
 link key: `…/api/wake?key=<key>`, or a header `x-tempolight-key: <key>`. The key opens only these calls, nothing else,
 and **New key** on the Home & sleep page replaces it if it ever leaks. Calls from other websites in a browser are
 refused, and Shortcuts, Tasker and Home Assistant aren't affected by that. Set Wake-up sunrise to **Linked to my

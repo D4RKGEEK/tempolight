@@ -4,7 +4,8 @@ The online demo is the real Tempolight app running entirely in the visitor's bro
 and effects as the home install, with three pretend WLED controllers instead of a network. Visitors can play songs,
 use the pads, edit the room, save scenes and set a PIN; everything they change stays in their own browser.
 
-Cloudflare Pages only serves static files, so it's free and needs no server code.
+Cloudflare Pages only serves static files, so it's free and needs no server code. To drive real lights, install
+Tempolight at home: [Your first show](guides/first-run.md).
 
 ## Set up once (from a phone works too)
 

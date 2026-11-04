@@ -169,3 +169,6 @@ device and runs [`install/pi/customize.sh`](../install/pi/customize.sh) inside i
 | The setup page doesn't open by itself | Open http://10.42.0.1 while on Tempolight-Setup. Turn off mobile data if the phone keeps using it |
 | The Pi joins, then Tempolight-Setup comes back | Wrong password, or a 5 GHz-only network on a Pi 3 Model B or Zero 2 W (they only have 2.4 GHz) |
 | Hidden network | Pick *Another network* and type its name |
+
+Once it's up, the setup wizard takes you through the rest: [Your first show](guides/first-run.md). Other problems:
+[troubleshooting.md](guides/troubleshooting.md).

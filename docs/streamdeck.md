@@ -10,6 +10,8 @@ Tempolight's Stream Deck plugin puts your lights on keys and dials, and the keys
 | **Lights on/off** | Power | On / Off |
 | **Brightness** (Stream Deck +) | Turn: brightness (1, 2, 5 or 10% a click); press or touch: lights on/off | The brightness on the touch strip |
 
+More for streamers (OBS, games, Twitch): [creators.md](guides/creators.md).
+
 Needs Stream Deck 6.4 or later (Windows 10+, macOS 12+). The plugin has no packages: it runs on the Node.js that
 Stream Deck comes with (Node 20) and talks to Tempolight over the network.
 
