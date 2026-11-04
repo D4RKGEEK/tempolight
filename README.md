@@ -47,6 +47,10 @@ designer: it knows where the beat is, which part of the song you're in, and what
 | 🎧 **Live listening** | This computer's sound or a microphone from the browser; a sound card on a Raspberry Pi with no browser open |
 | ✨ **95 effects** | Every effect works on every layout: Warp Tunnel, Kick Shockwave, Spiral Galaxy, Laser Show, Fireworks, Thunderstorm, Aurora, Candlelight… ([full list](docs/effects.md)) |
 | ❤️ **Make it yours** | Like or ban effects, tune each one (speed, intensity, colour, mirror), add an accent layer, and split the room into zones with their own effect or brightness |
+| 🧠 **Song memory and shows** | Songs you play are remembered and recognised when they play again from anywhere (Spotify, a DJ); each gets an effect timeline you can edit. Vocal detection, Pro DJ Link beat grid from CDJs |
+| 🧩 **Make your own effects** | Build effects from parts (pattern, direction, what moves it, colours) without code, and share them as codes |
+| 📷 **Camera LED mapping** | A phone or laptop camera finds where every LED really is |
+| 🎉 **Parties** | Phones become extra lights by scanning a QR code; guests request songs and vote; screen sync turns a film or game into room light |
 | ⏱️ **One-tap timing fix** | Plays clicks, listens with the microphone and sets the light delay for your speakers, Bluetooth included |
 | 🔌 **Power limit** | Tell it your power supply's amps and the strip never draws more |
 | 🎛️ **Live pads** | Flash, strobe, blackout, freeze, build & drop, drop now, next effect, boost, tap tempo, colour hold, with keyboard shortcuts |
@@ -54,7 +58,7 @@ designer: it knows where the beat is, which part of the song you're in, and what
 | 🔎 **Plug and play** | Finds WLED controllers on your network (mDNS and a network scan), reads their LED counts, notices when one changes address |
 | 🕒 **Scenes & schedules** | Save a look as a scene; switch scenes, power or brightness at set times, at sunrise or sunset |
 | 🌙 **Night mode** | Late at night the lights stay dim and warm, with no strobes |
-| 🎹 **MIDI, clips, backups** | Play the pads from a MIDI controller, record a 15-second clip to share, back up your whole setup to one file |
+| 🎹 **MIDI, clips, backups, updates** | Play the pads from a MIDI controller, record a 15-second clip to share, back up your whole setup to one file, update with one click |
 | 🔒 **PIN lock** | Guests at a party can pick effects and use the pads, but can't touch your setup |
 | 👁️ **Photosensitive-safe mode** | No more than three big flashes per second (WCAG 2.3.1) |
 | 🔌 **Integrations** | DDP, E1.31 (sACN) and Art-Net output, Govee lights (beta), OpenRGB (PC lighting), Nanoleaf, Philips Hue (basic), HTTP + WebSocket API, OSC (TouchOSC, Companion, lighting desks), WLED audio sync, Home Assistant (MQTT discovery, appears by itself) |
@@ -274,9 +278,8 @@ New effects are the easiest way to contribute: one object in `packages/engine/sr
 
 ## Roadmap
 
-Next: Home Assistant (MQTT discovery), sunrise/sunset schedules, per-zone effects, phone-camera LED mapping, a show
-editor, E1.31/Art-Net output and Philips Hue. Full list in [docs/roadmap.md](docs/roadmap.md). Ideas welcome in
-[issues](https://github.com/D4RKGEEK/tempolight/issues).
+Next: Ableton Link, Hue Entertainment streaming, an online effect gallery and multi-room. What's done and what's
+left is in [docs/roadmap.md](docs/roadmap.md). Ideas welcome in [issues](https://github.com/D4RKGEEK/tempolight/issues).
 
 ## Acknowledgements
 

@@ -15,33 +15,26 @@
 - OSC input, WLED audio sync output, HTTP + WebSocket API
 - Installers for Linux/Pi/macOS (with systemd service) and Windows, Docker image
 
-## Next: v0.3 (suggested batch)
+## Done since v0.2 (coming in v0.3)
 
-- **Like or ban effects**: automatic mode never shows banned effects and favours liked ones
-- **Zones with effect settings**: own effect and brightness per zone; speed, size, direction, colours and intensity per effect, saved in scenes
-- **One-tap timing fix**: speakers play clicks, the microphone measures the delay and sets the light timing
-- **Power limit per controller**: estimated current draw, brightness capped to fit the power supply
-- **Audio input picker**: choose the microphone or sound card in the browser, with a level meter
-- **About 12 new effects**: Lighthouse, Corner bounce, Gravity, Wave collision, Portal, Stadium wave, Vocal glow, Chorus bloom, Drop rewind, Bass rain, Beat counter, Fireplace
-
-## Features after that
-
-| Area | Ideas |
+| Area | What's in |
 | --- | --- |
-| Timing and music | Song memory (recognise songs heard live and reuse their full beat map), layers (background effect plus beat accents), vocal detection |
-| Home | Home Assistant via MQTT discovery, night mode, sunrise/sunset schedules, backup and restore, one-click updates, text on matrix panels (song, BPM, clock, countdown) |
-| Parties | Phones as extra lights (scan a QR code), record a clip of the preview, auto-generated shows on a timeline, guest song requests |
-| More lights | E1.31 and Art-Net, Govee (local network), Philips Hue Entertainment, Nanoleaf, OpenRGB, screen colour sync |
-| DJs and pros | Ableton Link, Pioneer Pro DJ Link, MIDI controllers for the pads |
-| Bigger projects | Phone-camera LED mapping, effect builder and gallery, multi-room |
+| Effects | Like or ban effects; per-effect speed, intensity, colour shift, saturation and mirror; accent layer; zones with their own effect and brightness; 21 new effects (Lighthouse, Corner Bounce, Gravity, Wave Collision, Portal, Stadium Wave, Vocal Glow, Chorus Bloom, Drop Rewind, Bass Rain, Beat Counter, Spectrum Rings, Neon Sign, Box Breathing, Focus Timer, Wake-up Sunrise, Colour Cannons, Strobe Scatter, Oscilloscope, Text Scroller, Screen Sync); make your own effects from parts, with share codes |
+| Timing and music | One-tap timing fix, audio input picker with level meter, song memory (songs heard live are recognised and use their stored beat map), vocal detection, auto-generated show timelines (editable per block) |
+| Home | Home Assistant through MQTT discovery, night mode, sunrise/sunset schedules, backup and restore, one-click updates, text on matrix panels |
+| Parties | Phones as extra lights (QR code), clip recording, guest song requests with votes |
+| More lights | E1.31 and Art-Net, Govee (LAN, beta), OpenRGB, Nanoleaf (real panel layout), Philips Hue (basic), screen colour sync, power limit per controller |
+| DJs and pros | Pioneer Pro DJ Link (beat grid from CDJs, listen-only), MIDI controllers for the pads |
+| Setup | Camera LED mapping: the strip's real shape from a phone or laptop camera |
 
-## Effect ideas
+## Still to do
 
-| Group | Effects |
+| Idea | Why it isn't done yet |
 | --- | --- |
-| Uses the room's real layout | Lighthouse, Corner bounce, Gravity, Wave collision, Portal (light pours out of the TV), Stadium wave |
-| Follows the song | Vocal glow, Chorus bloom, Drop rewind, Bass rain, Beat counter |
-| Calm and everyday | Fireplace, Rain on a window, Breathing guide, Focus timer, Sunrise alarm |
-| Party | Colour cannons, Strobe scatter, Oscilloscope (on matrix panels) |
+| Ableton Link | Following Link's beat phase needs its clock-measurement exchange with peers; worth doing properly with real Link apps to test against |
+| Philips Hue Entertainment (fast streaming) | Needs DTLS, which Node.js doesn't include; would need a dependency. Hue works now in basic mode (about 10 updates a second) |
+| Effect gallery online | Share codes work today; a public gallery needs a small hosted service |
+| Multi-room | Several rooms, each with its own music and show. Zones cover part of this today |
+| Govee segments on more models, Nanoleaf/Hue discovery | Needs testing on real hardware |
 
 Not planned: cloud accounts, heavy AI audio separation, custom ESP32 firmware (stock WLED is the point).
