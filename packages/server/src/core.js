@@ -3,6 +3,7 @@
 import { startScheduler, nextRun } from "./scheduler.js";
 import { resolveTime } from "./sun.js";
 import { DEFAULTS, merge } from "./defaults.js";
+import { createHome, homeRoutes } from "./home.js";
 import { ROOM_PRESETS, buildPreset } from "../../engine/src/index.js";
 
 const SHAPE_TYPES = new Set(["line", "pole", "free", "circle", "rect", "hex", "tri", "matrix", "points"]);
@@ -267,6 +268,8 @@ export function createCore({ store, runtime, env }) {
     l.splice(i, 1); forgetEffect(p.id); runtime.rebuildEffects(); changed("effects"); return { ok: true }; });
   route("GET", "/api/network", null, () => ({ addresses: env.lan ? env.lan() : [] })); // for the phone QR code
   route("GET", "/api/log", null, () => runtime.log.slice(-100));
+  // Home & sleep: sunrise alarm, sleep timer, ambient plan (home.js)
+  const home = createHome({ store, runtime, now: env.now, randomToken: env.randomToken }); homeRoutes(home, { route, authorised, HttpError, changed });
 
   // like or ban an effect for automatic mode, and its settings: speed, intensity, hue (degrees), saturation, mirror
   route("PATCH", "/api/effects/:id", "effects", async (ctx, p) => {
@@ -446,6 +449,6 @@ export function createCore({ store, runtime, env }) {
     throw new HttpError(404, `No API route ${method} ${pathname}`);
   }
 
-  return { handle, connect, broadcast, discovery, onChange: f => changeListeners.add(f), applyScene, applyShow, applySettings, addDevice, pub,
-    close() { clearInterval(statusTimer); sched.stop(); osc && osc.close(); djlink && djlink.close(); for (const c of clients) c.close?.(); } };
+  return { handle, connect, broadcast, discovery, onChange: f => changeListeners.add(f), applyScene, applyShow, applySettings, addDevice, pub, home,
+    close() { clearInterval(statusTimer); home.close(); sched.stop(); osc && osc.close(); djlink && djlink.close(); for (const c of clients) c.close?.(); } };
 }

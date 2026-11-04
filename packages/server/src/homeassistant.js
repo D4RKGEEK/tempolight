@@ -20,7 +20,8 @@ export function startHomeAssistant({ core, store, runtime, version }) {
     cfg("sensor", "bpm", { name: "Tempo", state_topic: T("status"), value_template: "{{ value_json.bpm | default(0) }}", unit_of_measurement: "BPM", icon: "mdi:metronome" });
     cfg("sensor", "part", { name: "Song part", state_topic: T("status"), value_template: "{{ value_json.part }}", icon: "mdi:music-note" });
     cfg("sensor", "source", { name: "Music source", state_topic: T("status"), value_template: "{{ value_json.source }}", icon: "mdi:speaker" });
-    for (const [id, name, icon] of [["flash", "Flash", "mdi:flash"], ["drop", "Drop now", "mdi:arrow-collapse-down"], ["next", "Next effect", "mdi:skip-next"]])
+    for (const [id, name, icon] of [["flash", "Flash", "mdi:flash"], ["drop", "Drop now", "mdi:arrow-collapse-down"], ["next", "Next effect", "mdi:skip-next"],
+      ["sleep", "Sleep timer", "mdi:power-sleep"], ["wake_snooze", "Snooze wake-up", "mdi:alarm-snooze"], ["wake_stop", "Stop wake-up", "mdi:alarm-off"]]) // Home & sleep
       cfg("button", id, { name, command_topic: T("action/set"), payload_press: id, icon });
     client.publish(T("availability"), "online", { retain: true }); lastState = ""; publishState();
   }
@@ -39,7 +40,7 @@ export function startHomeAssistant({ core, store, runtime, version }) {
       if (c.brightness !== undefined) core.applySettings({ brightness: Number(c.brightness) / 255 });
       if (c.effect) { if (c.effect === "Automatic") core.applyShow({ mode: "auto" }); else { const e = runtime.effects.list.find(x => x.name === c.effect || x.id === c.effect); if (e) core.applyShow({ effect: e.id, mode: "manual" }); } }
     } else if (topic === T("scene/set")) { const sc = data().scenes.find(s => s.name === text || s.id === text); if (sc) { core.applyScene(sc); client.publish(T("scene/state"), sc.name, { retain: true }); } }
-    else if (topic === T("action/set")) { try { runtime.action({ type: text }); } catch {} }
+    else if (topic === T("action/set")) { try { if (!/^(sleep|wake_)/.test(text) || !core.home) runtime.action({ type: text }); else core.home.command(text); } catch {} }
     publishState();
   }
   function restart() {

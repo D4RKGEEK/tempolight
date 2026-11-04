@@ -10,10 +10,10 @@ const DEFAULT_PORT = { govee: 4003, openrgb: 6742, nanoleaf: 60222, hue: 80 }; /
 
 /**
  * @param {{data:object, save:()=>void}} store
- * @param {{io:object, logger?:Console|null}} opts io: DDPSender, AudioSyncSender, getInfo, setState, setSegments, ipOf,
+ * @param {{io:object, logger?:Console|null, now?:()=>Date}} opts now: the wall clock (night mode); io: DDPSender, AudioSyncSender, getInfo, setState, setSegments, ipOf,
  *   discoverWled, startCapture, listSources, splitCommand, RATE
  */
-export function createRuntime(store, { io, logger = console } = {}) {
+export function createRuntime(store, { io, logger = console, now = () => new Date() } = {}) {
   const { DDPSender, E131Sender, GoveeSender, OpenRGBSender, NanoleafSender, HueSender, AudioSyncSender, getInfo, setState, setSegments, ipOf, discoverWled, startCapture, listSources, splitCommand, RATE } = io;
   const data = () => store.data;
   const log = [], listeners = new Set();
@@ -248,9 +248,10 @@ export function createRuntime(store, { io, logger = console } = {}) {
     const tx = s.text || {}; extra = { ...(extra || {}), text: tx.source === "custom" ? tx.custom : tx.source === "clock" ? new Date().toTimeString().slice(0, 5)
       : tx.source === "bpm" ? (V && V.bpm ? `${Math.round(V.bpm)} BPM` : "TEMPOLIGHT") : (rt.song ? rt.song.name : rt.source === "idle" ? tx.custom : rt.sourceLabel) };
     if (rt.screen && now - rt.screen.at < 3000) extra.screen = rt.screen; else rt.screen = null;
-    const col = D.frame(V, t, extra, wall);
-    let bri = s.brightness; if (!V && sh.mode === "auto") bri *= s.idleBrightness;
+    let bri = s.brightness; if (!V && sh.mode === "auto") bri *= rt.home?.idleBrightness() ?? s.idleBrightness; // the ambient plan's brightness for this hour, if on
     if (rt.night) bri = Math.min(bri, s.night.maxBrightness);
+    rt.bri = bri; // the sunrise alarm draws at its own brightness, whatever this is
+    const col = D.frame(V, t, extra, wall);
     if (!sh.power) { bri = 0; }
     toRGB8(col, col8, bri);
     // copy each shape's LEDs into its controller's buffer at its segment range
@@ -399,7 +400,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
       type: "status", source: rt.source, sourceLabel: rt.sourceLabel, fps: Math.round(rt.fps), leds: L.N, effect: D.showing, effectName: fx.list.find(e => e.id === D.showing)?.name || D.showing, style: D.style,
       styleName: fx.styles[D.style]?.name || D.style, bpm: V && V.bpm ? Math.round(V.bpm * 10) / 10 : null, part: V ? V.state : "idle",
       beat: V && V.g.has ? V.g.beatInBar : null, level: an ? Math.round(Math.min(1, an.eFast / an.eMax) * 100) / 100 : V ? Math.round((V.loud || 0) * 100) / 100 : 0,
-      bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, mapping: rt.mapping ? { device: rt.mapping.dev, led: rt.mapping.led } : null, djlink: djFresh(performance.now()) ? { name: rt.dj.name, bpm: rt.dj.bpm, beatInBar: rt.dj.beatInBar } : null, recognised: rt.mem.lock && liveFresh() ? { id: rt.mem.lock.id, name: rt.mem.lock.name, pos: Math.round(lockPos(rt.mem.lock, rt.live.an.t) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
+      bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, mapping: rt.mapping ? { device: rt.mapping.dev, led: rt.mapping.led } : null, djlink: djFresh(performance.now()) ? { name: rt.dj.name, bpm: rt.dj.bpm, beatInBar: rt.dj.beatInBar } : null, recognised: rt.mem.lock && liveFresh() ? { id: rt.mem.lock.id, name: rt.mem.lock.name, pos: Math.round(lockPos(rt.mem.lock, rt.live.an.t) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, home: rt.home ? rt.home.status() : null, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
       song: rt.song ? { memId: rt.song.memId || null, name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
       capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null,
       overlay: overlayState(), devices: data().devices.map(d => ({ id: d.id, ...health.get(d.id), sent: outs.get(d.id)?.sender.sent || 0, used: outs.get(d.id)?.used || 0, amps: Math.round((outs.get(d.id)?.amps || 0) * 100) / 100, limited: !!outs.get(d.id)?.limited })),
@@ -412,7 +413,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
   }
 
   function updateNight() {
-    const n = data().settings.night, on = !!(n && n.enabled && inWindow(n.from, n.to, new Date(), data().settings.location));
+    const n = data().settings.night, on = !!(n && n.enabled && inWindow(n.from, n.to, now(), data().settings.location)) || !!rt.planNight; // or a "night" row of the ambient plan
     if (on !== !!rt.night) { rt.night = on; syncDirector(); note(on ? "Night mode on" : "Night mode off"); }
   }
   const nightTimer = setInterval(updateNight, 5000);

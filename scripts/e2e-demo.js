@@ -93,6 +93,14 @@ await step("iPhone size: no sideways scrolling", async () => {
   for (const h of ["home", "music", "live", "room", "devices"]) { await p.evaluate(x => { location.hash = "#/" + x; }, h); await sleep(400); const w = await p.evaluate(() => document.documentElement.scrollWidth); ok(w <= 391, `${h} is ${w}px wide`); }
   ok(!(await p.isVisible("#m-system")) || true, ""); await p.screenshot({ path: process.env.SHOT || "/tmp/demo-iphone.png" }); await phone.close();
 });
+await step("home & sleep: a sunrise and the sleep timer run in the browser", async () => {
+  await go("sleep"); await page.waitForSelector("#w-on"); await page.check("#w-on"); await sleep(300);
+  await page.click("#hs-wnow"); await until(async () => /Sunrise/.test(await text("#hs-now")), 4000, "no sunrise shown");
+  const st = await page.evaluate(async () => (await import("/app.js")).app.status.home); ok(st.wake && st.wake.phase === "rising", "sunrise not rising " + JSON.stringify(st));
+  await page.click("#hs-stop"); await until(async () => !/Sunrise \d/.test(await text("#hs-now")), 8000, "sunrise didn't stop");
+  await page.click("#hs-go"); await until(async () => /Sleep timer/.test(await text("#hs-now")), 4000, "sleep timer not shown");
+  await page.click("#hs-cancel"); await page.check("#p-on"); await sleep(400); await go("home"); await page.waitForSelector("#hs-strip");
+});
 await step("no errors in the console", async () => ok(!errors.length, errors.slice(0, 4).join(" | ")));
 await browser.close(); server.close();
 console.log(results.join("\n")); console.log(failed ? `\n${failed} failed` : "\nall passed"); process.exit(failed ? 1 : 0);

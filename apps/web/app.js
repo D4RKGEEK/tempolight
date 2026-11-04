@@ -4,6 +4,7 @@ import { createAudio } from "/audio.js";
 import { roomPage } from "/room.js";
 import { mapPage } from "/mapper.js";
 import { createRenderer } from "/preview.js";
+import { homeSleepPage, homeStrip, bindHomeStrip, updateHomeStrip } from "/homesleep.js";
 
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -140,7 +141,7 @@ function homePage(el) {
       <div class="field"><label for="h-styl">Music style</label><select id="h-styl">${Object.entries(STYLE_NAMES()).map(([k, v]) => opt(k, v, k === st.show.style)).join("")}</select></div>
       <div class="field"><label for="h-pal">Colours</label><select id="h-pal">${st.palettes.map(p => opt(p, p === "auto" ? "Automatic (changes with the song)" : p[0].toUpperCase() + p.slice(1), p === st.show.palette)).join("")}</select></div>
     </div>`, "span-8")}
-    ${panel("Scenes", "", `<a class="btn" href="#/scenes">Manage</a>`, `<div class="pb chips" id="h-scenes">${st.scenes.map(s => `<button class="chip" data-scene="${s.id}" type="button">${esc(s.name)}</button>`).join("") || '<span class="faint">No scenes yet</span>'}</div>`, "span-4")}
+    ${panel("Scenes", "", `<a class="btn" href="#/scenes">Manage</a>`, `<div class="pb chips" id="h-scenes">${st.scenes.map(s => `<button class="chip" data-scene="${s.id}" type="button">${esc(s.name)}</button>`).join("") || '<span class="faint">No scenes yet</span>'}</div><div class="pb" style="padding-top:0">${homeStrip()}</div>`, "span-4")}
     ${panel("Devices", `${st.devices.length} controller${st.devices.length === 1 ? "" : "s"}`, `<a class="btn" href="#/devices">Manage</a>`, `<div class="tablewrap"><table><thead><tr><th>Name</th><th>Address</th><th class="num">LEDs</th><th>Status</th></tr></thead><tbody id="h-devs"></tbody></table></div>`, "span-6")}
     ${panel("Activity", "", `<button class="btn sm" id="h-clear" type="button">Clear</button>`, `<div class="log" id="h-log"></div>`, "span-6")}`;
 
@@ -164,6 +165,7 @@ function homePage(el) {
   $("#h-save").onclick = async () => { const name = prompt("Name for this scene:", "My scene"); if (name) await act(() => api("POST", "/api/scenes", { name }), "Scene saved").catch(() => {}); };
   $$("#h-scenes [data-scene]").forEach(b => b.onclick = () => act(() => api("POST", `/api/scenes/${b.dataset.scene}/apply`), `Scene: ${b.textContent}`).catch(() => {}));
   $("#h-clear").onclick = () => { app.log = []; $("#h-log").innerHTML = ""; };
+  bindHomeStrip();
   $("#h-log").innerHTML = app.log.slice(-60).reverse().map(logRow).join("");
   const A = app.audio;
   $("#h-play").onclick = () => A.toggle(); $("#h-next").onclick = () => A.next(); $("#h-prev").onclick = () => A.prev();
@@ -181,7 +183,7 @@ function homePage(el) {
       $("#h-meta").textContent = m.song ? `${Math.round(m.song.bpm)} BPM · ${app.state.styles[m.song.style] || m.song.style}${m.song.drops?.length ? ` · ${m.song.drops.length} drop${m.song.drops.length > 1 ? "s" : ""}` : ""}` : m.source === "idle" ? "Play a song or listen to your computer on the Music page." : "Listening live";
       $("#h-transport").hidden = !(a.mode === "song" && a.song);
       if (a.song) { const d = A.duration, p = A.pos(); $("#h-fill").style.width = (p / d * 100) + "%"; $("#h-pos").textContent = fmtTime(p); $("#h-dur").textContent = fmtTime(d); $("#h-play").textContent = a.song.playing ? "Pause" : "Play"; }
-      $("#h-black").setAttribute("aria-pressed", m.overlay.blackout);
+      $("#h-black").setAttribute("aria-pressed", m.overlay.blackout); updateHomeStrip(m);
       $("#h-devs").innerHTML = app.state.devices.map(d => { const h = m.devices.find(x => x.id === d.id) || {};
         return `<tr><td>${esc(d.name)}</td><td class="mono">${esc(d.virtual ? "virtual" : d.host)}</td><td class="num">${d.leds || "?"}</td><td>${!d.enabled ? '<span class="badge">Off</span>' : h.online ? '<span class="badge live"><i></i>Online</span>' : h.online === false ? '<span class="badge err"><i></i>Offline</span>' : '<span class="badge">Checking</span>'}</td></tr>`; }).join("") || '<tr><td colspan="4" class="faint">No devices</td></tr>';
     },
@@ -532,7 +534,7 @@ function livePage(el) {
 }
 
 /** A link a guest's phone can open: a phone can't reach "localhost", so use this computer's network address. */
-async function guestUrl(path) {
+export async function guestUrl(path) {
   if (!DEMO && /^(localhost|127\.|\[?::1)/.test(location.hostname)) {
     const n = await api("GET", "/api/network").catch(() => ({ addresses: [] })), a = n.addresses.find(x => /^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))/.test(x)) || n.addresses[0];
     if (a) return `${location.protocol}//${a}${location.port ? ":" + location.port : ""}${path}`; }
@@ -737,7 +739,7 @@ function settingsPage(el) {
 }
 
 // ---------------------------------------------------------------- router and boot
-const PAGES = { home: ["Home", homePage], music: ["Music", musicPage], effects: ["Effects", effectsPage], live: ["Live pads", livePage], scenes: ["Scenes & schedules", scenesPage],
+const PAGES = { home: ["Home", homePage], music: ["Music", musicPage], effects: ["Effects", effectsPage], live: ["Live pads", livePage], scenes: ["Scenes & schedules", scenesPage], sleep: ["Home & sleep", homeSleepPage],
   room: ["Room", el => unlocked() ? roomPage(el) : lockScreen(el, "Room setup")], map: ["Camera mapping", el => unlocked() ? mapPage(el) : lockScreen(el, "Room setup")], devices: ["Devices", devicesPage], settings: ["Settings", settingsPage] };
 export function route() {
   const name = (location.hash.match(/^#\/(\w+)/) || [])[1] || "home", [title, fn] = PAGES[name] || PAGES.home;
