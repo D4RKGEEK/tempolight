@@ -63,4 +63,9 @@
   a Pi Zero or Pi 3 or when the frame loop can't keep up. Song memory's matching runs in slices of a few ms between frames.
 - **store.js**: one JSON settings file, written atomically. **ws.js**: a minimal RFC 6455 WebSocket server.
   **nowplaying.js**: the track music apps on this computer play (osascript, MPRIS, Windows media controls, optionally
-  the Spotify Web API); a remembered song is followed with its beat map at the app's position. **capture.js**: sound capture commands. **scheduler.js**: day/time schedules. **osc.js**: OSC over UDP.
+  the Spotify Web API); a remembered song is followed with its beat map at the app's position. **spotify.js**: Sync with
+  Spotify (see [spotify.md](spotify.md)): the track's position from the local player or the Web API (**spotify-sync.js**:
+  smoothing, seeks, gliding corrections, poll timing), beat maps by Spotify track ID, learning a track by listening
+  (**spotify-learn.js**: stretches heard, lined up with the Spotify position, analysed and merged), Spotify's legacy audio
+  analysis (**spotify-analysis.js**) and the optional shared beat-map service (**beatmap-cloud.js**; the Cloudflare
+  Worker is in `worker/beatmaps`). **capture.js**: sound capture commands. **scheduler.js**: day/time schedules. **osc.js**: OSC over UDP.

@@ -211,7 +211,8 @@ export function createCore({ store, runtime, env }) {
   // Wi-Fi setup (the Raspberry Pi image's tempolight-wifi service): only where that service exists
   route("GET", "/api/wifi", null, async () => env.wifi ? env.wifi.status() : { available: false });
   route("POST", "/api/wifi/setup", "admin", async () => { if (!env.wifi) throw new HttpError(400, "Wi-Fi setup is only on the Tempolight Raspberry Pi image"); try { return await env.wifi.setup(); } catch (e) { throw new HttpError(e.code === 400 ? 400 : 502, e.message); } });
-  route("GET", "/api/songs", null, () => data().songs.map(e => ({ id: e.id, name: e.name, bpm: e.bpm, dur: e.dur, style: e.style, drops: e.drops.length, at: e.at })));
+  route("GET", "/api/songs", null, () => data().songs.map(e => ({ id: e.id, name: e.name, bpm: e.bpm, dur: e.dur, style: e.style, drops: e.drops.length, at: e.at,
+    ...(e.spotifyId ? { spotifyId: e.spotifyId } : {}), ...(e.src ? { src: e.src } : {}), ...(e.cov ? { cover: Math.round(Math.min(1, e.cov.reduce((n, c) => n + c[1] - c[0], 0) / e.dur) * 100) } : {}) }))); // src: "learned" | "shared" | "spotify-analysis" (from spotify.js); cover: percent of a partly learned song
   const songById = id => { const e = data().songs.find(x => x.id === id); if (!e) throw new HttpError(404, "That song isn't remembered"); return e; };
   // a song's show: effect blocks (`show`, as before) plus the timeline editor's colour blocks, cues and brightness keyframes
   const hex2 = c => "#" + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0")).join("");

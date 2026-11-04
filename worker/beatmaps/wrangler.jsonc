@@ -1,0 +1,19 @@
+// Tempolight shared beat maps: a Cloudflare Worker with a D1 database. Optional: Tempolight works without it.
+// Deploy guide: docs/spotify.md ("Shared beat maps"). In short:
+//   npx wrangler d1 create tempolight-beatmaps          (put the database_id it prints below)
+//   npx wrangler d1 execute tempolight-beatmaps --remote --file=schema.sql
+//   npx wrangler secret put SALT                         (any long random text: install IDs and IPs are stored only as hashes with it)
+//   npx wrangler deploy
+{
+  "name": "tempolight-beatmaps",
+  "main": "src/index.js",
+  "compatibility_date": "2025-06-01",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "tempolight-beatmaps", "database_id": "00000000-0000-0000-0000-000000000000" }
+  ],
+  "vars": {
+    "MAX_POSTS_PER_INSTALL_DAY": "200",
+    "MAX_POSTS_PER_IP_DAY": "400",
+    "MAX_GETS_PER_IP_HOUR": "3000"
+  }
+}

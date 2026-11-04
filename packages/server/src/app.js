@@ -17,6 +17,7 @@ import { startHomeAssistant } from "./homeassistant.js";
 import { createUpdater } from "./update.js";
 import { startProLink } from "./prolink.js";
 import { startNowPlaying } from "./nowplaying.js";
+import { startSpotify } from "./spotify.js";
 import { startLink } from "./ableton-link.js";
 import { applyEnvSettings } from "./env-settings.js";
 import { wifiClient } from "./wifi.js";
@@ -89,6 +90,7 @@ export async function createApp(opts) {
     lan: () => Object.values(os.networkInterfaces()).flat().filter(a => a && a.family === "IPv4" && !a.internal).map(a => a.address) } });
   const ha = startHomeAssistant({ core, store, runtime, version: pkg.version });
   const np = startNowPlaying({ core, store, runtime, dataDir: opts.dataDir, port: () => server.address()?.port || 8080, ...opts.nowPlaying }); // opts.nowPlaying: test runner/platform
+  const spotify = startSpotify({ core, store, runtime, nowPlaying: np, dataDir: opts.dataDir, fetch: opts.nowPlaying?.fetch, ...opts.spotify }); // Sync with Spotify (opts.spotify: test clock)
 
   // ---------------------------------------------------------------- static files
   // /packages/ serves the engine and the server core to the browser too (the web app and the demo import them)
@@ -137,9 +139,9 @@ export async function createApp(opts) {
 
   closeApp = () => api.close();
   const api = {
-    server, runtime, store, core, discovery: core.discovery, nowPlaying: np,
+    server, runtime, store, core, discovery: core.discovery, nowPlaying: np, spotify,
     listen(port, host) { return new Promise((res, rej) => { server.once("error", rej); server.listen(port, host, () => res(server.address().port)); }); },
-    async close() { ha.close(); np.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
+    async close() { ha.close(); spotify.close(); np.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
   };
   return api;
 }
