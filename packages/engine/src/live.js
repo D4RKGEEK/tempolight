@@ -20,9 +20,12 @@ export class LiveAnalyser {
     this.cosT = new Float32Array(NF / 2); this.sinT = new Float32Array(NF / 2);
     for (let i = 0; i < NF / 2; i++) { this.cosT[i] = Math.cos(-2 * Math.PI * i / NF); this.sinT[i] = Math.sin(-2 * Math.PI * i / NF); }
     this.ring = new Float32Array(NF); this.ringPos = 0; this.filled = 0; this.sinceHop = 0; this.decAcc = 0; this.decN = 0;
-    this.wave = new Float32Array(256); this.tap = new FingerprintTap(); this.ctap = new ChromaTap(this.sr);
+    this.wave = new Float32Array(256); this.tap = new FingerprintTap(); this.ctap = new ChromaTap(this.sr); this.hopN = 0; this._lite = false;
     this.reset();
   }
+  /** Low-power mode (small computers): chroma every 2nd frame, the vocal estimate every 2nd hop. */
+  get lite() { return this._lite; }
+  set lite(v) { this._lite = !!v; this.ctap.lite = !!v; }
 
   reset() {
     this.samples = 0; this.t = 0; this.hasPrev = false; if (this.tap) this.tap.reset(); if (this.ctap) this.ctap.reset();
@@ -34,7 +37,7 @@ export class LiveAnalyser {
     this.bass = 0; this.bassMax = 1e-4; this.mid = 0; this.high = 0; this.highMax = 1e-4;
     this.bands = new Float32Array(24); this.bandMax = new Float32Array(24).fill(1e-4); this.vocal = 0; this.vocalRaw = 0; this.pitchHist = []; this.ampHist = []; this.fade = 0;
     this.state = "silent"; this.cand2 = "silent"; this.candT = 0; this.stateT = 0; this.buildStart = 0; this.dropT = -9; this.barOff = 0;
-    this.domS = null; this.domHist = []; this.domHistT = -9;
+    this.domS = null; this.domHist = []; this.domHistT = -9; this.domBase = null; // domBase: pct(domHist, 0.3), kept until domHist changes
     this.styleStats = { env: [], envT: -9, drops: [] }; this.style = null; this.styleCand = null; this.lastStyleT = -9; this.styleLock = null;
   }
 
@@ -75,7 +78,7 @@ export class LiveAnalyser {
     for (let i = 0; i < 256; i++) this.wave[i] = ring[(this.ringPos + NF - 256 + i) & (NF - 1)];
     rms = Math.sqrt(rms / NF); this.rms = rms;
     this.tap.push(this.samples / this.sr, rms); // for recognising remembered songs
-    this.fft(); for (let i = 0; i < mag.length; i++) mag[i] = Math.hypot(re[i], im[i]) / NF;
+    this.fft(); for (let i = 0; i < mag.length; i++) { const a = re[i], b = im[i]; mag[i] = Math.sqrt(a * a + b * b) / NF; } // (Math.hypot is several times slower)
     const t = this.t = this.samples / this.sr - NF / 2 / this.sr, dt = this.dtHop;
     if (!this.hasPrev) { this.prev.set(mag); this.hasPrev = true; return; }
     const loudEnough = rms > 0.0015;
@@ -102,11 +105,12 @@ export class LiveAnalyser {
     this.bass += (bass - this.bass) * (1 - Math.exp(-dt / 0.15)); this.bassMax = Math.max(this.bassMax * Math.pow(0.97, dt), this.bass);
     this.high += (high - this.high) * (1 - Math.exp(-dt / 0.3)); this.highMax = Math.max(this.highMax * Math.pow(0.97, dt), this.high);
     this.mid += (this.bandMag(300, 2000) - this.mid) * (1 - Math.exp(-dt / 0.3));
+    const bandDecay = Math.pow(0.9, dt);
     for (let b = 0; b < 24; b++) {
-      const v = this.bandMag(EDGES[b], EDGES[b + 1]); this.bandMax[b] = Math.max(this.bandMax[b] * Math.pow(0.9, dt), v, 1e-5);
+      const v = this.bandMag(EDGES[b], EDGES[b + 1]); this.bandMax[b] = Math.max(this.bandMax[b] * bandDecay, v, 1e-5);
       const nv = loudEnough ? Math.min(1, v / this.bandMax[b]) : 0; this.bands[b] += (nv - this.bands[b]) * (nv > this.bands[b] ? 0.7 : 0.25);
     }
-    this.vocalHop(loudEnough, dt);
+    if (!this._lite || (++this.hopN & 1)) this.vocalHop(loudEnough, this._lite ? dt * 2 : dt); // (lite: every 2nd hop, covering two)
     if (t - this.lastEst > 0.5) { this.lastEst = t; this.estimateTempo(t); }
     this.sections(t, dt);
     if (t - this.lastStyleT > 2) { this.lastStyleT = t; this.estimateStyle(t); }
@@ -164,8 +168,9 @@ export class LiveAnalyser {
     const loud = this.eFast / this.eMax, kickRecent = t - this.last.k < 0.9;
     const dom = Math.log10(Math.max(1e-7, this.bass) / Math.max(1e-7, this.mid));
     this.domS = this.domS == null ? dom : this.domS + (dom - this.domS) * (1 - Math.exp(-dt / 0.4));
-    if (t - this.domHistT > 0.1 && loud > 0.06) { this.domHistT = t; this.domHist.push(this.domS); if (this.domHist.length > 300) this.domHist.shift(); }
-    const base = this.domHist.length ? pct(this.domHist, 0.3) : this.domS, bass = (this.domS - base > 0.5 && this.domHist.length > 25) ? 1 : 0;
+    if (t - this.domHistT > 0.1 && loud > 0.06) { this.domHistT = t; this.domHist.push(this.domS); if (this.domHist.length > 300) this.domHist.shift(); this.domBase = null; }
+    if (this.domBase == null && this.domHist.length) this.domBase = pct(this.domHist, 0.3); // (sorted again only when it changed, 10 times a second at most)
+    const base = this.domHist.length ? this.domBase : this.domS, bass = (this.domS - base > 0.5 && this.domHist.length > 25) ? 1 : 0;
     const snareRate = this.snares.filter(x => t - x < 2).length / 2, kicks2 = this.kicks.filter(x => t - x < 1.2).length;
     let c;
     if (loud < 0.06 || this.eFast < 0.0015) c = "silent";

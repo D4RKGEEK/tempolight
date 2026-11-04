@@ -150,6 +150,13 @@ Turn requests off with `PATCH /api/settings {requests: false}`.
 | `GET /api/backup` | admin: everything except the PIN, as one JSON file |
 | `POST /api/restore` | admin: a backup file; the current PIN is kept |
 
+`PATCH /api/settings {performance: "auto"|"full"|"lite"}` (default `auto`): low-power mode for small computers. Lite caps the
+frame rate at 30 fps, sends the preview and phones 15 times a second and status twice a second, and the live analyser works out
+chroma every second frame and the vocal estimate at half rate. Auto picks lite on a Raspberry Pi Zero, 1, 2 or 3, a 32-bit ARM
+processor, one core or two slow ones, or when the frame loop can't keep up for 10 seconds. `GET /api/status` has
+`perf: {mode: "full"|"lite", setting, why, fps, frameMs, cpu}` (`frameMs`: average work per frame; `cpu`: percent of one core
+the server uses). `node scripts/bench.js` measures each part's CPU time.
+
 Settings (`PATCH /api/settings`, admin) also take `setupDone: true|false` (the setup wizard opens by itself on a first start with no lights until it is finished or skipped), `link: {enabled, port}` (Ableton Link, listen-only; `GET /api/status` then has `link: {peers, bpm, measured, following, beat, playing, error}`),
 `dmx: {enabled, lasers, fog, fogWhen: "before"|"drop", fogLead, fogBurst, fogCooldown, fogMaxDuty, fogLevel, laserMaxSec}` (lasers and fog are off by
 default; lasers run only during the first `laserMaxSec` seconds of a drop and never in photosensitive-safe or night mode; fog bursts `fogLead` s

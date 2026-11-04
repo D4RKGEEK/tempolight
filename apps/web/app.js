@@ -1,15 +1,16 @@
 // Tempolight web UI: no framework, no build step. Each page is a function that fills #page and can react to the
 // live status the server sends 4 times a second.
 import { createAudio } from "/audio.js";
-import { roomPage } from "/room.js";
-import { mapPage } from "/mapper.js";
 import { createRenderer } from "/preview.js";
-import { timelinePage } from "/timeline.js";
-import { homeSleepPage, homeStrip, bindHomeStrip, updateHomeStrip } from "/homesleep.js";
-import { dmxPanels, mountDmx } from "/dmx.js";
-import { createClockFollower } from "/midiclock.js";
-import { openWizard, wantsWizard, wizardStatus } from "/wizard.js";
+import { homeStrip, bindHomeStrip, updateHomeStrip } from "/homestrip.js";
 import { latencyChip, warnIcons, homeBadge, latencyPanel } from "/latency.js";
+// Loaded the first time they are needed, so the first visit downloads only what the Home page uses: the Room, Camera
+// mapping, Show editor and Home & sleep pages, the DMX panels, the MIDI clock and the setup wizard (see lazyPage below;
+// sw.js keeps them all for offline use).
+let wizardMod = null;
+const openWizard = async (...a) => (wizardMod ||= await import("/wizard.js")).openWizard(...a);
+const wizardStatus = m => wizardMod?.wizardStatus(m);
+const wantsWizard = st => !!st && !st.settings.setupDone && !st.devices.length && (!st.locked || !!app.token); // (as in wizard.js)
 
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -537,14 +538,14 @@ function livePage(el) {
     if (learning && learnPad && down) { for (const k of Object.keys(map)) if (map[k] === learnPad) delete map[k]; map[note] = learnPad; saveMap(); $("#midi-st").textContent = `Note ${note} → ${PADS.find(p => p.id === learnPad).name}`; learnPad = null; return; }
     const id = map[note]; if (id) press(id, down); };
   if ($("#midi-on")) {
-    $("#midi-on").onclick = async () => { try { midi = await navigator.requestMIDIAccess(); const hook = () => { const ins = [...midi.inputs.values()]; ins.forEach(i => i.onmidimessage = onMidi);
+    $("#midi-on").onclick = async () => { try { if (!clock.load) { const { createClockFollower } = await import("/midiclock.js"); clock = createClockFollower(m => ws.send(m)); clock.load = true; } midi = await navigator.requestMIDIAccess(); const hook = () => { const ins = [...midi.inputs.values()]; ins.forEach(i => i.onmidimessage = onMidi);
         $("#midi-st").textContent = ins.length ? `Connected: ${ins.map(i => i.name).join(", ")}` : "No MIDI controller found. Plug one in."; clockInputs(ins); }; hook(); midi.onstatechange = hook; }
       catch (e) { $("#midi-st").textContent = "MIDI permission was refused"; } };
     $("#midi-learn").onclick = () => { learning = !learning; $("#midi-learn").setAttribute("aria-pressed", learning); $("#midi-st").textContent = learning ? "Learn: tap a pad here, then hit a key on the controller" : "Learn off"; };
     $$(".pad").forEach(b => b.addEventListener("pointerdown", () => { if (learning) learnPad = b.dataset.pad; }, true));
   }
-  // MIDI clock: the selected input's clock becomes the beat grid on the server
-  const clock = createClockFollower(m => ws.send(m)), clockKey = "tl.midiclock";
+  // MIDI clock: the selected input's clock becomes the beat grid on the server (midiclock.js, loaded with MIDI)
+  let clock = { input: null, follow() {}, stop() {} }; const clockKey = "tl.midiclock";
   function clockInputs(ins) { const sel = $("#mc-in"), on = $("#mc-on"); if (!sel) return; let want = null; try { want = localStorage.getItem(clockKey); } catch {}
     sel.innerHTML = ins.map(i => opt(i.id, i.name, i.id === (clock.input?.id || want))).join("") || "<option>No MIDI inputs</option>"; sel.disabled = on.disabled = !ins.length;
     const pick = () => ins.find(i => i.id === sel.value);
@@ -623,8 +624,9 @@ function devicesPage(el) {
       <p class="faint" style="margin-top:8px;font-size:12.5px">Power limit: enter your power supply's amps (for example 10 for a 5 V 10 A supply) and Tempolight keeps the strip under it, estimating about 60 mA per LED at full white. Find the address in the WLED app or your router. Tempolight sends light with DDP on UDP port 4048; in WLED, keep “Receive UDP realtime” on (Sync settings).
       OpenRGB (RAM, fans, keyboards, motherboards): start OpenRGB's SDK server, then Scan network. Nanoleaf: hold the controller's power button for 5–7 seconds until the lights flash, then add its address; the panels appear in the room where they really are. Philips Hue: press the bridge's link button, then add the bridge's address; Hue changes colour slowly, so it suits calm effects. Govee lights (beta): turn on “LAN Control” for the light in the Govee Home app. One colour works on all LAN models; segments mode uses Govee's DreamView streaming and only some models support it.</p></div>`, "span-6")}
     ${panel("Found on the network", `<span id="d-scanmsg">Press “Scan network” to look</span>`, "", `<div class="tablewrap"><table><tbody id="d-found"></tbody></table></div>`, "span-6")}
-    ${dmxPanels()}`;
-  const dmx = mountDmx(el);
+    <template id="d-dmx"></template>`;
+  let dmx = null, gone = false; // the DMX panels (dmx.js), loaded with this page
+  import("/dmx.js").then(m => { const slot = $("#d-dmx"); if (gone || !slot) return; slot.insertAdjacentHTML("beforebegin", m.dmxPanels()); slot.remove(); dmx = m.mountDmx(el); }).catch(() => {});
   function rows(m) {
     const s = m || app.status || { devices: [] };
     $("#d-rows").innerHTML = st.devices.map(d => { const h = s.devices.find(x => x.id === d.id) || {};
@@ -669,7 +671,7 @@ function devicesPage(el) {
     } catch {} finally { $("#d-scan").disabled = false; }
   };
   const lat = m => { const box = $("#d-lat"); if (box) box.innerHTML = latencyPanel(m || app.status, st.devices); }; lat();
-  return { onStatus(m) { lat(m); if (!el.contains(document.activeElement) || document.activeElement === document.body) rows(m); }, onChanged(w) { if (w.has("devices")) route(); }, destroy() { dmx.destroy(); } };
+  return { onStatus(m) { lat(m); if (!el.contains(document.activeElement) || document.activeElement === document.body) rows(m); }, onChanged(w) { if (w.has("devices")) route(); }, destroy() { gone = true; dmx?.destroy(); } };
 }
 
 // ---------------------------------------------------------------- Settings
@@ -682,6 +684,7 @@ function settingsPage(el) {
       <div class="field"><label for="s-idleb">Idle brightness <output id="s-idleb-o">${Math.round(s.idleBrightness * 100)}%</output></label><input type="range" id="s-idleb" min="0" max="1" step="0.05" value="${s.idleBrightness}"></div>
       <div class="field"><label for="s-idlea">Go idle after <output id="s-idlea-o">${s.idleAfterSec} s</output> of silence</label><input type="range" id="s-idlea" min="2" max="60" step="1" value="${s.idleAfterSec}"></div>
       <div class="field"><label for="s-fps">Frame rate <output id="s-fps-o">${s.fps} fps</output></label><input type="range" id="s-fps" min="20" max="90" step="5" value="${s.fps}"><span class="help">Lower it on a Raspberry Pi Zero or busy Wi-Fi.</span></div>
+      <div class="field"><label for="s-perf">Performance</label><select id="s-perf">${opt("auto", "Automatic", (s.performance || "auto") === "auto")}${opt("full", "Full", s.performance === "full")}${opt("lite", "Low power (small computers)", s.performance === "lite")}</select><span class="help">Low power: at most 30 fps, a lighter preview and fewer updates. Automatic picks it on a Raspberry Pi Zero or Pi 3, or when this computer can't keep up.</span><span class="help" id="s-perf-st"></span></div>
       <label class="check"><input type="checkbox" id="s-safe" ${s.safe ? "checked" : ""}> Photosensitive-safe mode (at most 3 flashes a second)</label>
       <label class="check"><input type="checkbox" id="s-dropf" ${s.dropFlash ? "checked" : ""}> Flash on drops</label>
     </div>`, "span-12")}
@@ -735,6 +738,7 @@ function settingsPage(el) {
   const range = (id, key, fmt, conv = Number) => { $("#" + id).oninput = e => $(`#${id}-o`).textContent = fmt(e.target.value); $("#" + id).onchange = e => setS({ [key]: conv(e.target.value) }); };
   $("#s-amb").onchange = e => setS({ ambient: e.target.value });
   range("s-idleb", "idleBrightness", v => Math.round(v * 100) + "%"); range("s-idlea", "idleAfterSec", v => v + " s"); range("s-fps", "fps", v => v + " fps");
+  $("#s-perf").onchange = e => setS({ performance: e.target.value });
   $("#s-safe").onchange = e => setS({ safe: e.target.checked }); $("#s-dropf").onchange = e => setS({ dropFlash: e.target.checked });
   $("#s-sync").onchange = e => setS({ audioSync: e.target.checked }); $("#s-disc").onchange = e => setS({ autoDiscover: e.target.checked });
   $("#s-dj").onchange = e => setS({ djlink: { enabled: e.target.checked } }); $("#s-link").onchange = e => setS({ link: { enabled: e.target.checked } });
@@ -766,12 +770,21 @@ function settingsPage(el) {
   $("#s-updgo").onclick = async () => { const r = await act(() => api("POST", "/api/update")).catch(() => null); if (!r) return; $("#s-updmsg").textContent = r.message; $("#s-updgo").hidden = true;
     const t0 = Date.now(), wait = async () => { await new Promise(x => setTimeout(x, 1500)); try { await api("GET", "/api/health"); if (Date.now() - t0 > 4000) return location.reload(); } catch {} if (Date.now() - t0 < 90000) wait(); }; wait(); };
   $("#s-reset").onclick = async () => { if (confirm("Reset all devices, the room, scenes, schedules and settings?")) { await act(() => api("POST", "/api/reset"), "Reset").catch(() => {}); await refreshState(); await loadLayout(); route(); } };
-  return { onChanged(w) { if (w.has("lock")) route(); }, onStatus(m) { const e = $("#m-state"); if (e) e.textContent = mqttLabel(m.mqtt); } };
+  const perfLabel = p => p ? `Now: ${p.mode === "lite" ? "low power" : "full"}${p.why && p.why !== "auto" ? ` (${p.why.replace(/^auto: /, "")})` : ""}${p.fps ? ` · ${p.fps} fps, ${p.frameMs} ms a frame` : ""}${p.cpu != null ? ` · CPU ${p.cpu}%` : ""}` : "";
+  return { onChanged(w) { if (w.has("lock")) route(); }, onStatus(m) { const e = $("#m-state"); if (e) e.textContent = mqttLabel(m.mqtt); const pf = $("#s-perf-st"); if (pf && m.perf) pf.textContent = perfLabel(m.perf); } };
 }
 
 // ---------------------------------------------------------------- router and boot
-const PAGES = { home: ["Home", homePage], music: ["Music", musicPage], effects: ["Effects", effectsPage], live: ["Live pads", livePage], scenes: ["Scenes & schedules", scenesPage], sleep: ["Home & sleep", homeSleepPage],
-  room: ["Room", el => unlocked() ? roomPage(el) : lockScreen(el, "Room setup")], map: ["Camera mapping", el => unlocked() ? mapPage(el) : lockScreen(el, "Room setup")], devices: ["Devices", devicesPage], settings: ["Settings", settingsPage], timeline: ["Show editor", timelinePage] };
+// a page in a module of its own: loaded the first time it's shown (then from the browser's cache), then made as usual
+function lazyPage(load, name) {
+  return el => { const wait = {}; el.innerHTML = `<div class="callout span-12 faint">Loading…</div>`;
+    load().then(m => { if (app.page !== wait) return; el.innerHTML = ""; const pg = m[name](el) || {}; app.page = pg; if (app.status) pg.onStatus?.(app.status); })
+      .catch(e => { if (app.page === wait) el.innerHTML = `<div class="callout err span-12">Couldn't load this page (${esc(e.message)}). Check the connection and reload.</div>`; });
+    return wait; };
+}
+const roomPage = lazyPage(() => import("/room.js"), "roomPage"), mapPage = lazyPage(() => import("/mapper.js"), "mapPage");
+const PAGES = { home: ["Home", homePage], music: ["Music", musicPage], effects: ["Effects", effectsPage], live: ["Live pads", livePage], scenes: ["Scenes & schedules", scenesPage], sleep: ["Home & sleep", lazyPage(() => import("/homesleep.js"), "homeSleepPage")],
+  room: ["Room", el => unlocked() ? roomPage(el) : lockScreen(el, "Room setup")], map: ["Camera mapping", el => unlocked() ? mapPage(el) : lockScreen(el, "Room setup")], devices: ["Devices", devicesPage], settings: ["Settings", settingsPage], timeline: ["Show editor", lazyPage(() => import("/timeline.js"), "timelinePage")] };
 export function route() {
   const name = (location.hash.match(/^#\/(\w+)/) || [])[1] || "home", [title, fn] = PAGES[name] || PAGES.home;
   if (app.page?.canLeave && app.page.hash !== location.hash && !app.page.canLeave()) { history.replaceState(null, "", app.page.hash); return; } // unsaved changes: stay
@@ -792,7 +805,8 @@ async function boot() {
   $("#bri").onchange = e => act(() => api("POST", "/api/brightness", { value: e.target.value / 100 })).catch(() => {});
   if (DEMO) { demo = await import("/demo.js"); await demo.ready; $("#demo-bar").hidden = false; document.body.classList.add("demo"); }
   else import("/nowplaying.js").then(m => { NP = m; }).catch(() => {});
-  if ("serviceWorker" in navigator && isSecureContext) navigator.serviceWorker.register("/sw.js").catch(() => {});
+  if ("serviceWorker" in navigator && isSecureContext) { navigator.serviceWorker.register("/sw.js").catch(() => {});
+    setTimeout(() => navigator.serviceWorker.ready.then(r => r.active?.postMessage("precache")).catch(() => {}), 5000); } // the other pages, for offline use, once this one has loaded
   try { await refreshState(); } catch (e) { if (e.status === 403) { app.token = null; store.set("token", null); await refreshState(); } else throw e; }
   if (app.token && app.state.locked) { try { await api("PATCH", "/api/settings", {}); } catch { app.token = null; store.set("token", null); chrome(); } }
   await loadLayout();

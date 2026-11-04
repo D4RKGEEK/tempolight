@@ -5,6 +5,7 @@ import { inWindow } from "./sun.js";
 import { createFixtures } from "./fixtures.js";
 import { createBeatSources } from "./beatsources.js";
 import { noteRtt, audioDelay, deviceLatency } from "./latency.js";
+import { createPerf, LITE } from "./perf.js";
 import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, gridAt, toRGB8, LiveAnalyser, memoryEntry, memoryAnalysis, recognise, matchAt, refineByKicks, planShow, drumlessEntry, hearsLabel, moodName } from "../../engine/src/index.js";
 // Everything that touches the network or the sound card comes in through `io` (see node-io.js), so the same runtime
 // runs on a PC or Pi and, with pretend devices, inside the browser for the online demo.
@@ -13,20 +14,24 @@ const DEFAULT_PORT = { govee: 4003, openrgb: 6742, nanoleaf: 60222, hue: 80 }; /
 
 /**
  * @param {{data:object, save:()=>void}} store
- * @param {{io:object, logger?:Console|null, now?:()=>Date}} opts now: the wall clock (night mode); io: DDPSender, AudioSyncSender, getInfo, setState, setSegments, ipOf,
- *   discoverWled, startCapture, listSources, splitCommand, RATE
+ * @param {{io:object, logger?:Console|null, now?:()=>Date, host?:object|null, cpuUsage?:()=>{user:number, system:number}}} opts now: the wall clock (night mode); io: DDPSender, AudioSyncSender, getInfo, setState, setSegments, ipOf,
+ *   discoverWled, startCapture, listSources, splitCommand, RATE, hostInfo (optional: the computer, for the performance mode);
+ *   host: what to use instead of io.hostInfo() (tests); cpuUsage: process.cpuUsage, for the CPU figure in the status
  */
-export function createRuntime(store, { io, logger = console, now = () => new Date() } = {}) {
+export function createRuntime(store, { io, logger = console, now = () => new Date(), host, cpuUsage = null } = {}) {
   const { DDPSender, E131Sender, GoveeSender, OpenRGBSender, NanoleafSender, HueSender, AudioSyncSender, getInfo, setState, setSegments, ipOf, discoverWled, startCapture, listSources, splitCommand, RATE } = io;
   const data = () => store.data;
   const log = [], listeners = new Set();
   function note(msg, level = "info") { const e = { t: Date.now(), level, msg }; log.push(e); if (log.length > 200) log.shift(); for (const f of listeners) f(e); if (logger) logger.log(`[tempolight] ${msg}`); }
+  // performance mode (perf.js): full, or lite on small computers; the frame rate the loop really runs at
+  const perf = createPerf({ setting: () => data().settings.performance, host: () => host !== undefined ? host : io.hostInfo ? io.hostInfo() : null, note, cpuUsage });
+  const loopFps = () => { const f = data().settings.fps || 60; return perf.lite ? Math.min(f, LITE.fps) : f; };
 
   let L, fx, D, ranges, outs = new Map();
   const fixtures = createFixtures(), beats = createBeatSources(); // DMX fixtures; MIDI clock and Ableton Link beat grids
   const health = new Map(); // device id -> {online, rssi, version, ledsReported, lastSeen, error}
   const rt = {
-    frames: 0, fps: 0, startedAt: Date.now(), source: "idle", sourceLabel: "Nothing playing", mem: { lock: null, cand: null },
+    frames: 0, fps: 0, perf, startedAt: Date.now(), source: "idle", sourceLabel: "Nothing playing", mem: { lock: null, cand: null },
     live: null,      // {an, kind, label, lastPush, clientId}
     capture: null,   // {proc, sourceId, label, error}
     song: null,      // {name, pre, pos, playing, rate, at, clientId}
@@ -79,10 +84,10 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   function pushPcm(samples, kind, label, clientId, rate = RATE, inMs = 0) { // inMs: the browser's estimate of its capture delay (latency meter)
     if (!rt.live || rt.live.kind !== kind || rt.live.clientId !== clientId || rt.live.rate !== rate) {
       if (rt.live && rt.live.kind === "browser" && kind === "capture" && performance.now() - rt.live.lastPush < 1500) return; // a browser that is sending wins
-      rt.live = { an: new LiveAnalyser(rate), kind, label, clientId, rate, lastPush: 0, started: performance.now() }; rt.mem.lock = null; rt.mem.cand = null; memT = 0;
-      note(`Listening to ${label}`);
+      rt.live = { an: new LiveAnalyser(rate), kind, label, clientId, rate, lastPush: 0, started: performance.now() }; rt.mem.lock = null; rt.mem.cand = null; memT = 0; memJob = null;
+      rt.live.an.lite = perf.lite; note(`Listening to ${label}`);
     }
-    rt.live.an.push(samples); rt.live.lastPush = performance.now(); rt.live.inMs = inMs; rt.live.chunkMs = samples.length / rate * 1000;
+    const t0 = performance.now(); rt.live.an.push(samples); perf.add("analysis", performance.now() - t0); rt.live.lastPush = performance.now(); rt.live.inMs = inMs; rt.live.chunkMs = samples.length / rate * 1000;
   }
   function liveFresh() { return rt.live && performance.now() - rt.live.lastPush < 1500; }
   function stopLive(clientId) { if (rt.live && (clientId == null || rt.live.clientId === clientId)) { note(`Stopped listening to ${rt.live.label}`); rt.live = null; rt.mem.lock = null; rt.mem.cand = null; } }
@@ -160,45 +165,61 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   }
   /** The timeline editor previews its unsaved changes on the lights: {id, show, colors, cues, bright} for a while, or null. */
   function setDraft(d) { rt.draft = d ? { ...d, until: performance.now() + 120000 } : null; }
-  let memT = 0;
+  let memT = 0, memJob = null;
+  const MEM_SLICE = 4; // ms of matching at a time
   const lockPos = (L, t) => L.pos0 + (t - L.t0) * L.rate; // where in the song we are at live time t
   function release(why) { const m = rt.mem; if (m.lock) note(`Song memory: ${why} “${m.lock.name}”, back to live listening`); m.lock = null; m.cand = null; }
-  function lockOn(e, pos, an, rate) { const pre = memoryAnalysis(e), ref = refineByKicks(an.kicks, an.t, pos, pre.kicks, 0.2, rate);
-    rt.mem.lock = { id: e.id, name: e.name, e, pre, pos0: ref.pos, t0: an.t, rate, miss: 0 }; rt.mem.cand = null;
+  function lockOn(e, pos, kicks, t, rate) { const pre = memoryAnalysis(e), ref = refineByKicks(kicks, t, pos, pre.kicks, 0.2, rate);
+    rt.mem.lock = { id: e.id, name: e.name, e, pre, pos0: ref.pos, t0: t, rate, miss: 0 }; rt.mem.cand = null;
     note(`Song memory: recognised “${e.name}” at ${Math.floor(ref.pos / 60)}:${String(Math.floor(ref.pos % 60)).padStart(2, "0")}; following its beat map`); }
   // the live tempo against the song's: a DJ playing it 3% fast plays it 3% faster (small differences are just the tempo estimate wobbling)
   function rateOf(an, e) { if (!an.bpm || !e.bpm || an.drumless() || drumlessEntry(e)) return 1; // (no drums: the tempo is a guess)
     for (const k of [1, 2, 0.5]) { const r = an.bpm / e.bpm / k; if (Math.abs(r - 1) < 0.06) return Math.abs(r - 1) >= 0.015 ? r : 1; } return 1; }
-  function songMemoryTick() { // once a second while listening live: is this a song we know?
+  // Once a second while listening live: is this a song we know? The frame only takes a snapshot of what was heard; the
+  // matching runs after it, in slices of a few ms between frames (one remembered song at a time, the best kept), so a
+  // long list of songs on a slow computer never makes the lights stutter. The answer is the same as matching them all at once.
+  function songMemoryTick() {
     const an = rt.live.an, list = data().songs, m = rt.mem;
-    if (!data().settings.songMemory || !list.length) { if (m.lock) release("song memory is off: stopped following"); return; }
-    if (an.t - memT < 1) return; memT = an.t;
-    const known = (r, at) => m.cand && m.cand.id === r.id && Math.abs(r.pos - (m.cand.pos + (an.t - m.cand.t) * rateOf(an, at))) < 0.3; // seen twice, in step
-    if (m.lock) {
-      const L = m.lock, exp = lockPos(L, an.t);
-      if (exp > L.pre.dur + 0.5) return release("the end of");
-      // still this song, here? Only positions near where it should be count, so a chorus that comes back can't fool it
-      const here = matchAt(an.tap.q, L.e, exp, 0.2, an.memoryQuery());
-      const ok = here && here.score > 0.45;
+    if (!data().settings.songMemory || !list.length) { memJob = null; if (m.lock) release("song memory is off: stopped following"); return; }
+    if (memJob || an.t - memT < 1) return; memT = an.t;
+    const L = m.lock, exp = L ? lockPos(L, an.t) : 0;
+    if (L && exp > L.pre.dur + 0.5) return release("the end of");
+    memJob = { an, t: an.t, q: an.tap.q.slice(), query: an.memoryQuery(), kicks: an.kicks.slice(), lock: L, exp, entries: list.slice(), i: 0, best: null, here: undefined };
+    setTimeout(memStep, 0);
+  }
+  function memStep() {
+    const J = memJob; if (!J) return;
+    if (!rt.live || rt.live.an !== J.an || rt.mem.lock !== J.lock || !data().settings.songMemory) { if (memJob === J) memJob = null; return; } // another source, or let go meanwhile
+    const t0 = performance.now();
+    // still this song, here? Only positions near where it should be count, so a chorus that comes back can't fool it
+    if (J.lock && J.here === undefined) J.here = matchAt(J.q, J.lock.e, J.exp, 0.2, J.query);
+    while (J.i < J.entries.length && performance.now() - t0 < MEM_SLICE) { const r = recognise(J.q, [J.entries[J.i++]], J.query); if (r && (!J.best || r.score > J.best.score)) J.best = r; }
+    perf.add("memory", performance.now() - t0);
+    if (J.i < J.entries.length) { setTimeout(memStep, 0); return; }
+    memJob = null; memDecide(J);
+  }
+  function memDecide(J) {
+    const an = J.an, list = data().songs, m = rt.mem, t = J.t, r = J.best && list.some(e => e.id === J.best.id) ? J.best : null; // (not one forgotten meanwhile)
+    const known = (r, at) => m.cand && m.cand.id === r.id && Math.abs(r.pos - (m.cand.pos + (t - m.cand.t) * rateOf(an, at))) < 0.3; // seen twice, in step
+    if (J.lock) {
+      const L = J.lock, exp = J.exp, here = J.here, ok = here && here.score > 0.45;
       if (ok) { L.miss = 0;
-        const rate = rateOf(an, L.e); if (Math.abs(rate - L.rate) > 0.004) { L.pos0 = exp; L.t0 = an.t; L.rate += (rate - L.rate) * 0.5; }
-        const ref = refineByKicks(an.kicks, an.t, exp, L.pre.kicks, 0.08, L.rate); if (ref.hits) L.pos0 += (ref.pos - exp) * 0.5; }
+        const rate = rateOf(an, L.e); if (Math.abs(rate - L.rate) > 0.004) { L.pos0 = exp; L.t0 = t; L.rate += (rate - L.rate) * 0.5; }
+        const ref = refineByKicks(J.kicks, t, exp, L.pre.kicks, 0.08, L.rate); if (ref.hits) L.pos0 += (ref.pos - exp) * 0.5; }
       // too flat to tell: fine in a quiet part of the song, but silence where the song is loud means it stopped
       else if (!here) { if (an.state === "silent" && songView(L.pre, exp).state !== "silent") L.miss += 2; }
       else L.miss++;
       // something we know, somewhere else, twice in step (another song, or this one after a skip): follow that instead,
       // unless where we are still fits about as well (a chorus that comes back)
-      const r = recognise(an.tap.q, list, an.memoryQuery());
       if (r && !(r.id === L.id && Math.abs(r.pos - exp) < 0.3) && (!ok || r.score > here.score + 0.1)) { const e = list.find(x => x.id === r.id);
-        if (known(r, e)) { if (e.id !== L.id) note(`Song memory: “${L.name}” is no longer playing`); return lockOn(e, r.pos, an, rateOf(an, e)); }
-        m.cand = { ...r, t: an.t }; } else m.cand = null;
+        if (known(r, e)) { if (e.id !== L.id) note(`Song memory: “${L.name}” is no longer playing`); return lockOn(e, r.pos, J.kicks, t, rateOf(an, e)); }
+        m.cand = { ...r, t }; } else m.cand = null;
       if (L.miss >= 4) release("lost track of");
       return;
     }
-    const r = recognise(an.tap.q, list, an.memoryQuery());
     if (!r) { m.cand = null; return; }
     const e = list.find(x => x.id === r.id);
-    if (known(r, e)) lockOn(e, r.pos, an, rateOf(an, e)); else m.cand = { ...r, t: an.t };
+    if (known(r, e)) lockOn(e, r.pos, J.kicks, t, rateOf(an, e)); else m.cand = { ...r, t };
   }
   function forget(id) { const list = data().songs, i = list.findIndex(e => e.id === id); if (i < 0) return false; list.splice(i, 1); if (rt.mem.lock && rt.mem.lock.id === id) rt.mem.lock = null; store.save(); return true; }
 
@@ -266,7 +287,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     let bri = s.brightness; if (!V && sh.mode === "auto") bri *= rt.home?.idleBrightness() ?? s.idleBrightness; // the ambient plan's brightness for this hour, if on
     if (rt.night) bri = Math.min(bri, s.night.maxBrightness);
     rt.bri = bri; // the sunrise alarm draws at its own brightness, whatever this is
-    const col = D.frame(V, t, extra, wall);
+    const tr = performance.now(), col = D.frame(V, t, extra, wall), tr2 = performance.now(); perf.add("render", tr2 - tr);
     if (!sh.power) { bri = 0; }
     toRGB8(col, col8, bri);
     fixtures.begin({ V, t, wall, cfg: s.dmx, safe: s.safe, night: !!rt.night, power: sh.power, overlay: D.state.overlay, bri });
@@ -295,14 +316,18 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     }
     // WLED audio sync, so the controllers' own sound-reactive effects can run too
     if (s.audioSync && liveFresh() && now - lastSync > 20) { lastSync = now; sendAudioSync(); }
-    // preview for the web UI, 30 fps
-    if (++previewTick % Math.max(1, Math.round((s.fps || 60) / 30)) === 0 && previewClients.size) {
+    const tb = performance.now(); perf.add("output", tb - tr2);
+    // preview for the web UI, 30 fps (15 in low-power mode)
+    const fr = loopFps(); ++previewTick;
+    if (previewTick % Math.max(1, Math.round(fr / (perf.lite ? LITE.previewFps : 30))) === 0 && previewClients.size) {
       const msg = new Uint8Array(1 + col8.length); msg[0] = 1; msg.set(col8, 1);
       for (const c of previewClients) if (c.open && !c.busy) c.send(msg);
     }
     // phones as extra lights: each phone shows the colour of its own part of the room, so a crowd of phones moves with it
-    if (phones.size && previewTick % Math.max(1, Math.round((s.fps || 60) / 30)) === 0) sendPhones(sh.power ? 1 : 0);
+    if (phones.size && previewTick % Math.max(1, Math.round(fr / (perf.lite ? LITE.phoneFps : 30))) === 0) sendPhones(sh.power ? 1 : 0);
     rt.frames++; fpsN++; if (now - fpsT > 1000) { rt.fps = fpsN * 1000 / (now - fpsT); fpsN = 0; fpsT = now; }
+    const end = performance.now(); perf.add("broadcast", end - tb);
+    if (perf.frame(end - now, fr)) startLoop(); // auto mode stepped down: the loop restarts at the lower rate
   }
   // DMX: one universe per device, always sent (DMX nodes hold the last values, so stopping could leave fog on),
   // about 40 times a second; dark while camera mapping; zeros for 2 s after it is turned off, then nothing
@@ -344,7 +369,9 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     let mi = 0; for (let i = 1; i < 24; i++) if (an.bands[i] > an.bands[mi]) mi = i;
     syncSender.s.send({ sampleRaw: Math.min(255, an.rms * 1200), sampleSmth: Math.min(255, an.eFast * 1200), peak: an.t - (an.kicks.at(-1) ?? -9) < 0.05, fft, magnitude: an.bands[mi] * 1000, majorPeak: 40 * Math.pow(250, (mi + 0.5) / 24) });
   }
-  function startLoop() { clearInterval(timer); timer = setInterval(() => { try { frame(); } catch (e) { note(`Render error: ${e.message}`, "error"); } }, 1000 / (data().settings.fps || 60)); }
+  function startLoop() {
+    perf.update(); if (rt.live) rt.live.an.lite = perf.lite;
+    clearInterval(timer); timer = setInterval(() => { try { frame(); } catch (e) { note(`Render error: ${e.message}`, "error"); } }, 1000 / loopFps()); }
 
   // ---------------------------------------------------------------- devices
   async function checkDevice(d) {
@@ -436,7 +463,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null,
       overlay: overlayState(), devices: data().devices.map(d => { const o = outs.get(d.id), { rtts, ...h } = health.get(d.id) || {}; void rtts;
         return { id: d.id, ...h, sent: o?.sender.sent || 0, used: o?.used || 0, amps: Math.round((o?.amps || 0) * 100) / 100, limited: !!o?.limited, ...latencyOf(d, h, o) }; }),
-      uptime: Math.round((Date.now() - rt.startedAt) / 1000),
+      uptime: Math.round((Date.now() - rt.startedAt) / 1000), perf: { ...perf.status(), fps: perf.fps || Math.round(rt.fps) },
       ...beats.status(performance.now()), dmx: data().devices.some(d => d.kind === "dmx") ? fixtures.status(performance.now() / 1000) : null,
     };
   }
@@ -462,7 +489,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   if (data().settings.capture.enabled) startCaptureSource();
 
   return {
-    get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, rt, log, listeners, previewClients, phones, health,
+    get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, perf, rt, log, listeners, previewClients, phones, health,
     rebuild, rebuildEffects, syncDirector, startLoop, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
     fixtures, beats, identify, syncSegments, setPower, action, status, setScreen, clearScreen, remember, forget, djBeat, djOnAir, planFor, setDraft, mapLight, endMap, layoutInfo, checkDevice, note,
     close() { for (const [id, o] of outs) if (data().devices.find(d => d.id === id)?.kind === "dmx") try { o.sender.send(new Uint8Array(512)); } catch {} // DMX: leave everything at zero

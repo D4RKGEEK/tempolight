@@ -85,7 +85,10 @@ await step("installable app: manifest, icons and service worker", async () => {
   await until(() => page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration())), 5000, "service worker not registered");
 });
 await step("works offline once installed", async () => {
-  await page.reload(); await sleep(800); await ctx.setOffline(true); await page.reload(); await page.waitForSelector("#page .panel", { timeout: 8000 }); await ctx.setOffline(false);
+  await page.reload(); await sleep(800); await ctx.setOffline(true); await page.reload(); await page.waitForSelector("#page .panel", { timeout: 8000 });
+  // pages loaded only when first shown (and not visited yet) open offline too: the service worker kept them
+  await page.evaluate(() => { location.hash = "#/sleep"; }); await page.waitForSelector("#w-on", { timeout: 8000 });
+  await page.evaluate(() => { location.hash = "#/home"; }); await page.waitForSelector("#page .panel", { timeout: 8000 }); await ctx.setOffline(false);
 });
 await step("iPhone size: no sideways scrolling", async () => {
   const phone = await browser.newContext({ ...require("playwright").devices["iPhone 13"] }); const p = await phone.newPage();
