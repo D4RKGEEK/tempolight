@@ -53,10 +53,12 @@ jobs:
         with:
           node-version: 22
 
+      - name: Install the Mermaid CLI once (running it through npx in parallel races on npx's cache)
+        run: npm install -g ${{ env.MERMAID_CLI }}
       - name: Check the docs (Mermaid diagrams compile; links, anchors and images resolve)
         run: npm run docs:check
         env:
-          MMDC: npx -y ${{ env.MERMAID_CLI }}
+          MMDC: mmdc
 
       - name: Install the site's tools
         working-directory: website
