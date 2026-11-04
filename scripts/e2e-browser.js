@@ -206,6 +206,18 @@ await step("devices: a DMX universe, fixtures by profile and address, live chann
     await shot("08c-dmx"); await go("live"); ok(await page.isVisible('[data-pad="fog"]'), "no fog pad with a DMX device");
   } finally { rx.close(); for (const x of app.store.data.devices.filter(x => x.kind === "dmx")) await fetch(`${base}/api/devices/${x.id}`, { method: "DELETE" }); } // later steps expect only the two WLED controllers
 });
+await step("devices: a smart bulb (WiZ) from the grouped kind list, shown online, its colours arrive", async () => {
+  const { fakeWiz } = await import("../packages/outputs/test/fake-lights.js"), W = await fakeWiz();
+  try {
+    await go("devices"); await sleep(400);
+    ok((await page.$$("#d-kind optgroup")).length === 3, "kinds aren't grouped");
+    await page.selectOption("#d-kind", "wiz"); await page.fill("#d-ip", W.host); await page.fill("#d-name", "Bedside"); await page.click("#d-add");
+    const d = await until(() => app.store.data.devices.find(x => x.kind === "wiz"), 4000, "WiZ light not added");
+    await until(async () => (await page.$$(`[data-chk="${d.id}"]`)).length === 1, 4000, "WiZ row not shown");
+    await page.click(`[data-chk="${d.id}"]`); await until(async () => (await page.textContent("#d-rows")).includes("WiZ ESP01"), 4000, "WiZ health not shown");
+    await until(() => W.pilots.length > 0, 4000, "no setPilot commands");
+  } finally { W.close(); for (const x of app.store.data.devices.filter(x => x.kind === "wiz")) await fetch(`${base}/api/devices/${x.id}`, { method: "DELETE" }); } // later steps expect only the two WLED controllers
+});
 await step("music: input picker, level meter and timing fix are there", async () => {
   await go("music"); ok(await page.isVisible("#m-input") && await page.isVisible("#m-cal") && (await page.$("#m-lvl")) !== null, "controls missing");
 });

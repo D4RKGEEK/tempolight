@@ -19,7 +19,7 @@ const DEFAULT_PORT = { govee: 4003, openrgb: 6742, nanoleaf: 60222, hue: 80 }; /
  *   host: what to use instead of io.hostInfo() (tests); cpuUsage: process.cpuUsage, for the CPU figure in the status
  */
 export function createRuntime(store, { io, logger = console, now = () => new Date(), host, cpuUsage = null } = {}) {
-  const { DDPSender, E131Sender, GoveeSender, OpenRGBSender, NanoleafSender, HueSender, AudioSyncSender, getInfo, setState, setSegments, ipOf, discoverWled, startCapture, listSources, splitCommand, RATE } = io;
+  const { DDPSender, E131Sender, GoveeSender, OpenRGBSender, NanoleafSender, HueSender, HueEntertainmentSender, LIGHT_KINDS: LK = {}, AudioSyncSender, getInfo, setState, setSegments, ipOf, discoverWled, startCapture, listSources, splitCommand, RATE } = io;
   const data = () => store.data;
   const log = [], listeners = new Set();
   function note(msg, level = "info") { const e = { t: Date.now(), level, msg }; log.push(e); if (log.length > 200) log.shift(); for (const f of listeners) f(e); if (logger) logger.log(`[tempolight] ${msg}`); }
@@ -50,13 +50,15 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     for (const [id, o] of outs) if (!ids.has(id)) { o.sender.close(); outs.delete(id); }
     for (const d of data().devices) {
       const used = Math.max(0, ...ranges.filter(r => r.dev === d.id).map(r => r.end + 1));
-      const size = Math.max(used, 1), ip = ipOf(d.host), port = d.ddpPort || DEFAULT_PORT[d.kind] || 4048;
+      const size = Math.max(used, 1), ip = ipOf(d.host), port = d.ddpPort || DEFAULT_PORT[d.kind] || LK[d.kind]?.port || 4048;
       let o = outs.get(d.id);
-      const proto = d.kind === "dmx" ? "dmx" : d.kind === "govee" && GoveeSender ? "govee" : d.kind === "openrgb" && OpenRGBSender ? "openrgb" : d.kind === "nanoleaf" && NanoleafSender ? "nanoleaf" : d.kind === "hue" && HueSender ? "hue" : d.protocol && d.protocol !== "ddp" && E131Sender ? d.protocol : "ddp";
+      const fastHue = d.kind === "hue" && d.hue?.ent?.on && d.hue.clientkey && HueEntertainmentSender; // Hue fast mode (Entertainment streaming)
+      const proto = LK[d.kind] ? d.kind : d.kind === "dmx" ? "dmx" : d.kind === "govee" && GoveeSender ? "govee" : d.kind === "openrgb" && OpenRGBSender ? "openrgb" : d.kind === "nanoleaf" && NanoleafSender ? "nanoleaf" : d.kind === "hue" && HueSender ? "hue" : d.protocol && d.protocol !== "ddp" && E131Sender ? d.protocol : "ddp";
       // everything a sender is built from: a change to any of it (segments, a new token after pairing again, a restored backup) makes a new sender
-      const key = JSON.stringify([d.host, port, proto, d.universe ?? "", d.goveeMode || "", d.goveeSegments || 0, d.leds, d.orgbIndex ?? "", d.nanoleaf?.token, d.nanoleaf?.panels, d.hue?.user, d.hue?.lights, d.hue?.color]);
+      const key = JSON.stringify([d.host, port, proto, d.universe ?? "", d.goveeMode || "", d.goveeSegments || 0, d.leds, d.orgbIndex ?? "", d.nanoleaf?.token, d.nanoleaf?.panels, d.hue?.user, d.hue?.lights, d.hue?.color, fastHue ? [d.hue.clientkey, d.hue.ent, d.hue.clipPort, d.hue.streamPort] : 0, d.light || null]);
       if (!o || o.key !== key) { const old = o; // the new sender first, so a connection shared with the old one (OpenRGB) stays open
-        o = { sender: proto === "dmx" ? (E131Sender ? new E131Sender(ip, { protocol: d.protocol === "e131" ? "e131" : "artnet", universe: d.universe, channels: 512, port: Number(/:(\d+)$/.exec(d.host)?.[1]) || undefined }) : { sent: 0, send() { this.sent++; }, close() {} }) : proto === "ddp" ? new DDPSender(ip, port) : proto === "hue" ? new HueSender(d.host, { user: d.hue?.user, lights: d.hue?.lights, color: d.hue?.color }) : proto === "nanoleaf" ? new NanoleafSender(d.host, { token: d.nanoleaf?.token, panels: d.nanoleaf?.panels, port }) : proto === "openrgb" ? new OpenRGBSender(ip, { port, index: d.orgbIndex || 0, leds: d.leds }) : proto === "govee" ? new GoveeSender(ip, { mode: d.goveeMode, segments: d.goveeSegments || d.leds, port }) : new E131Sender(ip, { protocol: proto, universe: d.universe }), ip, port, key, createdAt: Date.now() }; outs.set(d.id, o); if (old) old.sender.close(); }
+        o = { sender: LK[proto] ? LK[proto].sender(d) : fastHue ? new HueEntertainmentSender(d.host, { user: d.hue.user, clientkey: d.hue.clientkey, area: d.hue.ent, lights: d.hue.lights, color: d.hue.color, clipPort: d.hue.clipPort, streamPort: d.hue.streamPort,
+            onState: (st, err) => { if (st === "streaming") note(`${d.name}: streaming (Hue Entertainment)`); else if (st === "fallback") note(`${d.name}: fast mode isn't working (${err}); basic mode for now`, "warn"); } }) : proto === "dmx" ? (E131Sender ? new E131Sender(ip, { protocol: d.protocol === "e131" ? "e131" : "artnet", universe: d.universe, channels: 512, port: Number(/:(\d+)$/.exec(d.host)?.[1]) || undefined }) : { sent: 0, send() { this.sent++; }, close() {} }) : proto === "ddp" ? new DDPSender(ip, port) : proto === "hue" ? new HueSender(d.host, { user: d.hue?.user, lights: d.hue?.lights, color: d.hue?.color }) : proto === "nanoleaf" ? new NanoleafSender(d.host, { token: d.nanoleaf?.token, panels: d.nanoleaf?.panels, port }) : proto === "openrgb" ? new OpenRGBSender(ip, { port, index: d.orgbIndex || 0, leds: d.leds }) : proto === "govee" ? new GoveeSender(ip, { mode: d.goveeMode, segments: d.goveeSegments || d.leds, port }) : new E131Sender(ip, { protocol: proto, universe: d.universe }), ip, port, key, createdAt: Date.now() }; outs.set(d.id, o); if (old) old.sender.close(); }
       o.size = size; o.buf = new Uint8Array(size * 3); o.used = used;
     }
     col8 = new Uint8Array(L.N * 3);
@@ -377,7 +379,10 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   async function checkDevice(d) {
     const h = health.get(d.id) || {}; health.set(d.id, h);
     if (d.virtual) return Object.assign(h, { online: true, version: "virtual", ledsReported: d.leds, lastSeen: Date.now() });
-    if (d.kind === "hue") { try { const t0 = performance.now(), l = await io.hueLights(d.host, d.hue?.user); noteRtt(h, performance.now() - t0); return Object.assign(h, { online: true, version: "Hue bridge", ledsReported: l.length, lastSeen: Date.now(), error: null }); }
+    if (LK[d.kind]) { try { const t0 = performance.now(), r = await LK[d.kind].check(d); noteRtt(h, performance.now() - t0); return Object.assign(h, { online: true, version: r.version, ledsReported: r.leds, lastSeen: Date.now(), error: null }); }
+      catch (e) { if (h.online !== false) note(`${d.name} is not answering (${d.host})`, "warn"); return Object.assign(h, { online: false, error: e.message }); } }
+    if (d.kind === "hue") { try { const t0 = performance.now(), l = await io.hueLights(d.host, d.hue?.user); noteRtt(h, performance.now() - t0); hueAreas(d, h);
+        return Object.assign(h, { online: true, version: outs.get(d.id)?.sender.mode === "entertainment" ? "Hue bridge (fast mode)" : "Hue bridge", ledsReported: l.length, lastSeen: Date.now(), error: null }); }
       catch (e) { if (h.online !== false) note(`${d.name} is not answering (${d.host})`, "warn"); return Object.assign(h, { online: false, error: e.message }); } }
     if (d.kind === "nanoleaf") { try { const t0 = performance.now(), info = await io.nanoleafInfo(d.host, d.nanoleaf?.token); noteRtt(h, performance.now() - t0); return Object.assign(h, { online: true, version: `Nanoleaf ${info.model}`.trim(), ledsReported: info.panels.length, lastSeen: Date.now(), error: null }); }
       catch (e) { if (h.online !== false) note(`${d.name} is not answering (${d.host})`, "warn"); return Object.assign(h, { online: false, error: e.message }); } }
@@ -392,6 +397,9 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     catch (e) { if (h.online !== false) note(`${d.name} is not answering (${d.host})`, "warn"); Object.assign(h, { online: false, error: e.message }); }
     return h;
   }
+  // does the bridge have entertainment areas (so the Devices page can offer fast mode)? Asked every 5 minutes.
+  function hueAreas(d, h) { if (!io.hueEntertainmentAreas || Date.now() - (h.areasAt || 0) < 300_000) return; h.areasAt = Date.now();
+    io.hueEntertainmentAreas(d.host, d.hue?.user, { clipPort: d.hue?.clipPort }).then(a => { h.hueAreas = a.map(x => ({ id: x.id, name: x.name })); }, () => { h.hueAreas ||= []; }); }
   let healthTimer = null, rediscoverAt = 0;
   async function healthLoop() {
     await Promise.all(data().devices.map(checkDevice));
@@ -417,7 +425,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   async function setPower(on) {
     data().show.power = !!on; store.save(); if (!on) rt.powerOffAt = performance.now(); else rt.powerOnAt = Date.now();
     note(on ? "Lights on" : "Lights off");
-    await Promise.all(data().devices.filter(d => d.enabled && !d.virtual).map(d => d.kind === "openrgb" || d.kind === "dmx" ? null : d.kind === "govee" || d.kind === "nanoleaf" || d.kind === "hue" ? outs.get(d.id)?.sender.power?.(!!on) : setState(d.host, { on: !!on }, 2000).catch(() => {})));
+    await Promise.all(data().devices.filter(d => d.enabled && !d.virtual).map(d => d.kind === "openrgb" || d.kind === "dmx" ? null : d.kind === "govee" || d.kind === "nanoleaf" || d.kind === "hue" || LK[d.kind] ? outs.get(d.id)?.sender.power?.(!!on) : setState(d.host, { on: !!on }, 2000).catch(() => {})));
   }
 
   // ---------------------------------------------------------------- live controls (pads, OSC, API)

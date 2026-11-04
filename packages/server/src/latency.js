@@ -12,7 +12,7 @@
 // can't see (Bluetooth, the air) are what the one-tap timing fix measures.
 
 export const ANALYSIS_MS = 23; // LiveAnalyser: a 256-sample hop at 22,050 Hz (11.6 ms) plus onset smoothing
-const FRAME_MS = { hue: 100, nanoleaf: 33, govee: 33 }; // devices that update more slowly than our frame rate
+const FRAME_MS = { hue: 100, hueFast: 20, nanoleaf: 33, govee: 33, lifx: 50, wiz: 100, kasa: 100, yeelight: 50, twinkly: 40 }; // devices that update more slowly than our frame rate
 
 /** Remember a new HTTP round trip for a device; the network delay uses the best of the recent ones (no WLED busy time). */
 export function noteRtt(h, ms) {
@@ -48,7 +48,7 @@ export function deviceLatency({ dev, health = {}, out = {}, fps = 60, offsetMs =
   const warnings = [], warn = (kind, text) => warnings.push({ kind, text });
   const ourFps = Math.max(1, fps || 60);
   const networkMs = dev.virtual ? 0 : health.rttMs != null ? Math.round(health.rttMs / 2) : null;
-  const frameMs = Math.round(FRAME_MS[dev.kind] || 1000 / ourFps);
+  const frameMs = Math.round(FRAME_MS[dev.kind === "hue" && dev.hue?.ent?.on ? "hueFast" : dev.kind] || 1000 / ourFps);
   const latencyMs = dev.enabled === false || health.online === false ? null
     : Math.round(audio.audioMs + audio.analysisMs + (networkMs || 0) + frameMs - (offsetMs || 0));
 
