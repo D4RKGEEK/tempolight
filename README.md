@@ -98,6 +98,7 @@ designer: it knows where the beat is, which part of the song you're in, and what
 
 You need **WLED controllers** (any ESP8266/ESP32 running [WLED](https://kno.wled.ge)) and a computer on the same
 network: Windows, macOS, Linux or a Raspberry Pi 3/4/5.
+Also: a ready-to-flash [Raspberry Pi image](docs/raspberry-pi.md) with Wi-Fi setup from your phone, and a [Home Assistant add-on](homeassistant/tempolight/DOCS.md).
 
 > **Note:** the one-line installers download from this repository, so they work once it is public. Until then, use
 > [From source](#from-source).

@@ -1,0 +1,5 @@
+# Home Assistant add-on repository: add https://github.com/D4RKGEEK/tempolight in Settings > Add-ons > Add-on store >
+# ⋮ > Repositories. The add-on itself is in homeassistant/tempolight. (Home Assistant only reads this file at the root.)
+name: Tempolight
+url: https://github.com/D4RKGEEK/tempolight
+maintainer: D4RKGEEK

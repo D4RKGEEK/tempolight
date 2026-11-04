@@ -1,0 +1,77 @@
+name: Raspberry Pi image
+# Builds tempolight-<version>-pi-arm64.img.xz from the official Raspberry Pi OS Lite (64-bit) and attaches it, its
+# sha256 and a Raspberry Pi Imager repository file (tempolight-imager.json) to the GitHub release of the tag.
+# Manual runs build the current branch and keep the image as a workflow artifact (no release).
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      rpios_url:
+        description: Raspberry Pi OS Lite arm64 image (.img.xz) to start from; empty = the latest
+        required: false
+        default: ""
+      ffmpeg:
+        description: Include ffmpeg (about 150 MB; plays music files and more capture sources)
+        type: boolean
+        default: true
+
+permissions:
+  contents: write
+
+concurrency:
+  group: pi-image-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  image:
+    # a native arm64 runner: the image's programs run directly, no qemu emulation (much faster)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # the image gets a full git checkout, so one-click updates can pull
+
+      - name: Version
+        id: v
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = tag ]; then v="${GITHUB_REF_NAME#v}"; else v="$(node -p 'require("./package.json").version')-dev.$(git rev-parse --short HEAD)"; fi
+          pkg="$(node -p 'require("./package.json").version')"
+          if [ "${GITHUB_REF_TYPE}" = tag ] && [ "$v" != "$pkg" ]; then echo "::warning::Tag $GITHUB_REF_NAME doesn't match package.json version $pkg"; fi
+          echo "version=$v" >> "$GITHUB_OUTPUT"
+
+      - name: Tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xz-utils parted e2fsprogs dosfstools zerofree util-linux
+          if [ "$(uname -m)" != aarch64 ]; then sudo apt-get install -y qemu-user-static binfmt-support; fi
+
+      - name: Build the image
+        env:
+          RPIOS_URL: ${{ inputs.rpios_url }}
+          WITH_FFMPEG: ${{ (github.event_name != 'workflow_dispatch' || inputs.ffmpeg) && '1' || '0' }}
+        run: |
+          [ -n "$RPIOS_URL" ] || unset RPIOS_URL
+          sudo --preserve-env=RPIOS_URL,WITH_FFMPEG install/pi/build-image.sh "${{ steps.v.outputs.version }}" dist
+          sudo chown -R "$(id -u):$(id -g)" dist
+          ls -l dist && cat dist/*.sha256
+
+      - name: Keep as an artifact (manual runs)
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: tempolight-${{ steps.v.outputs.version }}-pi-arm64
+          path: dist/*
+          compression-level: 0   # already xz
+          retention-days: 14
+
+      - name: Attach to the release
+        if: github.ref_type == 'tag'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/tempolight-${{ steps.v.outputs.version }}-pi-arm64.img.xz
+            dist/tempolight-${{ steps.v.outputs.version }}-pi-arm64.img.xz.sha256
+            dist/tempolight-imager.json
+          fail_on_unmatched_files: true

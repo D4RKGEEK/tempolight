@@ -1,0 +1,43 @@
+# Home Assistant add-on: Tempolight. Built on the Home Assistant machine from this folder's Dockerfile, which downloads
+# the Tempolight release tagged v<version>. Bump `version` with each Tempolight release (it must have a matching tag).
+name: Tempolight
+version: "0.3.0"
+slug: tempolight
+description: Music-reactive lighting for WLED that understands the song (beats, build-ups, drops and mood)
+url: https://github.com/D4RKGEEK/tempolight
+arch:
+  - aarch64
+  - amd64
+startup: application
+boot: auto
+# Host networking: Tempolight finds WLED with mDNS, streams DDP/E1.31/Art-Net over UDP and listens for Pro DJ Link
+# and Ableton Link broadcasts. None of that works through Docker's port mapping.
+host_network: true
+# No ingress: the web app uses absolute paths (/app.js, /api, /ws), which break under the ingress path prefix.
+ingress: false
+webui: "http://[HOST]:[PORT:8080]/"
+ports:
+  8080/tcp: 8080
+ports_description:
+  8080/tcp: Web interface (with host networking, change it with the port option instead)
+# The PulseAudio server of Home Assistant's audio plugin: lets "Listen on the server" use a sound card on this machine
+audio: true
+# Ask the Supervisor for the Mosquitto broker's address and login (GET http://supervisor/services/mqtt)
+services:
+  - mqtt:want
+map:
+  - media:ro
+options:
+  port: 8080
+  mqtt_auto: true
+  mqtt_url: ""
+  mqtt_username: ""
+  mqtt_password: ""
+  discover: true
+schema:
+  port: port
+  mqtt_auto: bool
+  mqtt_url: str?
+  mqtt_username: str?
+  mqtt_password: password?
+  discover: bool

@@ -1,0 +1,24 @@
+# Tempolight on the Raspberry Pi image. Settings live in /var/lib/tempolight.
+[Unit]
+Description=Tempolight music-reactive lighting
+After=network-online.target sound.target
+Wants=network-online.target
+
+[Service]
+User=tempolight
+Group=tempolight
+SupplementaryGroups=audio
+Environment=TEMPOLIGHT_DATA=/var/lib/tempolight
+# one-click updates (git pull in /opt/tempolight) exit with code 3 and systemd starts the new version
+Environment=TEMPOLIGHT_SUPERVISED=1
+# the Wi-Fi setup service (tempolight-wifi.service): shows "Set up Wi-Fi again" in Settings
+Environment=TEMPOLIGHT_WIFI_SETUP=http://127.0.0.1:8099
+Environment=NODE_ENV=production
+WorkingDirectory=/opt/tempolight
+ExecStart=/usr/bin/node /opt/tempolight/packages/server/src/index.js --port 8080
+Restart=always
+RestartSec=3
+Nice=-5
+
+[Install]
+WantedBy=multi-user.target

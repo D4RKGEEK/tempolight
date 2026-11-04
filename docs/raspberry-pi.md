@@ -1,0 +1,171 @@
+# Raspberry Pi image
+
+A ready-to-flash image for a Raspberry Pi that does nothing but run Tempolight: write it to a microSD card, power the
+Pi on, join it to your Wi-Fi from your phone, open **http://tempolight.local**.
+
+| | |
+| --- | --- |
+| Works on | Raspberry Pi 5, 4, 3 (64-bit), Zero 2 W, Pi 400 / 500 |
+| Based on | Raspberry Pi OS Lite (64-bit), the latest release when the image was built (Trixie at the time of writing; Bookworm or newer) |
+| Inside | Node.js 22 (NodeSource apt repository, so `apt upgrade` updates it), Tempolight in `/opt/tempolight`, avahi (mDNS), NetworkManager, alsa-utils and ffmpeg |
+| Download | `tempolight-<version>-pi-arm64.img.xz` and its `.sha256` on the [releases page](https://github.com/D4RKGEEK/tempolight/releases) |
+
+## Flash it
+
+### With Raspberry Pi Imager (recommended)
+
+1. Install [Raspberry Pi Imager](https://www.raspberrypi.com/software/) (version 1.8 or newer; 2.0 has the
+   custom-repository setting described below).
+2. **Choose device**: your Pi model. **Choose OS** → *Use custom* → pick the downloaded `.img.xz` (no need to unpack it).
+3. **Choose storage**: the microSD card (8 GB or more).
+4. Imager offers **OS customisation**. All of it is optional:
+   - **Wi-Fi**: enter your network here and the Pi joins it at the first boot; the setup hotspot below never appears.
+   - **Hostname**: leave it as `tempolight` (or change it; the address becomes `http://<name>.local`).
+   - **Username and password**, **SSH**: only if you want to log in (see [SSH and login](#ssh-and-login)).
+5. Write, put the card in the Pi, power it on. The first boot takes 1–2 minutes (it grows the file system to the whole
+   card).
+
+### Tempolight in Imager's list (custom repository)
+
+Each release also has `tempolight-imager.json`, an Imager repository file with the image's size and checksums, so
+Imager shows Tempolight as an OS of its own and verifies the download:
+
+- **Imager 2.0**: *App options* → *Content repository* → *Use custom URL*, and enter
+  `https://github.com/D4RKGEEK/tempolight/releases/latest/download/tempolight-imager.json`
+- **Any version, from the command line**: `rpi-imager --repo https://github.com/D4RKGEEK/tempolight/releases/latest/download/tempolight-imager.json`
+
+The file follows Imager's `os_list` format (it's written by `install/pi/build-image.sh`):
+
+```json
+{
+  "os_list": [
+    {
+      "name": "Tempolight 0.3.0",
+      "description": "Music-reactive lighting for WLED, ready to go. Based on Raspberry Pi OS (64-bit, Lite).",
+      "url": "https://github.com/D4RKGEEK/tempolight/releases/download/v0.3.0/tempolight-0.3.0-pi-arm64.img.xz",
+      "icon": "https://raw.githubusercontent.com/D4RKGEEK/tempolight/main/apps/web/icons/icon-192.png",
+      "website": "https://github.com/D4RKGEEK/tempolight",
+      "release_date": "2026-11-04",
+      "extract_size": 4294967296,
+      "extract_sha256": "<sha256 of the unpacked .img>",
+      "image_download_size": 812345678,
+      "image_download_sha256": "<sha256 of the .img.xz>",
+      "init_format": "cloudinit-rpi",
+      "devices": ["pi5-64bit", "pi4-64bit", "pi3-64bit"]
+    }
+  ]
+}
+```
+
+`init_format` is `cloudinit-rpi` for Trixie-based images (Imager writes its customisation as cloud-init files) and
+`systemd` for Bookworm-based ones (the older `firstrun.sh`); the build script picks the right one. The `pi3-64bit` tag
+also covers the Zero 2 W.
+
+### With other tools
+
+Any tool that writes `.img.xz` files works (balenaEtcher, `xz -dc tempolight-….img.xz | sudo dd of=/dev/sdX bs=4M
+status=progress`). Check the download first: `sha256sum -c tempolight-<version>-pi-arm64.img.xz.sha256`.
+Without Imager's customisation, set up Wi-Fi from your phone.
+
+## Wi-Fi setup from your phone
+
+If the Pi isn't on a network about 30 seconds after it starts (90 seconds if it has a saved Wi-Fi network, so a slow
+first connection isn't interrupted), it opens its own Wi-Fi network:
+
+1. On your phone, join the Wi-Fi **Tempolight-Setup** (open, no password).
+2. The setup page opens by itself (on iPhone a sheet slides up, on Android tap *Sign in to network*). If it doesn't,
+   open **http://10.42.0.1** in the browser.
+3. Pick your Wi-Fi, type its password, optionally pick your country (it sets the allowed Wi-Fi channels), **Connect**.
+4. The page says *Open http://tempolight.local*. The setup network goes away; put your phone back on your Wi-Fi and
+   open that address.
+
+If the password was wrong, Tempolight-Setup comes back within a minute; join it again and the page says what went
+wrong.
+
+**Later on.** If a network that worked goes away for 10 minutes (moved house, new router), the hotspot opens again.
+Short outages, such as a router restarting, never open it. While the hotspot is up and nobody uses the page for 10
+minutes, the Pi goes back to trying its saved networks for 2 minutes, then opens the hotspot again, so a router that
+comes back is always picked up. With an Ethernet cable plugged in, the hotspot doesn't open by itself.
+
+**On purpose.** Settings → **Wi-Fi** → **Set up Wi-Fi again**. This only appears on the Pi image (Linux with the setup
+service), and needs the PIN if Settings are locked.
+
+### How it works
+
+- `tempolight-wifi.service` runs `packages/server/src/wifi-setup.js` as root. It reads the network state with
+  `nmcli -t -f DEVICE,TYPE,STATE,CONNECTION device status` every 5 seconds and scans with
+  `nmcli -t -f SSID,SIGNAL,SECURITY device wifi list` (before the hotspot starts: a single Wi-Fi chip can't scan well
+  while it is an access point, so the list is from just before).
+- The hotspot is a NetworkManager connection profile `Tempolight-Setup` (access point mode, 2.4 GHz channel 6,
+  `ipv4.method shared` with address 10.42.0.1). Joining a network is `nmcli device wifi connect <ssid> password …`;
+  a profile that failed with a wrong password is deleted again.
+- **Captive portal DNS.** In shared mode NetworkManager runs its own dnsmasq for DHCP and DNS (from the
+  `dnsmasq-base` package, installed in the image) and reads `/etc/NetworkManager/dnsmasq-shared.d/`. The image puts
+  `address=/#/10.42.0.1` there, so every name resolves to the Pi while you're on the hotspot. Phones' connectivity
+  checks (`connectivitycheck.gstatic.com/generate_204`, `captive.apple.com/hotspot-detect.html`, …) reach the setup
+  page on port 80 and get redirected to it, which makes them show the sign-in page. HTTPS sites can't be redirected
+  (no valid certificate), so the page is reached via those plain-HTTP checks or http://10.42.0.1.
+- When the hotspot isn't up, port 80 only redirects to Tempolight on port 8080, so **http://tempolight.local** works
+  without a port number. The setup page is never served on your home network.
+- Tempolight's server reaches the setup service on `http://127.0.0.1:8099` (localhost only) through
+  `TEMPOLIGHT_WIFI_SETUP`, set in `tempolight.service`.
+- **Wi-Fi country.** Raspberry Pi OS keeps Wi-Fi blocked until a country is set; the service runs
+  `rfkill unblock wifi` before the hotspot, and the page's country choice runs `raspi-config nonint do_wifi_country`.
+- **A password for the hotspot.** It's open by default (it only exists while the Pi has no network). To require one:
+  `sudo systemctl edit tempolight-wifi` and add `[Service]` / `Environment=TEMPOLIGHT_HOTSPOT_PASSWORD=8-or-more-chars`.
+- Turn the whole thing off with `sudo systemctl disable --now tempolight-wifi` (http://tempolight.local then needs
+  `:8080`).
+
+## What's in the image
+
+| | |
+| --- | --- |
+| Hostname | `tempolight`, announced by avahi: `http://tempolight.local` (port 80 redirects to 8080). Also advertised as an `_http._tcp` service "Tempolight on tempolight" |
+| Tempolight | `/opt/tempolight`, a git checkout on `main` owned by the `tempolight` user, so **Settings → Check for updates** works (git pull, then systemd restarts it) |
+| Settings | `/var/lib/tempolight/tempolight.json` (back up from Settings → Backup) |
+| Services | `tempolight.service` (user `tempolight`, `TEMPOLIGHT_SUPERVISED=1`, `Restart=always`), `tempolight-wifi.service`, `avahi-daemon`, `NetworkManager` |
+| Sound | `alsa-utils` and `ffmpeg`; the `tempolight` user is in the `audio` group, so a USB sound card works with Music → *Listen on the server* |
+| Logs | `journalctl -u tempolight -f`, `journalctl -u tempolight-wifi -f` |
+| Version | `/etc/tempolight-release` |
+
+### SSH and login
+
+**SSH is off**, as in Raspberry Pi OS: an appliance on your home network shouldn't accept logins nobody set up, and the
+image has no default password. To log in, set a username and password and enable SSH in Imager's OS customisation
+when writing the card. Without that, Raspberry Pi OS asks for a new user on a keyboard and screen at the first boot;
+Tempolight runs either way.
+
+### SD card care
+
+The system journal is kept in RAM (`/etc/systemd/journald.conf.d/tempolight.conf`, `Storage=volatile`): fewer writes
+to the card, but logs start empty after each reboot. Tempolight writes its settings file only after a change (batched,
+and atomically, so a power cut can't corrupt it). For years of 24/7 use, a good "endurance" card or a USB SSD is
+still the best protection; log2ram isn't installed.
+
+## Building the image yourself
+
+The [Raspberry Pi image workflow](../.github/workflows/pi-image.yml) builds it on every `v*` tag and attaches it to
+the release; *Run workflow* builds the current branch and keeps the image as a workflow artifact for 14 days. It runs on
+GitHub's arm64 runners, so the image's programs run natively (no emulation), and takes about 15–25 minutes.
+
+On your own Linux machine (Debian or Ubuntu; on x86 also install `qemu-user-static`):
+
+```bash
+sudo apt-get install -y xz-utils parted e2fsprogs zerofree git curl
+sudo install/pi/build-image.sh 0.3.0-mine dist
+# RPIOS_URL=<an .img.xz> to start from a specific Raspberry Pi OS release, WITH_FFMPEG=0 for a smaller image
+```
+
+The script downloads the official image and checks its sha256, makes room for Node.js and ffmpeg, mounts it on a loop
+device and runs [`install/pi/customize.sh`](../install/pi/customize.sh) inside it (chroot). The service files are in
+[`install/pi/files`](../install/pi/files).
+
+## Troubleshooting
+
+| Problem | Fix |
+| --- | --- |
+| http://tempolight.local doesn't open | Some Android phones and older Windows don't resolve `.local`. Find "tempolight" in your router's list of devices and open `http://<its address>:8080` |
+| Tempolight-Setup doesn't appear | Wait 2 minutes after power-on. With an Ethernet cable plugged in it doesn't open by itself (use Settings → Wi-Fi instead) |
+| The setup page doesn't open by itself | Open http://10.42.0.1 while on Tempolight-Setup. Turn off mobile data if the phone keeps using it |
+| The Pi joins, then Tempolight-Setup comes back | Wrong password, or a 5 GHz-only network on a Pi 3 Model B or Zero 2 W (they only have 2.4 GHz) |
+| Hidden network | Pick *Another network* and type its name |

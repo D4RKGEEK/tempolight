@@ -206,6 +206,9 @@ export function createCore({ store, runtime, env }) {
   route("GET", "/api/layout", null, () => runtime.layoutInfo());
   route("GET", "/api/update", "admin", () => env.update ? env.update.check() : { method: "demo", canUpdate: false, message: "The online demo is always the latest version." });
   route("POST", "/api/update", "admin", async () => { if (!env.update) throw new HttpError(400, "Nothing to update in the online demo"); try { const r = await env.update.apply(); runtime.note("Updating Tempolight and restarting…"); return r; } catch (e) { throw new HttpError(e.code === 409 ? 409 : 400, e.message); } });
+  // Wi-Fi setup (the Raspberry Pi image's tempolight-wifi service): only where that service exists
+  route("GET", "/api/wifi", null, async () => env.wifi ? env.wifi.status() : { available: false });
+  route("POST", "/api/wifi/setup", "admin", async () => { if (!env.wifi) throw new HttpError(400, "Wi-Fi setup is only on the Tempolight Raspberry Pi image"); try { return await env.wifi.setup(); } catch (e) { throw new HttpError(e.code === 400 ? 400 : 502, e.message); } });
   route("GET", "/api/songs", null, () => data().songs.map(e => ({ id: e.id, name: e.name, bpm: e.bpm, dur: e.dur, style: e.style, drops: e.drops.length, at: e.at })));
   const songById = id => { const e = data().songs.find(x => x.id === id); if (!e) throw new HttpError(404, "That song isn't remembered"); return e; };
   // a song's show: effect blocks (`show`, as before) plus the timeline editor's colour blocks, cues and brightness keyframes

@@ -1,0 +1,21 @@
+configuration:
+  port:
+    name: Port
+    description: Port of Tempolight's web interface (the add-on uses host networking, so this is the port on your Home Assistant machine).
+  mqtt_auto:
+    name: Connect to Mosquitto automatically
+    description: Find the Mosquitto broker add-on and set up Tempolight's MQTT connection with it at every start, so Tempolight shows up in Home Assistant by itself.
+  mqtt_url:
+    name: MQTT broker (optional)
+    description: Use this broker instead, for example mqtt://192.168.1.10:1883. Leave empty to use Mosquitto automatically.
+  mqtt_username:
+    name: MQTT username (optional)
+    description: Only with your own broker address above.
+  mqtt_password:
+    name: MQTT password (optional)
+    description: Only with your own broker address above.
+  discover:
+    name: Look for WLED controllers on first start
+    description: Scan the network for WLED controllers the first time Tempolight starts.
+network:
+  8080/tcp: Web interface
