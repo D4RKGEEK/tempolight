@@ -224,7 +224,7 @@ test("screen sync: a shared screen's colours reach the LEDs", { skip: typeof Web
     await s.call("POST", "/api/room/preset", { id: "fourwalls" }); await s.call("PATCH", "/api/show", { effect: "screen" });
     const ws = new WebSocket(`ws://127.0.0.1:${s.port}/ws`); await new Promise(r => ws.onopen = r);
     const red = Buffer.alloc(8 * 4 * 3); for (let i = 0; i < red.length; i += 3) red[i] = 255;
-    const timer = setInterval(() => ws.send(JSON.stringify({ type: "screen", w: 8, h: 4, px: red.toString("base64"), label: "Test" })), 50);
+    const timer = setInterval(() => ws.send(JSON.stringify({ type: "screen", w: 8, h: 4, px: red.toString("base64"), label: "Test" })), 50); timer.unref(); // a failed assertion skips clearInterval: don't keep the test file alive
     const rgb = () => { const f = wled.lastFrame; let r = 0, g = 0, b = 0; for (let i = 0; i < f.length; i += 3) { r += f[i]; g += f[i + 1]; b += f[i + 2]; } return [r, g, b]; };
     assert.ok(await until(() => { const [r, g, b] = rgb(); return r > 1000 && r > 5 * (g + b); }), "the room turns the screen's red");
     assert.equal((await s.call("GET", "/api/status")).body.screen, "Test");
@@ -323,17 +323,18 @@ test("Pro DJ Link: beats from a CDJ set the tempo and the bar", async () => {
   assert.equal(p.device, 2); assert.equal(p.name, "CDJ-3000"); assert.equal(p.trackBpm, 124); assert.ok(Math.abs(p.bpm - 126.48) < 0.02); assert.equal(p.beatInBar, 3);
   assert.equal(parseBeat(Buffer.from("not a beat")), null);
   const s = await setup(), port = 51000 + Math.floor(Math.random() * 900);
+  const sock = dgram.createSocket("udp4"); let beat = 0, timer = null; // closed in finally: a failed assertion mustn't leave them running (the test file would never exit)
   try {
     await s.call("POST", "/api/devices", { virtual: true });
     assert.equal((await s.call("PATCH", "/api/settings", { djlink: { enabled: true, port } })).status, 200);
-    const sock = dgram.createSocket("udp4"); let beat = 0;
-    const timer = setInterval(() => sock.send(beatPacket({ bpm: 128, beatInBar: (beat++ % 4) + 1 }), port, "127.0.0.1"), 60000 / 128);
+    timer = setInterval(() => sock.send(beatPacket({ bpm: 128, beatInBar: (beat++ % 4) + 1 }), port, "127.0.0.1"), 60000 / 128);
     assert.ok(await until(() => s.app.runtime.status().djlink), "beats arrive");
+    await until(() => s.app.runtime.status().source === "djlink", 2000); // the source follows on the next frame
     const st = s.app.runtime.status(); assert.equal(st.source, "djlink"); assert.equal(st.bpm, 128); assert.match(st.sourceLabel, /CDJ-3000/);
     await sleep(60000 / 128 * 0.25); // a quarter into a beat: the bar position matches the deck's last beat
     assert.equal(s.app.runtime.status().beat, s.app.runtime.rt.dj.beatInBar - 1);
-    clearInterval(timer); sock.close(); await s.call("PATCH", "/api/settings", { djlink: { enabled: false } });
-  } finally { await s.done(); }
+    await s.call("PATCH", "/api/settings", { djlink: { enabled: false } });
+  } finally { clearInterval(timer); sock.close(); await s.done(); }
 });
 
 test("guest song requests: guests ask and vote, the host marks them played; works when locked", async () => {
@@ -525,7 +526,7 @@ test("Pro DJ Link: in automatic mode the effect still changes every few bars", a
   try {
     await s.call("POST", "/api/devices", { virtual: true }); await s.call("PATCH", "/api/show", { mode: "auto", everyBeats: 4, style: "party" });
     const rt = s.app.runtime, P = 60000 / 180; let k = 0, seen = new Set();
-    const timer = setInterval(() => rt.djBeat({ device: 1, name: "CDJ", bpm: 180, trackBpm: 180, pitch: 1, beatInBar: (k++ % 4) + 1, at: performance.now() }), P);
+    const timer = setInterval(() => rt.djBeat({ device: 1, name: "CDJ", bpm: 180, trackBpm: 180, pitch: 1, beatInBar: (k++ % 4) + 1, at: performance.now() }), P); timer.unref(); // a failed assertion skips clearInterval: don't keep the test file alive
     await until(() => { seen.add(rt.status().effect); return seen.size >= 3; }, 9000); clearInterval(timer);
     assert.ok(seen.size >= 3, `effects shown: ${[...seen].join(", ")}`);
   } finally { await s.done(); }
@@ -675,6 +676,7 @@ test("key and mood: shown in /api/status for a played song; a drumless ballad he
     let found = null, heard = 0; await playLive(s, song.x.subarray(30 * 22050), 0.6, (r, t) => { if (r) { found = r; heard = t; return false; } });
     assert.ok(found && found.name === "Slow one" && heard < 20, `recognised after ${heard} s`);
     const truth = 30 + s.app.runtime.rt.live.an.t; assert.ok(Math.abs(found.pos - truth) < 0.4, `position ${found.pos} vs ${truth}`);
+    await until(() => s.app.runtime.status().hears === "F# minor · melancholic", 2000); // the next frame shows the recognised song
     assert.equal(s.app.runtime.status().hears, "F# minor · melancholic", "a recognised song shows its stored key and mood");
   } finally { await s.done(); }
 });

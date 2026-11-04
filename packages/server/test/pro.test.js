@@ -175,7 +175,7 @@ test("MIDI clock over the WebSocket: the server follows a browser's clock as the
     const P = 60000 / 132, tick = P / 24, t0 = performance.now(); let k = 0;
     h.message(JSON.stringify({ type: "midi-clock", events: [[START, t0]], now: performance.now(), label: "TR-8" }), false);
     const timer = setInterval(() => { const now = performance.now(), ev = []; while (t0 + k * tick <= now) { ev.push([TICK, t0 + k * tick]); k++; }
-      h.message(JSON.stringify({ type: "midi-clock", events: ev, now: performance.now(), label: "TR-8" }), false); }, 40);
+      h.message(JSON.stringify({ type: "midi-clock", events: ev, now: performance.now(), label: "TR-8" }), false); }, 40); timer.unref(); // a failed assertion skips clearInterval: don't keep the test file alive
     assert.ok(await until(() => s.app.runtime.rt.source === "midiclock", 3000), `source ${s.app.runtime.rt.source}`);
     const st = s.app.runtime.status(); assert.ok(Math.abs(st.bpm - 132) < 0.6, `bpm ${st.bpm}`); assert.equal(st.midiClock.input, "TR-8"); assert.match(st.sourceLabel, /MIDI clock/);
     const beat = (performance.now() - t0) / P, V = s.app.runtime.rt.view; assert.ok(Math.abs(((V.g.idx + V.g.phase) - beat + 0.5) % 1 - 0.5) < 0.08, "phase follows the clocks");
