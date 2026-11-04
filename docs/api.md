@@ -287,3 +287,30 @@ by themselves (the bridge's configuration number goes up); a scene keeps its acc
 
 The bridge's identity, setup code and pairings are in `homekit.json` in the data folder, not in `tempolight.json`, so
 backups never carry them.
+
+## Integrations (OBS, games, Twitch, Discord, Stream Deck)
+
+Node server only (not the online demo). Everything here except `POST /api/gsi/<game>` and the plugin download is
+admin-only: with a PIN lock it needs `x-tempolight-token`. Passwords, the Twitch sign-in and the Discord webhook are
+kept in the settings file under `integrations` and never sent back (`/api/state` doesn't include them). See
+[integrations.md](integrations.md) and [streamdeck.md](streamdeck.md).
+
+| Method | Path | What |
+| --- | --- | --- |
+| GET | `/api/integrations` | Settings and live status of all of them (`obs.status`, `games.cs2.status`, `twitch.status`, `twitch.eventsub`, `discord.status`, `streamdeck.available`) |
+| PATCH | `/api/integrations/obs` | `{enabled, url, password, clearPassword, sceneMap: [{obs, scene}], onStreamStart, onStreamStop, onRecordStart, tally: {enabled, when: recording\|streaming\|either, target, color}}` |
+| PATCH | `/api/integrations/games/cs2` (or `dota2`) | `{enabled, intensity 0-1, mode: blend\|takeover, healthTarget, effectsTarget, manaTarget, ambientTarget, kills, flashbang, bomb, rounds, roshan, daynight}`; turning it on makes its token |
+| POST | `/api/integrations/games/<game>/token` | A new token (the installed config file stops working) |
+| GET | `/api/integrations/games/<game>/cfg?url=http://<tempolight>:8080` | `{filename, folder, content}`: the game's `gamestate_integration_tempolight.cfg` |
+| POST | `/api/integrations/games/<game>/test` | `{what: flash\|bomb\|kill\|win\|lose\|roshan\|night\|day\|low}`: pretend it happened |
+| POST | `/api/gsi/cs2`, `/api/gsi/dota2` | Where the games post (Valve GSI JSON with `auth.token`). 403 without the right token, 429 above 40 a second |
+| PATCH | `/api/integrations/twitch` | `{chat: {enabled, channel, prefix, who: everyone\|subscriber\|vip\|mod, cooldownSec, userCooldownSec, commands: {scene, effect, flash, color, strobe, drop}, scenes: [ids], effects: [ids]}, clientId, eventsOn, target, events: {follow\|subscribe\|resub\|gift\|raid\|cheer: {type: none\|flash\|color\|strobe\|scene\|effect\|drop, color, seconds, scene, effect, minBits}}}` |
+| POST | `/api/integrations/twitch/login` | `{clientId}`: starts the device-code sign-in, returns `{userCode, uri}` to enter at twitch.tv/activate |
+| DELETE | `/api/integrations/twitch/login` | Sign out |
+| POST | `/api/integrations/twitch/test` | `{kind: follow\|...}`: run that event's reaction |
+| PATCH | `/api/integrations/discord` | `{webhook, username, nowPlaying, scenes, twitch}` (`webhook: ""` removes it) |
+| POST | `/api/integrations/discord/test` | Posts a test message |
+| GET | `/api/integrations/streamdeck/plugin` | The `.streamDeckPlugin` file (or a redirect to the releases page) |
+| GET | `/obs` | The OBS browser source page (`?preview=0`, `?np=0`, `?corner=tl\|tr\|bl\|br`, `?scale=1.5`, `?bg=1`) |
+
+A target is `all`, `off`, `zone:<zone id>` or `dev:<device id>`.

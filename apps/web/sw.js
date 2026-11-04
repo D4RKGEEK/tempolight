@@ -8,7 +8,8 @@ const SHELL = ["/", "/index.html", "/style.css", "/app.js", "/audio.js", "/previ
 // ones visited before going offline (fetched after the first visit has loaded, in the background)
 const LATER = ["/room.js", "/mapper.js", "/mapping.js", "/timeline.js", "/timeline.css", "/homesleep.js", "/dmx.js", "/midiclock.js", "/wizard.js", "/nowplaying.js", "/homekit.js", "/spotify.js",
   "/qr.js", "/calibrate.js", "/screen.js", "/engine/layout.js", "/engine/presets.js",
-  "/engine/analysis.js", "/engine/tonal.js"];
+  "/engine/analysis.js", "/engine/tonal.js",
+  "/integrations.js"];
 
 // one at a time and each on its own, so a file this server doesn't have can't stop the others being kept
 const keep = (c, list) => Promise.all(list.map(u => c.match(u).then(hit => hit || c.add(u)).catch(() => {})));

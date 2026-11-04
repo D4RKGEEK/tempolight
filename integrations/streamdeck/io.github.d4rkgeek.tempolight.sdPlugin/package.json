@@ -1,0 +1,6 @@
+{
+  "name": "tempolight-streamdeck",
+  "private": true,
+  "description": "Tempolight for Stream Deck: scenes, effects, live pads, power and brightness on keys and dials",
+  "type": "module"
+}

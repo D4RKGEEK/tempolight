@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tempolight</title>
+<style>
+  :root { color-scheme: dark; }
+  body { margin: 0; padding: 8px 8px 12px; font: 13px -apple-system, "Segoe UI", system-ui, sans-serif; color: #d8d8d8; background: #2d2d2d; }
+  .row { display: grid; grid-template-columns: 96px 1fr; align-items: center; gap: 6px; margin: 6px 0; }
+  label { color: #9a9a9a; text-align: right; font-size: 12px; }
+  input, select { box-sizing: border-box; width: 100%; padding: 4px 6px; font: inherit; color: #e6e6e6; background: #3d3d3d; border: 1px solid #4a4a4a; border-radius: 3px; }
+  input[type=color] { padding: 0; height: 26px; }
+  input[type=checkbox] { width: auto; }
+  h3 { margin: 12px 0 4px; font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: #8a8a8a; }
+  .st { margin: 4px 0 0 102px; font-size: 12px; color: #9a9a9a; } .st.ok { color: #7fd17f; } .st.err { color: #f08a7a; }
+  .help { margin: 2px 0 0 102px; font-size: 11.5px; color: #8a8a8a; line-height: 1.35; }
+  button { margin-left: 102px; padding: 4px 10px; font: inherit; color: #e6e6e6; background: #4a4a4a; border: 1px solid #5a5a5a; border-radius: 3px; cursor: pointer; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+  <div id="per">
+    <div class="row" data-for="scene"><label for="scene">Scene</label><select id="scene"></select></div>
+    <div class="row" data-for="effect"><label for="effect">Effect</label><select id="effect"></select></div>
+    <div class="row" data-for="pad"><label for="pad">Pad</label><select id="pad"></select></div>
+    <div class="row" data-for="pad"><label for="mode">When pressed</label><select id="mode"><option value="press">Press: on / off</option><option value="hold">Hold: only while held</option></select></div>
+    <p class="help" data-for="pad" id="mode-help">Hold Build to build up; let go for the drop.</p>
+    <div class="row" data-for="pad" id="color-row"><label for="color">Flash colour</label><input id="color" type="color" value="#ffffff"></div>
+    <div class="row" data-for="brightness"><label for="step">Step per click</label><select id="step"><option value="0.01">1%</option><option value="0.02">2%</option><option value="0.05">5%</option><option value="0.1">10%</option></select></div>
+    <div class="row" data-for="scene effect pad power brightness"><label for="title">Title</label><input id="title" placeholder="automatic (follows Tempolight)"></div>
+  </div>
+  <h3>Tempolight</h3>
+  <div class="row"><label for="server">Address</label><input id="server" placeholder="127.0.0.1:8080" spellcheck="false" autocomplete="off"></div>
+  <div class="row"><label for="pin">PIN</label><input id="pin" type="password" inputmode="numeric" maxlength="8" placeholder="only if Tempolight is locked" autocomplete="off"></div>
+  <p class="st" id="st">Connecting…</p>
+  <p class="help">The address shown in Tempolight under Integrations → Stream Deck (this computer: 127.0.0.1:8080). These two are shared by all Tempolight keys.</p>
+  <button type="button" id="again">Reload scenes and effects</button>
+<script>
+// Stream Deck calls connectElgatoStreamDeckSocket when the key's settings open
+let ws = null, uuid = "", action = "", context = "", settings = {}, globals = {};
+const $ = id => document.getElementById(id);
+const kind = () => action.split(".").pop();
+function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+function saveSettings() { send({ event: "setSettings", context: uuid, payload: settings }); }
+function saveGlobals() { send({ event: "setGlobalSettings", context: uuid, payload: globals }); }
+function fill(sel, list, value, first) {
+  const el = $(sel); el.innerHTML = (first ? `<option value="">${first}</option>` : "") + list.map(([v, n]) => `<option value="${String(v).replace(/"/g, "&quot;")}">${String(n).replace(/</g, "&lt;")}</option>`).join("");
+  if (value != null && [...el.options].some(o => o.value === value)) el.value = value; else if (value) { const o = document.createElement("option"); o.value = value; o.textContent = value; el.appendChild(o); el.value = value; }
+}
+function show() {
+  for (const el of document.querySelectorAll("[data-for]")) el.hidden = !el.dataset.for.split(" ").includes(kind());
+  const pad = settings.pad || "flash"; $("color-row").hidden = kind() !== "pad" || pad !== "flash";
+  $("mode-help").hidden = kind() !== "pad" || pad !== "build";
+  $("mode").value = settings.mode || "press"; $("color").value = settings.color || "#ffffff"; $("step").value = String(settings.step || 0.05); $("title").value = settings.title || "";
+}
+function info(p) {
+  const st = $("st"); st.className = "st " + (p.connected ? "ok" : "err");
+  st.textContent = p.connected ? `Connected to ${p.server}${p.locked ? (p.hasToken ? " (unlocked with the PIN)" : " (locked: enter the PIN)") : ""}` : (p.error || `Can't reach Tempolight at ${p.server}`);
+  if (kind() === "scene") fill("scene", p.scenes.map(s => [s.id, s.name]), settings.scene, "Pick a scene");
+  if (kind() === "effect") fill("effect", [["auto", "Automatic (follow the music)"], ...p.effects.map(e => [e.id, e.name])], settings.effect || "auto");
+  if (kind() === "pad") fill("pad", Object.entries(p.pads), settings.pad || "flash");
+}
+window.connectElgatoStreamDeckSocket = (port, inUUID, registerEvent, inInfo, inActionInfo) => {
+  uuid = inUUID; const ai = JSON.parse(inActionInfo || "{}"); action = ai.action || ""; context = ai.context || ""; settings = ai.payload?.settings || {};
+  show(); fill("pad", [["flash", "Flash"]], settings.pad || "flash");
+  ws = new WebSocket(`ws://127.0.0.1:${port}`);
+  ws.onopen = () => { send({ event: registerEvent, uuid }); send({ event: "getGlobalSettings", context: uuid }); send({ event: "sendToPlugin", action, context: uuid, payload: { type: "refresh" } }); };
+  ws.onmessage = e => { const m = JSON.parse(e.data);
+    if (m.event === "didReceiveGlobalSettings") { globals = m.payload?.settings || {}; $("server").value = globals.server || ""; $("pin").value = globals.pin || ""; }
+    else if (m.event === "didReceiveSettings") { settings = m.payload?.settings || {}; show(); }
+    else if (m.event === "sendToPropertyInspector" && m.payload?.type === "info") info(m.payload); };
+};
+const set = (k, v) => { if (v === "" || v == null) delete settings[k]; else settings[k] = v; saveSettings(); show(); };
+$("scene").onchange = e => set("scene", e.target.value);
+$("effect").onchange = e => set("effect", e.target.value);
+$("pad").onchange = e => set("pad", e.target.value);
+$("mode").onchange = e => set("mode", e.target.value);
+$("color").onchange = e => set("color", e.target.value);
+$("step").onchange = e => set("step", Number(e.target.value));
+$("title").onchange = e => set("title", e.target.value.trim());
+$("server").onchange = e => { globals.server = e.target.value.trim(); saveGlobals(); $("st").textContent = "Connecting…"; $("st").className = "st"; };
+$("pin").onchange = e => { globals.pin = e.target.value.trim(); saveGlobals(); };
+$("again").onclick = () => send({ event: "sendToPlugin", action, context: uuid, payload: { type: "refresh" } });
+</script>
+</body>
+</html>

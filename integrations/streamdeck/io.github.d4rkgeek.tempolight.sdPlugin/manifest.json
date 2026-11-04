@@ -1,0 +1,80 @@
+{
+  "$schema": "https://schemas.elgato.com/streamdeck/plugins/manifest.json",
+  "UUID": "io.github.d4rkgeek.tempolight",
+  "Name": "Tempolight",
+  "Version": "0.2.0.0",
+  "Author": "Tempolight",
+  "Description": "Music-reactive lights from your Stream Deck: scenes, effects, live pads (flash, strobe, blackout, build-up and drop), power, and brightness on a dial. Keys show what the lights are doing.",
+  "URL": "https://github.com/D4RKGEEK/tempolight/blob/main/docs/streamdeck.md",
+  "Category": "Tempolight",
+  "CategoryIcon": "imgs/category",
+  "Icon": "imgs/plugin",
+  "CodePath": "bin/plugin.js",
+  "Nodejs": { "Version": "20", "Debug": "enabled" },
+  "SDKVersion": 2,
+  "Software": { "MinimumVersion": "6.4" },
+  "OS": [
+    { "Platform": "mac", "MinimumVersion": "12" },
+    { "Platform": "windows", "MinimumVersion": "10" }
+  ],
+  "PropertyInspectorPath": "ui/inspector.html",
+  "Actions": [
+    {
+      "UUID": "io.github.d4rkgeek.tempolight.scene",
+      "Name": "Scene",
+      "Tooltip": "Switch to a Tempolight scene. The key lights up while that scene is on.",
+      "Icon": "imgs/scene",
+      "Controllers": ["Keypad"],
+      "States": [
+        { "Image": "imgs/scene", "TitleAlignment": "bottom", "FontSize": 11 },
+        { "Image": "imgs/scene-on", "TitleAlignment": "bottom", "FontSize": 11 }
+      ]
+    },
+    {
+      "UUID": "io.github.d4rkgeek.tempolight.effect",
+      "Name": "Effect",
+      "Tooltip": "Show one effect, or go back to automatic (the key shows the effect playing).",
+      "Icon": "imgs/effect",
+      "Controllers": ["Keypad"],
+      "States": [
+        { "Image": "imgs/effect", "TitleAlignment": "bottom", "FontSize": 11 },
+        { "Image": "imgs/effect-on", "TitleAlignment": "bottom", "FontSize": 11 }
+      ]
+    },
+    {
+      "UUID": "io.github.d4rkgeek.tempolight.pad",
+      "Name": "Live pad",
+      "Tooltip": "Flash, strobe, blackout, freeze, build-up, drop: press, or hold while the key is down.",
+      "Icon": "imgs/pad",
+      "Controllers": ["Keypad"],
+      "States": [
+        { "Image": "imgs/pad", "TitleAlignment": "middle", "FontSize": 14 },
+        { "Image": "imgs/pad-on", "TitleAlignment": "middle", "FontSize": 14 }
+      ]
+    },
+    {
+      "UUID": "io.github.d4rkgeek.tempolight.power",
+      "Name": "Lights on/off",
+      "Tooltip": "Turn the lights on or off.",
+      "Icon": "imgs/power",
+      "Controllers": ["Keypad"],
+      "States": [
+        { "Image": "imgs/power", "TitleAlignment": "bottom", "FontSize": 12 },
+        { "Image": "imgs/power-on", "TitleAlignment": "bottom", "FontSize": 12 }
+      ]
+    },
+    {
+      "UUID": "io.github.d4rkgeek.tempolight.brightness",
+      "Name": "Brightness",
+      "Tooltip": "Turn for brightness, press to turn the lights on or off (Stream Deck +).",
+      "Icon": "imgs/brightness",
+      "Controllers": ["Encoder"],
+      "Encoder": {
+        "layout": "$B1",
+        "Icon": "imgs/brightness",
+        "TriggerDescription": { "Rotate": "Brightness", "Push": "Lights on/off", "Touch": "Lights on/off" }
+      },
+      "States": [{ "Image": "imgs/brightness" }]
+    }
+  ]
+}

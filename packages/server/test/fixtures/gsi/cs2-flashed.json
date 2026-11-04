@@ -1,0 +1,70 @@
+{
+  "provider": {
+    "name": "Counter-Strike: Global Offensive",
+    "appid": 730,
+    "version": 14053,
+    "steamid": "76561198012345678",
+    "timestamp": 1762250000
+  },
+  "map": {
+    "mode": "competitive",
+    "name": "de_mirage",
+    "phase": "live",
+    "round": 7,
+    "team_ct": {
+      "score": 4,
+      "consecutive_round_losses": 0,
+      "timeouts_remaining": 1,
+      "matches_won_this_series": 0
+    },
+    "team_t": {
+      "score": 3,
+      "consecutive_round_losses": 1,
+      "timeouts_remaining": 1,
+      "matches_won_this_series": 0
+    },
+    "num_matches_to_win_series": 0
+  },
+  "round": {
+    "phase": "live"
+  },
+  "player": {
+    "steamid": "76561198012345678",
+    "name": "d4rkgeek",
+    "observer_slot": 1,
+    "team": "CT",
+    "activity": "playing",
+    "state": {
+      "health": 76,
+      "armor": 91,
+      "helmet": true,
+      "flashed": 255,
+      "smoked": 0,
+      "burning": 0,
+      "money": 4250,
+      "round_kills": 0,
+      "round_killhs": 0,
+      "round_totaldmg": 0,
+      "equip_value": 4700
+    },
+    "match_stats": {
+      "kills": 9,
+      "assists": 2,
+      "deaths": 5,
+      "mvps": 2,
+      "score": 24
+    }
+  },
+  "previously": {
+    "player": {
+      "state": {
+        "health": 100,
+        "armor": 100,
+        "flashed": 0
+      }
+    }
+  },
+  "auth": {
+    "token": "__TOKEN__"
+  }
+}
