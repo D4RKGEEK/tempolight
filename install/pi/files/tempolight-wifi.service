@@ -1,0 +1,18 @@
+# Wi-Fi setup from the phone: opens the "Tempolight-Setup" hotspot when there's no network, and redirects port 80 to
+# Tempolight (so http://tempolight.local works). Runs as root: it drives NetworkManager and listens on port 80.
+[Unit]
+Description=Tempolight Wi-Fi setup (hotspot and captive page)
+After=NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Environment=TEMPOLIGHT_PORT=8080
+# Environment=TEMPOLIGHT_HOTSPOT_PASSWORD=at-least-8-chars   (empty: an open hotspot)
+ExecStart=/usr/bin/node /opt/tempolight/packages/server/src/wifi-setup.js
+Restart=on-failure
+RestartSec=5
+ProtectHome=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

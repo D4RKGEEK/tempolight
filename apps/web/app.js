@@ -714,6 +714,9 @@ function settingsPage(el) {
       <span class="help">In Home Assistant, add the Mosquitto broker add-on and the MQTT integration, then use the same broker here. Tempolight appears as a light with effects, a scene picker, tempo and song-part sensors, and Flash, Drop and Next buttons.</span>
       <div class="row"><button class="btn sm" id="m-save" type="button">Save</button></div>
     </div>`, "span-6")}
+    ${DEMO || !admin ? "" : panel("Wi-Fi", "", "", `<div class="pb stack" id="s-wifi"><p class="muted" id="s-wifistate">Checking…</p>
+      <p class="faint" style="font-size:12.5px">Moving to another network? Start setup: this Pi leaves the current Wi-Fi and opens the <b>Tempolight-Setup</b> hotspot. Join it from your phone and pick the new network.</p>
+      <div class="row"><button class="btn" id="s-wifigo" type="button">Set up Wi-Fi again</button></div></div>`, "span-6")}
     ${panel("Backup", "Devices, room, zones, scenes, schedules and settings in one file", "", `<div class="pb stack"><div class="row"><button class="btn" id="b-down" type="button">Download backup</button><label class="btn" for="b-file">Restore from a file…</label><input type="file" id="b-file" accept="application/json,.json" hidden></div>
       <p class="faint" style="font-size:12.5px">Use it to move to a new computer or Raspberry Pi. Restoring keeps your current PIN.</p></div>`, "span-6")}
     ${panel("Lock", st.locked ? "Locked with a PIN" : "Not locked", "", `<div class="pb stack">
@@ -761,6 +764,11 @@ function settingsPage(el) {
   if ($("#s-relock")) $("#s-relock").onclick = () => { app.token = null; store.set("token", null); ws.sock?.close(); refreshState().then(route); };
   if (DEMO) $("#s-upd").disabled = true;
   $("#s-wizard").onclick = () => openWizard();
+  if ($("#s-wifi")) { const sec = $("#s-wifi").closest("section"); sec.hidden = true; // only on the Raspberry Pi image, where the Wi-Fi setup service runs
+    api("GET", "/api/wifi").then(w => { if (!w || !w.available) return; sec.hidden = false;
+      $("#s-wifistate").textContent = w.mode === "hotspot" ? `The setup hotspot ${w.hotspot} is open.` : w.ssid ? `Connected to ${w.ssid}.` : "Not on Wi-Fi (Ethernet, or not connected)."; }).catch(() => {});
+    $("#s-wifigo").onclick = async () => { if (!confirm("Leave the current Wi-Fi and open the Tempolight-Setup hotspot? This page stops answering until the Pi is on a network again.")) return;
+      const r = await act(() => api("POST", "/api/wifi/setup")).catch(() => null); if (r) $("#s-wifistate").textContent = r.message; }; }
   $("#s-upd").onclick = async () => { const m = $("#s-updmsg"); m.textContent = "Checking…"; const r = await act(() => api("GET", "/api/update")).catch(() => null); if (!r) { m.textContent = ""; return; }
     m.innerHTML = esc(r.message) + (r.changes?.length ? `<ul style="margin:6px 0 0 18px">${r.changes.map(c => `<li>${esc(c)}</li>`).join("")}</ul>` : ""); $("#s-updgo").hidden = !r.canUpdate; };
   $("#s-updgo").onclick = async () => { const r = await act(() => api("POST", "/api/update")).catch(() => null); if (!r) return; $("#s-updmsg").textContent = r.message; $("#s-updgo").hidden = true;

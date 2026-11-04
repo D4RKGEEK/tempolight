@@ -17,6 +17,8 @@ import { createUpdater } from "./update.js";
 import { startProLink } from "./prolink.js";
 import { startNowPlaying } from "./nowplaying.js";
 import { startLink } from "./ableton-link.js";
+import { applyEnvSettings } from "./env-settings.js";
+import { wifiClient } from "./wifi.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(here, "../../..");
@@ -36,10 +38,14 @@ async function readBody(req) {
 }
 
 /**
- * @param {{dataDir:string, logger?:Console|null, discover?:boolean, now?:()=>Date}} opts
+ * @param {{dataDir:string, logger?:Console|null, discover?:boolean, now?:()=>Date, envSettings?:object, wifi?:object|null}} opts
+ *   envSettings: settings from the environment (env-settings.js) that win over the saved ones
+ *   wifi: the Wi-Fi setup service client (Raspberry Pi image); by default from $TEMPOLIGHT_WIFI_SETUP on Linux
  */
 export async function createApp(opts) {
   const store = createStore(opts.dataDir);
+  if (opts.envSettings) applyEnvSettings(store, opts.envSettings);
+  const wifi = opts.wifi !== undefined ? opts.wifi : process.platform === "linux" && process.env.TEMPOLIGHT_WIFI_SETUP ? wifiClient(process.env.TEMPOLIGHT_WIFI_SETUP) : null;
   let closeApp = async () => {};
   const updater = opts.updater || createUpdater(ROOT, { exit: async (code, then) => { try { await closeApp(); } catch {} try { then?.(); } catch {} process.exit(code); } }); // then: after the port is free (start the new copy)
   const runtime = createRuntime(store, { io, logger: opts.logger === undefined ? console : opts.logger, now: opts.now });
@@ -47,7 +53,7 @@ export async function createApp(opts) {
     version: pkg.version, newId, hashPin, checkPin, randomToken: () => crypto.randomBytes(16).toString("hex"),
     getInfo: io.getInfo, discoverWled: io.discoverWled, discoverGovee: io.discoverGovee, listOpenRGB: io.listOpenRGB, nanoleafPair: io.nanoleafPair, nanoleafInfo: io.nanoleafInfo, panelPoints: io.panelPoints, huePair: io.huePair, hueLights: io.hueLights, ipOf: io.ipOf, listSources: io.listSources, startOsc,
     uptime: () => process.uptime(), now: opts.now, discover: opts.discover,
-    update: updater, startProLink, startLink,
+    update: updater, startProLink, startLink, wifi,
     lan: () => Object.values(os.networkInterfaces()).flat().filter(a => a && a.family === "IPv4" && !a.internal).map(a => a.address) } });
   const ha = startHomeAssistant({ core, store, runtime, version: pkg.version });
   const np = startNowPlaying({ core, store, runtime, dataDir: opts.dataDir, port: () => server.address()?.port || 8080, ...opts.nowPlaying }); // opts.nowPlaying: test runner/platform

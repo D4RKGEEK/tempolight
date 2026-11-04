@@ -1,0 +1,11 @@
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<!-- Advertise Tempolight's web interface on the network (shows up in mDNS browsers as "Tempolight on <hostname>") -->
+<service-group>
+  <name replace-wildcards="yes">Tempolight on %h</name>
+  <service>
+    <type>_http._tcp</type>
+    <port>8080</port>
+    <txt-record>path=/</txt-record>
+  </service>
+</service-group>

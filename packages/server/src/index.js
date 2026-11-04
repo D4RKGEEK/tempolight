@@ -8,6 +8,7 @@ import { spawn } from "node:child_process";
 import { createApp, VERSION } from "./app.js";
 import { localIPv4 } from "../../outputs/src/index.js";
 import { listSources, fileSource } from "./capture.js";
+import { settingsFromEnv } from "./env-settings.js";
 
 const argv = process.argv.slice(2);
 const flag = k => argv.includes("--" + k);
@@ -35,7 +36,9 @@ if (maj < 20) { console.error(`Tempolight needs Node.js 20 or newer (this is ${p
 
 const dataDir = path.resolve(opt("data", process.env.TEMPOLIGHT_DATA || path.join(os.homedir(), ".tempolight")));
 const port = Number(opt("port", process.env.PORT || 8080)), host = opt("host", process.env.HOST || "0.0.0.0");
-const app = await createApp({ dataDir, discover: !flag("no-discover") && !process.env.TEMPOLIGHT_NO_DISCOVER });
+const envSettings = settingsFromEnv(process.env); // e.g. TEMPOLIGHT_MQTT_URL from the Home Assistant add-on
+const app = await createApp({ dataDir, envSettings, discover: !flag("no-discover") && !process.env.TEMPOLIGHT_NO_DISCOVER });
+if (envSettings.mqtt) console.log(`  MQTT broker set from the environment: ${envSettings.mqtt.url.replace(/\/\/[^@/]*@/, "//")}`);
 
 const audio = opt("audio");
 if (audio) {

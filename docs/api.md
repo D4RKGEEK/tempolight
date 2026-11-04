@@ -164,6 +164,15 @@ Text Scroller. Schedules accept `time: "sunset+30"` or `"sunrise-15"` once a loc
 | `GET /api/update` | admin: `{method: "git"\|"docker"\|"manual", behind, changes: [...], canUpdate, message}` (fetches from GitHub) |
 | `POST /api/update` | admin: pulls the new version and restarts Tempolight (installs made with git or the installer) |
 
+## Wi-Fi (Raspberry Pi image)
+
+Only where the Wi-Fi setup service runs (the [Raspberry Pi image](raspberry-pi.md); Linux, `TEMPOLIGHT_WIFI_SETUP` set).
+
+| Call | Body |
+| --- | --- |
+| `GET /api/wifi` | `{available: false}` elsewhere; on the image `{available: true, mode: "watch"\|"hotspot"\|"connecting"\|"retry", ssid, hotspot, lastResult}` |
+| `POST /api/wifi/setup` | admin: leaves the current Wi-Fi and opens the Tempolight-Setup hotspot |
+
 ## Lock
 
 | Call | Body |
@@ -197,6 +206,10 @@ The easy way is MQTT discovery. In Settings → Home Assistant, turn it on and e
 Mosquitto add-on: `mqtt://homeassistant.local:1883`, with a user name and password). Or with the API:
 `PATCH /api/settings {mqtt: {enabled: true, url, username, password, prefix?: "homeassistant", base?: "tempolight"}}`.
 The password is never sent back (`hasPassword` says one is saved).
+Or with environment variables, applied at every start and winning over the saved settings (the
+[Home Assistant add-on](../homeassistant/tempolight/DOCS.md) uses these with the Mosquitto add-on's login):
+`TEMPOLIGHT_MQTT_URL` (turns it on), `TEMPOLIGHT_MQTT_USER`, `TEMPOLIGHT_MQTT_PASS`, `TEMPOLIGHT_MQTT_PREFIX`,
+`TEMPOLIGHT_MQTT_BASE`, and `TEMPOLIGHT_MQTT_ENABLED=0` to keep it off.
 
 Tempolight then appears in Home Assistant as one device with:
 
