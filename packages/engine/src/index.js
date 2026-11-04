@@ -8,7 +8,7 @@ export { LiveAnalyser } from "./live.js";
 export { memoryEntry, memoryAnalysis, recognise, matchAt, refineByKicks, fingerprint, FingerprintTap, drumlessEntry, chromaMatch } from "./memory.js";
 export { ChromaTap, keyOf, moodOf, moodName, moodPalette, hearsLabel, packChroma, unpackChroma } from "./tonal.js";
 export { createDirector, idleSignals } from "./director.js";
-export { planShow, showAt } from "./show.js";
+export { planShow, showAt, chooseStep, SHOW_VERSION } from "./show.js";
 export { cleanTimeline, rangeAt, brightAt, cuesAt, cueLen, createCueFirer, blockPalette, CUE_TYPES, CUE_BEATS } from "./timeline.js";
 export { ROOM_PRESETS, buildPreset } from "./presets.js";
 

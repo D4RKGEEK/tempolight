@@ -18,60 +18,60 @@
   "style": "hiphop"
  },
  "whole": {
-  "kickContrast": 0.397,
-  "kickContrastP10": 0.101,
+  "kickContrast": 0.706,
+  "kickContrastP10": 0.269,
   "kickLagMs": 12.5,
   "lum": {
-   "intro": 0.117,
-   "build": 0.109,
-   "drop": 0.123,
-   "break": 0.35,
-   "outro": 0.231,
-   "silence": 0.099
+   "intro": 0.143,
+   "build": 0.203,
+   "drop": 0.194,
+   "break": 0.138,
+   "outro": 0.132,
+   "silence": 0.082
   },
-  "dropBreak": 0.353,
+  "dropBreak": 1.408,
   "preDropDip": [
-   1.661,
-   1.231
+   0.359,
+   0.393
   ],
-  "preDropDipWorst": 1.661,
+  "preDropDipWorst": 0.393,
   "dropImpact": [
-   1.633,
-   0.444
+   0.705,
+   0.872
   ],
-  "dropImpactMin": 0.444,
-  "changes": 9,
+  "dropImpactMin": 0.705,
+  "changes": 6,
   "onDownbeat": 0,
   "on4Bar": 0,
-  "shortEffects": 1
+  "shortEffects": 0
  },
  "live": {
-  "kickContrast": 0.401,
-  "kickContrastP10": 0.083,
-  "kickLagMs": 16.7,
+  "kickContrast": 0.66,
+  "kickContrastP10": -0.043,
+  "kickLagMs": 22.9,
   "lum": {
-   "intro": 0.068,
-   "build": 0.131,
-   "drop": 0.212,
-   "break": 0.123,
-   "outro": 0.174,
-   "silence": 0.076
+   "intro": 0.205,
+   "build": 0.135,
+   "drop": 0.186,
+   "break": 0.118,
+   "outro": 0.15,
+   "silence": 0.084
   },
-  "dropBreak": 1.728,
+  "dropBreak": 1.569,
   "preDropDip": [
-   1.404,
-   1.025
+   0.676,
+   0.736
   ],
-  "preDropDipWorst": 1.404,
+  "preDropDipWorst": 0.736,
   "dropImpact": [
-   1.617,
-   1.36
+   8.139,
+   0.709
   ],
-  "dropImpactMin": 1.36,
-  "changes": 26,
-  "onDownbeat": 0.077,
-  "on4Bar": 0.077,
-  "shortEffects": 12,
+  "dropImpactMin": 0.709,
+  "changes": 12,
+  "onDownbeat": 0.083,
+  "on4Bar": 0.083,
+  "shortEffects": 1,
   "dropDelayMs": [
    166.7,
    500

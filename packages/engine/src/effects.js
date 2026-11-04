@@ -533,22 +533,36 @@ export function createEffects(layout, opts = {}) {
   // a custom effect can't replace a built-in one, and each id counts once (backups and hand-edited files can have anything)
   const taken = new Set(FX.map(f => f.id)), customs = (Array.isArray(opts.custom) ? opts.custom.slice(0, 100) : []).map(customEffect).filter(c => c && !taken.has(c.id) && taken.add(c.id));
   FX.push(...customs);
+  // effects that hit hard on every kick across the whole room: a drop opens with one of these
+  const IMPACT = ["shock", "burst", "ping", "eq", "chase", "glitch", "kaleido", "portal", "laser", "wipe", "split", "zigzag", "nova", "lightning"];
+  // each effect's usual brightness in its own kind of song part (mean of the output after the LED roll-off, example
+  // room). The director starts from these to even effects out, then learns what they do in the user's room.
+  const LUM = { aurora: .163, stars: .106, lava: .116, fill: .326, comets: .177, shock: .255, spin: .206, ping: .238, strobe: .302, fireworks: .103, kaleido: .252, chase: .174, eq: .198,
+    spiral: .069, classic: .078, ocean: .153, twinkle: .165, plasma: .174, flow: .186, heart: .097, melody: .129, swell: .057, candle: .096, sunrise: .203, mrain: .055, scanner: .22,
+    riser: .238, wipe: .236, confetti: .073, burst: .304, split: .181, mirror: .147, rings: .077, meteor: .108, lightning: .132, fire: .088, fireflies: .146, northern: .107,
+    rainglass: .144, lavablobs: .37, breath: .261, hypno: .092, pillars: .244, tstrobe: .162, vortex: .145, implode: .318, laser: .2, hyper: .122, nova: .121, cannon: .094, disco: .07,
+    roomeq: .153, rgbsplit: .226, glitch: .207, snake: .13, pong: .038, ripple: .152, balls: .065, curtain: .117, strobechase: .07, kaleido2: .109, tunnel: .165, galaxy: .138,
+    storm: .219, colorchord: .162, quake: .133, embers: .021, tiles: .08, helix: .282, countdown: .211, solar: .264, zigzag: .157, sparks: .093, lighthouse: .119, corner: .083,
+    gravity: .158, collision: .181, portal: .215, stadium: .177, vocal: .247, chorus: .278, rewind: .067, bassrain: .059, beatcount: .33, specrings: .13, neon: .259, cannons: .215,
+    scatter: .109, scope: .074 };
   const FXI = Object.fromEntries(FX.map((f, i) => [f.id, i]));
   const POOLS = { calm: ["northern", "galaxy", "vocal", "aurora", "embers", "neon", "colorchord", "fireflies", "stars", "lavablobs", "ocean", "hypno", "lava", "twinkle", "plasma", "flow"],
     build: ["fill", "rewind", "countdown", "pillars", "collision", "helix", "comets", "storm", "vortex", "riser", "tstrobe", "implode", "mrain", "spiral", "scanner"],
     drop: ["laser", "lighthouse", "tunnel", "shock", "cannons", "hyper", "quake", "portal", "solar", "corner", "stadium", "bassrain", "spin", "cannon", "ping", "nova", "confetti", "disco", "rgbsplit", "strobe", "snake", "fireworks", "roomeq", "wipe", "glitch",
            "kaleido2", "sparks", "gravity", "meteor", "tiles", "beatcount", "ripple", "zigzag", "specrings", "scatter", "chase", "curtain", "split", "pong", "eq", "balls", "rings", "burst", "strobechase", "mirror", "lightning", "fire", "kaleido"] };
-  // each music style listens for different things and uses its own effect pools
+  // each music style listens for different things and uses its own effect pools. The feel (director.js): pump = how
+  // much the kick pumps the room in drops, moment = how big the drop flash and the dim before it are, dyn = how much
+  // brightness follows the song part (calm low, build rising, drop full) and how much effects are evened out
   const STYLES = {
-    party: { name: "Party / EDM", mode: "sections", pools: POOLS, punch: 1, xfade: 0.3, every: 1, floor: 0.06 },
+    party: { name: "Party / EDM", mode: "sections", pools: POOLS, punch: 1, xfade: 0.3, every: 1, floor: 0.06, pump: 1, moment: 1, dyn: 1 },
     poprock: { name: "Pop / Rock", mode: "levels", pools: { low: ["flow", "vocal", "northern", "melody", "breath", "aurora"], mid: ["laser", "stadium", "lighthouse", "beatcount", "ping", "snake", "chase", "curtain", "mirror", "rgbsplit", "rings", "wipe", "meteor"],
-      peak: ["nova", "chorus", "tunnel", "shock", "cannons", "cannon", "fireworks", "solar", "portal", "disco", "hyper", "confetti", "kaleido2", "spin", "fire"] }, punch: 0.85, xfade: 0.4, every: 1, floor: 0.07 },
+      peak: ["nova", "chorus", "tunnel", "shock", "cannons", "cannon", "fireworks", "solar", "portal", "disco", "hyper", "confetti", "kaleido2", "spin", "fire"] }, punch: 0.85, xfade: 0.4, every: 1, floor: 0.07, pump: 0.8, moment: 0.85, dyn: 0.85 },
     hiphop: { name: "Hip-hop / Trap", mode: "levels", pools: { low: ["lava", "lavablobs", "plasma", "heart", "embers"], mid: ["quake", "bassrain", "roomeq", "shock", "tiles", "beatcount", "gravity", "glitch", "rgbsplit", "ripple", "eq", "rings", "split"],
-      peak: ["cannon", "nova", "laser", "fire", "glitch", "confetti", "ping", "meteor", "lightning"] }, punch: 1, xfade: 0.3, every: 1, floor: 0.07 },
+      peak: ["cannon", "nova", "laser", "fire", "glitch", "confetti", "ping", "meteor", "lightning"] }, punch: 1, xfade: 0.3, every: 1, floor: 0.07, pump: 1, moment: 1, dyn: 1 },
     chill: { name: "Chill / Lo-fi", mode: "levels", pools: { low: ["fireflies", "rainglass", "ocean", "aurora", "twinkle", "embers"], mid: ["galaxy", "neon", "vocal", "colorchord", "lavablobs", "hypno", "flow", "plasma", "melody", "northern"],
-      peak: ["northern", "swell", "breath", "lava"] }, punch: 0.35, xfade: 1.2, every: 2, floor: 0.1 },
+      peak: ["northern", "swell", "breath", "lava"] }, punch: 0.35, xfade: 1.2, every: 2, floor: 0.1, pump: 0.3, moment: 0.4, dyn: 0.5 },
     emotional: { name: "Emotional / Ballad", mode: "levels", pools: { low: ["candle", "vocal", "fireflies", "rainglass", "swell", "breath"], mid: ["swell", "vocal", "northern", "melody", "colorchord", "lavablobs", "ocean"],
-      peak: ["sunrise", "northern", "swell", "aurora"] }, punch: 0.1, xfade: 2.0, every: 2, floor: 0.12 },
+      peak: ["sunrise", "northern", "swell", "aurora"] }, punch: 0.1, xfade: 2.0, every: 2, floor: 0.12, pump: 0, moment: 0.25, dyn: 0.4 },
   };
 
   for (const c of customs) { if (c.tag === "home") continue; (POOLS[c.tag] ||= []).push(c.id); const lv = c.tag === "calm" ? "low" : c.tag === "build" ? "mid" : "peak";
@@ -562,5 +576,5 @@ export function createEffects(layout, opts = {}) {
     return COL;
   }
   const list = FX.map(f => ({ id: f.id, name: f.name, tag: f.tag, ...(f.custom ? { custom: true } : {}) }));
-  return { render, list, pools: POOLS, styles: STYLES, palettes: { auto: PAL, ...Object.fromEntries(Object.entries(PALSETS).map(([k, v]) => [k, v.map(hex)])) } };
+  return { render, list, pools: POOLS, styles: STYLES, impact: IMPACT, lum: LUM, palettes: { auto: PAL, ...Object.fromEntries(Object.entries(PALSETS).map(([k, v]) => [k, v.map(hex)])) } };
 }
