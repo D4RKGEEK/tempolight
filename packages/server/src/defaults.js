@@ -16,15 +16,18 @@ export const DEFAULTS = () => ({
     requests: true, // guests can request songs from their phones (/request)
     shows: true, // remembered songs play their show timeline (auto-generated, editable) in automatic mode
     songMemory: true, // remember analysed songs and recognise them when they play again while listening live
+    nowPlaying: { enabled: true, spotifyClientId: "" }, // read the track music apps on this computer play (server only, see nowplaying.js)
   },
   show: { power: true, mode: "auto", effect: "shock", style: "auto", palette: "auto", everyBeats: 8, speed: 1, params: {}, layer: null },
   devices: [],
   room: { name: "My room", shapes: [], zones: [] },
   scenes: [
-    { id: "party", name: "Party", show: { mode: "auto", style: "party", palette: "auto" }, brightness: 1 },
-    { id: "chill", name: "Chill evening", show: { mode: "auto", style: "chill", palette: "sunset" }, brightness: 0.55 },
-    { id: "movie", name: "Movie night", show: { mode: "manual", effect: "candle", palette: "mono" }, brightness: 0.25 },
-    { id: "focus", name: "Focus", show: { mode: "manual", effect: "aurora", palette: "ocean" }, brightness: 0.4 },
+    // names that read well to a voice assistant ("Hey Google, activate Party mode", see docs/voice.md); new installs only
+    { id: "party", name: "Party mode", show: { mode: "auto", style: "party", palette: "auto" }, brightness: 1 },
+    { id: "chill", name: "Chill mode", show: { mode: "auto", style: "chill", palette: "sunset" }, brightness: 0.55 },
+    { id: "movie", name: "Movie mode", show: { mode: "manual", effect: "candle", palette: "mono" }, brightness: 0.25 },
+    { id: "focus", name: "Focus mode", show: { mode: "manual", effect: "aurora", palette: "ocean" }, brightness: 0.4 },
+    { id: "relax", name: "Relax", show: { mode: "manual", effect: "breath", palette: "sunset" }, brightness: 0.3 },
   ],
   schedules: [],
   songs: [],

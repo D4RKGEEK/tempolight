@@ -446,6 +446,6 @@ export function createCore({ store, runtime, env }) {
     throw new HttpError(404, `No API route ${method} ${pathname}`);
   }
 
-  return { handle, connect, broadcast, discovery, onChange: f => changeListeners.add(f), applyScene, applyShow, applySettings, addDevice, pub,
+  return { handle, connect, broadcast, discovery, route, onChange: f => changeListeners.add(f), applyScene, applyShow, applySettings, addDevice, pub,
     close() { clearInterval(statusTimer); sched.stop(); osc && osc.close(); djlink && djlink.close(); for (const c of clients) c.close?.(); } };
 }

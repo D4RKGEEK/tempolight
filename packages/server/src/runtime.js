@@ -28,6 +28,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
     song: null,      // {name, pre, pos, playing, rate, at, clientId}
     forced: null,    // {kind:"build"|"drop", t0, dur}
     taps: [], view: null, powerOffAt: 0, mapEndAt: -1e9,
+    nowPlaying: null, // set by nowplaying.js on a PC: {follow(now), memId, info()}: what the music apps here play
   };
 
   function rebuild() {
@@ -148,7 +149,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
   /** The show timeline for the song playing now (played or recognised), when shows are on. */
   function currentPlan() {
     if (data().settings.shows === false) return null;
-    const id = rt.source === "song" ? rt.song?.memId : rt.mem.lock && liveFresh() ? rt.mem.lock.id : null; if (!id) return null;
+    const id = rt.source === "song" ? rt.song?.memId : rt.source === "nowplaying" ? rt.nowPlaying?.memId : rt.mem.lock && liveFresh() ? rt.mem.lock.id : null; if (!id) return null;
     const e = data().songs.find(x => x.id === id); if (!e) return null; if (!e.show) { e.show = planFor(e, e.name); store.save(); } return e.show;
   }
   let memT = 0;
@@ -209,6 +210,8 @@ export function createRuntime(store, { io, logger = console } = {}) {
       rt.source = "song"; rt.sourceLabel = rt.song.name;
       return { V: songView(rt.song.pre, t), t, extra: liveFresh() ? rt.live.an.extras() : {} };
     }
+    const np = rt.nowPlaying && rt.nowPlaying.follow(now); // a music app here plays a remembered song: its beat map, at the app's position
+    if (np) { const t = np.pos + off; rt.source = "nowplaying"; rt.sourceLabel = `${np.app}: ${np.name} (remembered)`; return { V: songView(np.pre, t), t, extra: liveFresh() ? rt.live.an.extras() : {} }; }
     if (liveFresh()) {
       const an = rt.live.an, t = an.t + Math.min(0.12, (now - rt.live.lastPush) / 1000) + (s.predict ? off : 0);
       songMemoryTick();
@@ -401,6 +404,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
       beat: V && V.g.has ? V.g.beatInBar : null, level: an ? Math.round(Math.min(1, an.eFast / an.eMax) * 100) / 100 : V ? Math.round((V.loud || 0) * 100) / 100 : 0,
       bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, mapping: rt.mapping ? { device: rt.mapping.dev, led: rt.mapping.led } : null, djlink: djFresh(performance.now()) ? { name: rt.dj.name, bpm: rt.dj.bpm, beatInBar: rt.dj.beatInBar } : null, recognised: rt.mem.lock && liveFresh() ? { id: rt.mem.lock.id, name: rt.mem.lock.name, pos: Math.round(lockPos(rt.mem.lock, rt.live.an.t) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
       song: rt.song ? { memId: rt.song.memId || null, name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
+      nowPlaying: rt.nowPlaying ? rt.nowPlaying.info() : null,
       capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null,
       overlay: overlayState(), devices: data().devices.map(d => ({ id: d.id, ...health.get(d.id), sent: outs.get(d.id)?.sender.sent || 0, used: outs.get(d.id)?.used || 0, amps: Math.round((outs.get(d.id)?.amps || 0) * 100) / 100, limited: !!outs.get(d.id)?.limited })),
       uptime: Math.round((Date.now() - rt.startedAt) / 1000),

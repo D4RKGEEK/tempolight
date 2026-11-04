@@ -1,0 +1,55 @@
+method return time=1793774502.161752 sender=:1.1 -> destination=:1.4 serial=3 reply_serial=2
+   array [
+      dict entry(
+         string "PlaybackStatus"
+         variant             string "Paused"
+      )
+      dict entry(
+         string "Position"
+         variant             int64 0
+      )
+      dict entry(
+         string "Rate"
+         variant             double 1
+      )
+      dict entry(
+         string "CanControl"
+         variant             boolean true
+      )
+      dict entry(
+         string "Metadata"
+         variant             array [
+               dict entry(
+                  string "mpris:trackid"
+                  variant                      object path "/com/spotify/track/0DiWol3AO6WpXZgp0goxAV"
+               )
+               dict entry(
+                  string "mpris:length"
+                  variant                      uint64 200000000
+               )
+               dict entry(
+                  string "xesam:title"
+                  variant                      string "Say "Hello" – Café"
+               )
+               dict entry(
+                  string "xesam:artist"
+                  variant                      array [
+                        string "A"
+                        string "B"
+                     ]
+               )
+               dict entry(
+                  string "xesam:album"
+                  variant                      string "Discovery"
+               )
+               dict entry(
+                  string "xesam:trackNumber"
+                  variant                      int32 1
+               )
+               dict entry(
+                  string "xesam:autoRating"
+                  variant                      double 0.79
+               )
+            ]
+      )
+   ]

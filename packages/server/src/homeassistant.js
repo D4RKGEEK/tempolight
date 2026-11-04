@@ -1,11 +1,15 @@
 // Home Assistant over MQTT: Tempolight announces itself with MQTT discovery, so it appears in Home Assistant by itself
 // as a light (on/off, brightness, effect), a scene picker, a few sensors (tempo, song part, source) and buttons
 // (flash, drop). Automations and voice assistants connected to Home Assistant can then control it.
+// Each Tempolight scene is also its own Home Assistant `scene` entity, so "Hey Google, activate Party mode" works
+// through Home Assistant's Google Assistant and Alexa integrations (see docs/voice.md).
 import { mqttConnect } from "./mqtt.js";
+
+const reEsc = s => String(s).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 export function startHomeAssistant({ core, store, runtime, version }) {
   const data = () => store.data, rt = runtime.rt;
-  let client = null, cfgKey = "", lastState = "", lastStatus = "", timer = null;
+  let client = null, cfgKey = "", lastState = "", lastStatus = "", timer = null, sceneIds = new Set();
   rt.mqtt = { state: "off" };
   const base = () => data().settings.mqtt.base || "tempolight", prefix = () => data().settings.mqtt.prefix || "homeassistant";
   const T = k => `${base()}/${k}`;
@@ -22,7 +26,18 @@ export function startHomeAssistant({ core, store, runtime, version }) {
     cfg("sensor", "source", { name: "Music source", state_topic: T("status"), value_template: "{{ value_json.source }}", icon: "mdi:speaker" });
     for (const [id, name, icon] of [["flash", "Flash", "mdi:flash"], ["drop", "Drop now", "mdi:arrow-collapse-down"], ["next", "Next effect", "mdi:skip-next"]])
       cfg("button", id, { name, command_topic: T("action/set"), payload_press: id, icon });
+    announceScenes();
     client.publish(T("availability"), "online", { retain: true }); lastState = ""; publishState();
+  }
+  // one `scene` entity per scene, plus "Tempolight off". They have no device on purpose: Home Assistant would put the
+  // device name in front ("Tempolight Party mode"), and voice assistants use that name
+  const sceneTopic = id => `${prefix()}/scene/${base()}/${id}/config`, sceneKey = sc => "scene_" + String(sc.id).replace(/[^\w-]/g, "_");
+  function announceScenes() {
+    const now = new Set(), pub = (id, o) => { now.add(id); client.publish(sceneTopic(id), { ...o, availability_topic: T("availability"), unique_id: `${base()}_${id}` }, { retain: true }); };
+    for (const sc of data().scenes) pub(sceneKey(sc), { name: sc.name, command_topic: T("scene/set"), payload_on: sc.id, icon: "mdi:palette" });
+    pub("tempolight_off", { name: "Tempolight off", command_topic: T("light/set"), payload_on: JSON.stringify({ state: "OFF" }), icon: "mdi:lightbulb-off" });
+    for (const id of sceneIds) if (!now.has(id)) client.publish(sceneTopic(id), "", { retain: true }); // a deleted scene leaves Home Assistant too
+    sceneIds = now;
   }
   function publishState() {
     if (!client || !client.connected) return;
@@ -33,6 +48,8 @@ export function startHomeAssistant({ core, store, runtime, version }) {
   }
   function onMessage(topic, payload) {
     const text = payload.toString("utf8");
+    const sm = new RegExp(`^${reEsc(prefix())}/scene/${reEsc(base())}/([^/]+)/config$`).exec(topic); // retained scene configs from an earlier run
+    if (sm) { if (text && !sceneIds.has(sm[1])) client.publish(topic, "", { retain: true }); return; }
     if (topic === T("light/set")) {
       let c; try { c = JSON.parse(text); } catch { c = { state: text }; }
       if (c.state) runtime.setPower(c.state === "ON").then(() => publishState());
@@ -49,7 +66,7 @@ export function startHomeAssistant({ core, store, runtime, version }) {
     clearInterval(timer); rt.mqtt = { state: "off" };
     if (!m.enabled || !m.url) return;
     client = mqttConnect(m.url, { username: m.username, password: m.password, clientId: `tempolight-${base()}`, will: { topic: T("availability"), payload: "offline", retain: true },
-      onMessage, onState: (state, error) => { rt.mqtt = { state, error: error || null }; if (state === "connected") { ["light/set", "scene/set", "action/set"].forEach(t => client.subscribe(T(t))); announce(); runtime.note("Home Assistant: connected to MQTT"); }
+      onMessage, onState: (state, error) => { rt.mqtt = { state, error: error || null }; if (state === "connected") { ["light/set", "scene/set", "action/set"].forEach(t => client.subscribe(T(t))); announce(); client.subscribe(`${prefix()}/scene/${base()}/+/config`); runtime.note("Home Assistant: connected to MQTT"); }
         else if (state === "error") runtime.note(`Home Assistant: ${error}`, "warn"); } });
     timer = setInterval(publishState, 2000);
   }

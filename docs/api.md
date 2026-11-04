@@ -79,6 +79,30 @@ A shape: `{type: "line"|"pole"|"free"|"circle"|"rect"|"hex"|"tri"|"matrix"|"poin
 | `GET /api/audio/sources` | sound inputs the server can capture from |
 | `PATCH /api/settings` | admin: `{capture: {enabled: true, source: "auto"\|<id>, command?}}` |
 
+## Now playing
+
+On a PC or Mac (not in the online demo), Tempolight reads which track the music apps on that computer play, with no
+account: Spotify and Music on macOS (`osascript`; macOS asks once to allow it under Privacy & Security → Automation),
+any MPRIS player on Linux (`playerctl`, or `dbus-send`), and anything in the Windows media controls (PowerShell,
+Windows 10 1809+). It is read about once a second. When the track is a remembered song (same title, and artist when
+the file name has one, and a length within 3 s), the lights follow that song's beat map and show at the app's
+position (`status.source` is `"nowplaying"`); otherwise it is only shown, and live audio still drives the lights.
+A song played in the web app comes first.
+
+| Call | Body |
+| --- | --- |
+| `GET /api/nowplaying` | `{enabled, supported, platform, state: "ok"\|"starting"\|"unavailable"\|"error"\|"off", message, method: "osascript"\|"playerctl"\|"dbus-send"\|"powershell", track, spotify: {clientId, connected, error, redirectUri}}` |
+| `PATCH /api/nowplaying` | admin: `{enabled?: true, spotifyClientId?: "<32 hex digits>"}` |
+| `POST /api/nowplaying/spotify/login` | admin: `{url}` to open: Spotify sign-in (PKCE, no client secret), which comes back to `redirectUri` (`http://127.0.0.1:<port>/api/nowplaying/spotify/callback`; add it to your Spotify app) |
+| `POST /api/nowplaying/spotify/code` | admin: `{url}`, the address Spotify sent the browser to, when signing in from another device |
+| `DELETE /api/nowplaying/spotify` | admin: disconnect |
+
+With Spotify connected, Spotify playing on any of your devices is used when nothing plays on this computer. The
+tokens are kept in `spotify-token.json` next to the settings and never sent to browsers (not in backups either).
+
+`GET /api/status` has `nowPlaying: {source: "macos"|"mpris"|"windows"|"spotify", app, device, title, artist, album,
+dur, pos, playing, posKnown, remembered: {id, name} | null, following}` or `null`.
+
 ## Guest song requests
 
 Guests open `/request` on their phone (QR code on the Music page). These calls are open to everyone, even when locked.
@@ -147,8 +171,11 @@ Tempolight then appears in Home Assistant as one device with:
 | --- | --- |
 | Light: on/off, brightness, effect (or "Automatic") | `tempolight/light/set` (JSON schema), state on `tempolight/light/state` |
 | Select: scene | `tempolight/scene/set` with a scene name |
+| Scenes: one `scene` entity per Tempolight scene (no device, so it's named just like the scene, for voice assistants), plus "Tempolight off" | `homeassistant/scene/tempolight/scene_<id>/config`; activating sends the scene id to `tempolight/scene/set` ("Tempolight off": `{"state": "OFF"}` to `tempolight/light/set`). Deleted scenes are removed |
 | Sensors: tempo, song part, music source | `tempolight/status` (JSON) |
 | Buttons: Flash, Drop now, Next effect | `tempolight/action/set` with `flash`, `drop` or `next` |
+
+Voice control through Home Assistant (Google Assistant, Alexa): see [voice.md](voice.md).
 
 `tempolight/availability` is `online` or `offline` (also set by the broker if Tempolight stops suddenly).
 `GET /api/status` has `mqtt: {state: "connected"|"connecting"|"reconnecting"|"error"|"off", error}`.
