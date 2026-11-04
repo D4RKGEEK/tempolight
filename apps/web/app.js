@@ -15,6 +15,7 @@ export const app = { state: null, status: null, layout: null, frame: null, token
 // demo mode: the online demo (and ?demo) runs the core in this page with pretend WLED controllers
 export const DEMO = !!document.querySelector('meta[name="tempolight-demo"]') || new URLSearchParams(location.search).has("demo");
 let demo = null;
+let NP = null; // "now playing" from music apps on the server's computer (nowplaying.js; not in the demo)
 
 // ---------------------------------------------------------------- server access
 export async function api(method, path, body) {
@@ -180,6 +181,7 @@ function homePage(el) {
       const a = A.state;
       $("#h-song").textContent = m.song ? m.song.name : m.source === "idle" ? "Nothing playing" : m.sourceLabel;
       $("#h-meta").textContent = m.song ? `${Math.round(m.song.bpm)} BPM · ${app.state.styles[m.song.style] || m.song.style}${m.song.drops?.length ? ` · ${m.song.drops.length} drop${m.song.drops.length > 1 ? "s" : ""}` : ""}` : m.source === "idle" ? "Play a song or listen to your computer on the Music page." : "Listening live";
+      const np = NP?.homeText(m); if (np) { $("#h-song").textContent = np.song; $("#h-meta").textContent = np.meta; }
       $("#h-transport").hidden = !(a.mode === "song" && a.song);
       if (a.song) { const d = A.duration, p = A.pos(); $("#h-fill").style.width = (p / d * 100) + "%"; $("#h-pos").textContent = fmtTime(p); $("#h-dur").textContent = fmtTime(d); $("#h-play").textContent = a.song.playing ? "Pause" : "Play"; }
       $("#h-black").setAttribute("aria-pressed", m.overlay.blackout);
@@ -210,6 +212,7 @@ function musicPage(el) {
       <button class="btn danger" id="m-stop" type="button" hidden>Stop listening</button>
       <p class="faint" style="font-size:12.5px">Your browser will ask what to share. For computer sound in Chrome or Edge, choose the screen or tab and turn on “Share audio”. Audio stays on your network.</p>
       <div class="callout err" id="m-err" hidden></div></div>`, "span-4")}
+    ${DEMO ? "" : '<div id="m-np"></div>'}
     ${panel("What Tempolight hears", `<span id="m-src"></span>`, "", `<div class="pb stack"><div class="spectrum" id="m-spec">${"<i></i>".repeat(24)}</div>
       <div class="kv"><div><span>Tempo</span><b id="m-bpm">–</b></div><div><span>Part</span><b id="m-part">–</b></div><div><span>Style</span><b id="m-style">–</b></div><div><span>Singing</span><b id="m-voc" title="An estimate from the sound: a clear tone whose pitch moves like a voice">–</b></div></div>
       <div class="row"><button class="btn" id="m-tap" type="button">Tap the beat</button><span class="faint" style="font-size:12.5px">Tap 4 times on the beat to fix the tempo and line up the beat.</span></div></div>`, "span-6")}
@@ -235,6 +238,7 @@ function musicPage(el) {
       <div class="field"><label for="m-capcmd">Custom command (optional)</label><input id="m-capcmd" class="mono" placeholder='ffmpeg -f pulse -i default -ac 1 -ar 22050 -f s16le -' value="${esc(s.capture.command)}"><span class="help">Any command that writes 16-bit mono 22,050 Hz audio to its output.</span></div>
       <div id="m-capst" class="faint"></div></div>`, "span-12")}`;
   const canShare = !!navigator.mediaDevices?.getDisplayMedia;
+  if (!DEMO) import("/nowplaying.js").then(mod => { NP = mod; mod.mount($("#m-np")); if (app.status) mod.status(app.status); }).catch(() => {});
   const fmtT = v => `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, "0")}`;
   async function songs() { const list = await api("GET", "/api/songs").catch(() => []), tb = $("#m-songs"); if (!tb) return;
     $("#m-memn").textContent = list.length ? `${list.length} song${list.length > 1 ? "s" : ""} remembered` : "";
@@ -338,6 +342,7 @@ function musicPage(el) {
       if (m.song?.memId && m.song.memId !== showFor) showLine();
       if (A.state.song && $("#m-fill")) { const p = A.pos(); $("#m-fill").style.width = (p / A.duration * 100) + "%"; $("#m-pos").textContent = fmtTime(p); }
       if (DEMO) return;
+      NP?.status(m);
       const c = app.state.settings.capture; $("#m-cap").textContent = c.enabled ? "Stop listening on the server" : "Start listening on the server";
       if (!lockedOut) $("#m-capst").innerHTML = m.capture ? (m.capture.error ? `<span class="badge err">${esc(m.capture.error)}</span>` : m.capture.running ? `<span class="badge live"><i></i>Listening: ${esc(m.capture.label)}</span>` : "Starting…") : "Not listening on the server.";
     },
@@ -760,6 +765,7 @@ async function boot() {
   $("#bri").oninput = e => $("#bri-out").textContent = e.target.value + "%";
   $("#bri").onchange = e => act(() => api("POST", "/api/brightness", { value: e.target.value / 100 })).catch(() => {});
   if (DEMO) { demo = await import("/demo.js"); await demo.ready; $("#demo-bar").hidden = false; document.body.classList.add("demo"); }
+  else import("/nowplaying.js").then(m => { NP = m; }).catch(() => {});
   if ("serviceWorker" in navigator && isSecureContext) navigator.serviceWorker.register("/sw.js").catch(() => {});
   try { await refreshState(); } catch (e) { if (e.status === 403) { app.token = null; store.set("token", null); await refreshState(); } else throw e; }
   if (app.token && app.state.locked) { try { await api("PATCH", "/api/settings", {}); } catch { app.token = null; store.set("token", null); chrome(); } }

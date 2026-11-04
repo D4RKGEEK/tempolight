@@ -1,0 +1,54 @@
+method return time=1793774502.157579 sender=:1.0 -> destination=:1.3 serial=3 reply_serial=2
+   array [
+      dict entry(
+         string "PlaybackStatus"
+         variant             string "Playing"
+      )
+      dict entry(
+         string "Position"
+         variant             int64 42123000
+      )
+      dict entry(
+         string "Rate"
+         variant             double 1
+      )
+      dict entry(
+         string "CanControl"
+         variant             boolean true
+      )
+      dict entry(
+         string "Metadata"
+         variant             array [
+               dict entry(
+                  string "mpris:trackid"
+                  variant                      object path "/com/spotify/track/0DiWol3AO6WpXZgp0goxAV"
+               )
+               dict entry(
+                  string "mpris:length"
+                  variant                      uint64 320357000
+               )
+               dict entry(
+                  string "xesam:title"
+                  variant                      string "One More Time"
+               )
+               dict entry(
+                  string "xesam:artist"
+                  variant                      array [
+                        string "Daft Punk"
+                     ]
+               )
+               dict entry(
+                  string "xesam:album"
+                  variant                      string "Discovery"
+               )
+               dict entry(
+                  string "xesam:trackNumber"
+                  variant                      int32 1
+               )
+               dict entry(
+                  string "xesam:autoRating"
+                  variant                      double 0.79
+               )
+            ]
+      )
+   ]
