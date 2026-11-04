@@ -47,6 +47,8 @@
     "demo": "node scripts/demo.js",
     "fake-wled": "node scripts/fake-wled.js",
     "test": "node --test",
+    "eval:beat": "node scripts/beat-eval.js",
+    "eval:feel": "node scripts/feel-eval.js",
     "docs": "node scripts/gen-docs.js",
     "docs:check": "node scripts/check-docs.js",
     "docs:dev": "npm --prefix website install && npm --prefix website run dev",

@@ -18,6 +18,8 @@ tests check real bytes on real sockets.
 | `npm run test:firmware` | `firmware/test/run.sh`: Tempolight Lite's C++ core on the host | g++ or clang++ |
 | `npm run smoke` | `scripts/smoke.js`: start a build, check it answers, stop it | |
 | `node scripts/bench.js` | CPU per part of the server | |
+| `npm run eval:beat` | `scripts/beat-eval.js`: how well the live analyser finds the beat | |
+| `npm run eval:feel` | `scripts/feel-eval.js`: how well the lights follow a song | |
 
 CI (`.github/workflows/ci.yml`) runs `npm test` on Linux, Windows and macOS with Node 20, 22 and 24, starts the server
 and checks `/api/health` and `/`, then runs both browser tests on Linux. `firmware.yml` runs the firmware host tests
@@ -30,7 +32,7 @@ contain no tests (the pretend servers, `synth.js`) are imported by others and pa
 
 | Folder | Files | Covers |
 | --- | --- | --- |
-| `packages/engine/test` | `engine.test.js`, `live.test.js`, `memory.test.js`, `timeline.test.js`, `tonal.test.js` | analysis of synthetic songs, the layout, every effect (finite colours, the 4 ms budget for 1,000 LEDs), custom effects, the live analyser, the director, song memory, shows and timelines, key and mood |
+| `packages/engine/test` | `engine.test.js`, `live.test.js`, `memory.test.js`, `timeline.test.js`, `tonal.test.js`, `beat.test.js`, `feel.test.js` | analysis of synthetic songs, the layout, every effect (finite colours, the 4 ms budget for 1,000 LEDs), custom effects, the live analyser, the director, song memory, shows and timelines, key and mood, and no regression in beat tracking or feel (see [Sync measurements](#sync-measurements)) |
 | `packages/outputs/test` | `outputs.test.js`, `discover.test.js`, `dmx.test.js`, `dtls.test.js`, `govee.test.js`, `lights.test.js`, `openrgb.test.js`, `smartlights.test.js` | packets byte by byte (DDP, audio sync, E1.31, Art-Net, segments), mDNS parsing and scans, DMX profiles, the DTLS client against a separate server and the published PRF test vector, every smart-light protocol |
 | `packages/server/test` | `server.test.js`, `lights.test.js`, `latency.test.js`, `perf.test.js`, `pro.test.js`, `home.test.js`, `timeline.test.js`, `mqtt.test.js`, `homekit.test.js`, `nowplaying.test.js`, `spotify.test.js`, `integrations.test.js`, `streamdeck.test.js`, `update.test.js`, `wifi.test.js`, `env-settings.test.js` | the whole app through HTTP and WebSocket: routes, the PIN lock, Origin checks, devices of every kind, the frame loop's output, latency and performance, DMX, MIDI clock and Link, home and sleep with an injected clock, MQTT against a tiny broker, HomeKit pairing as an iPhone would, now playing with fake players, Spotify against a fake Web API, integrations against fake OBS, Twitch and Discord |
 | `apps/web` | `calibrate.test.js`, `mapping.test.js`, `qr.test.js` | the pure helpers of the timing fix, camera mapping and the QR code maker |
@@ -45,6 +47,11 @@ the budget when `CI` is set.
 4 bars intro, 4 bars snare-roll build-up, 8 bars drop, 2 bars outro, Am F C G), `ballad()`, `voice()`, `pluck()`,
 `piece()`, `minorBallad()`, `majorPop()`. Songs with known structure mean analysis can be tested without shipping
 audio files. (`scripts/test-songs/*.py` make longer WAV files for listening by hand.)
+
+[`beat-songs.js`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/engine/test/beat-songs.js) makes 15 drum songs with known beats, downbeats and kicks:
+house, hip-hop, half-time, drum and bass, swing, a quiet intro, a break, a tempo jump and a tempo ramp.
+[`feel-song.js`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/engine/test/feel-song.js) makes a one-minute EDM song with known parts: intro, build,
+drop, breakdown, build, drop, outro, silence.
 
 ### Pretend devices and services
 
@@ -61,6 +68,94 @@ The server tests start the real app in-process with `createApp({dataDir: <temp d
 ...})` and its injection points: `now` (wall clock), `host` (pretend computer for the performance mode), `nowPlaying`
 (command runner, platform, fetch), `spotify` (clock), `homekit` (no mDNS, port), `integrations` (open, fetch, URLs), and
 `wifi`.
+
+## Sync measurements
+
+Two scripts measure how well the lights stay in time with the music. They use no packages and give the same numbers on
+every run (Math.random is seeded while the engine runs). They always test the code as it is now, so you can run them on
+any branch.
+
+### Beat tracking: `npm run eval:beat`
+
+`scripts/beat-eval.js` feeds each song to the live analyser (`packages/engine/src/live.js`) in 512-sample chunks at
+22,050 Hz, as the runtime does. It records the beats the lights would show, the kicks the analyser hears and its tempo.
+A full run takes about 13 seconds.
+
+The songs are the drum songs from `beat-songs.js`, `edm()` and `majorPop()` from `synth.js`, and your own WAV files.
+To add your own, put `song.wav` and `song.json` in `test-audio/` at the top of the repository. The folder is ignored
+by git. The JSON holds the true times in seconds: `{"beats": [...], "downbeats": [...], "kicks": [...]}`. Only
+`beats` is required. The WAV can be 8, 16, 24 or 32-bit, or float, at any sample rate.
+
+For each song and the mean it prints:
+
+| Column | Meaning |
+| --- | --- |
+| `F` | F-measure: shown beats within 70 ms of a true beat, from 5 s on |
+| `CMLt`, `AMLt` | beats in time and in a steady run; AMLt also accepts double, half and off-beat tempo |
+| `err±sd ms` | mean and spread of the timing error once locked; positive means the light is late |
+| `lock s` | when the first run of 8 correct beats starts |
+| `relock` | the same, from the moment the music comes back after a break or a tempo change |
+| `tempo ok/oct/oth` | share of the time the tempo is right, an octave off (half, double, 2/3, ...), or wrong |
+| `kick R/P` | kick recall and precision (60 ms) |
+| `downbt` | of the downbeats that got a shown beat, how many were shown as beat 1 |
+| `cpu ms/s` | analyser CPU time per second of audio |
+
+Options: `--json`, `--song <part of a name>`, and `--baseline check` or `--baseline write`. `LIVE=path/to/live.js`
+tests another analyser file instead (a prototype).
+
+### Feel: `npm run eval:feel`
+
+`scripts/feel-eval.js` plays `feel-song.js` through the real engine on the example room at 60 frames a second. It runs
+twice. Whole-song mode is `preAnalyseCore`, then `songView`, the director and the effects. Live mode is the live
+analyser, then the director and the effects. It measures the brightness of every frame against the known song. A run
+takes about 5 seconds.
+
+| Metric | Meaning |
+| --- | --- |
+| analysis BPM | is `preAnalyseCore`'s tempo within 2% of the truth |
+| kick contrast | in the drops: (peak in the 120 ms after a kick - low in the 120 ms before) / peak; median and 10th percentile |
+| kick-to-light lag | when the biggest brightness rise near a kick happens |
+| changes on downbeat, on 4-bar line | share of effect changes within -30/+75 ms of a bar line, or of a 4-bar line |
+| shorter than a bar | effects that showed for less than one bar |
+| drop / breakdown | mean brightness of the drops divided by the breakdown |
+| pre-drop dip | the last 0.4 s before a drop against the 1.5 s before that |
+| drop impact | the brightest frame in the first 0.25 s of a drop against the drop's typical brightness |
+| live drop delay, false drops | how late live mode calls each drop; switches into "drop" that are not a drop |
+
+`--effects` also lists which effect showed when, and the live song parts.
+
+It ends with a report of the roadmap's targets, each PASS or FAIL. The current code does not meet them yet. The report
+shows progress; it is not a test.
+
+| Target | Aim |
+| --- | --- |
+| analysis BPM | within 2% |
+| drop kick contrast | median at least 0.40, 10th percentile at least 0.25 |
+| effect changes on a downbeat | at least 90% |
+| effect changes on a 4-bar line | at least 75% |
+| effects shorter than one bar | none |
+| drop / breakdown brightness | at least 1.8 |
+| pre-drop dip | at most 0.7 |
+| live drop delay | at most 150 ms |
+
+### Baselines
+
+`packages/engine/test/baselines/beat.json` and `feel.json` hold the numbers measured on main. `beat.test.js` and
+`feel.test.js` (part of `npm test`) fail when the code gets worse than them:
+
+- beat: the mean F may drop by at most 0.02, and no song's F by more than 0.1.
+- feel: each metric has a margin, for example 0.05 for kick contrast, 10 points for changes on a downbeat, 150 ms for
+  the live drop delay. A drop that was found before and is now missed fails.
+
+After an intentional improvement, write new baselines and commit them with the change:
+
+```sh
+npm run eval:beat -- --baseline write
+npm run eval:feel -- --baseline write
+```
+
+`--baseline check` prints the same comparison as the tests, with every song or metric. Your own WAV files are never
+written to the baseline.
 
 ## Browser tests
 
