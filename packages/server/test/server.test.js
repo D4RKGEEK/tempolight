@@ -574,3 +574,19 @@ test("your own effects: deleting one leaves nothing pointing at it; backups are 
     assert.equal((await s.call("POST", "/api/custom-effects", { pattern: "wave" })).status, 400, "the 100-effect cap");
   } finally { await s.done(); }
 });
+
+test("other websites can't change things: cross-site API calls and WebSocket connections are refused", async () => {
+  const s = await setup(), http = await import("node:http");
+  try {
+    const raw = (method, p, headers, body) => new Promise((res, rej) => { const r = http.request({ host: "127.0.0.1", port: s.port, method, path: p, headers: { "content-type": "application/json", ...headers } }, x => { let d = ""; x.on("data", c => d += c); x.on("end", () => res({ status: x.statusCode, body: d })); }); r.on("error", rej); if (body) r.write(body); r.end(); });
+    assert.equal((await raw("POST", "/api/power", { origin: "https://evil.example" }, '{"on":false}')).status, 403);
+    assert.equal((await raw("POST", "/api/power", { origin: "null" }, '{"on":false}')).status, 403, "sandboxed pages too");
+    assert.equal(s.app.store.data.show.power, true, "nothing changed");
+    assert.equal((await raw("POST", "/api/power", { origin: `http://127.0.0.1:${s.port}` }, '{"on":false}')).status, 200, "the app itself is fine");
+    assert.equal((await raw("POST", "/api/power", {}, '{"on":true}')).status, 200, "scripts and Home Assistant send no Origin: fine");
+    assert.equal((await raw("GET", "/api/state", { origin: "https://evil.example" })).status, 200, "reading is unchanged");
+    const up = origin => new Promise(res => { const r = http.request({ host: "127.0.0.1", port: s.port, path: "/ws", headers: { connection: "Upgrade", upgrade: "websocket", "sec-websocket-version": "13", "sec-websocket-key": "dGhlIHNhbXBsZSBub25jZQ==", ...(origin ? { origin } : {}) } });
+      r.on("upgrade", (x, sock) => { sock.destroy(); res(101); }); r.on("response", x => res(x.statusCode)); r.on("error", () => res(0)); r.end(); });
+    assert.equal(await up("https://evil.example"), 403); assert.equal(await up(`http://127.0.0.1:${s.port}`), 101); assert.equal(await up(null), 101);
+  } finally { await s.done(); }
+});

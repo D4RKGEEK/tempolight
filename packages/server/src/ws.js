@@ -48,6 +48,13 @@ export class WsClient {
   closed() { if (!this.open) return; this.open = false; try { this.socket.destroy(); } catch {} this.onclose && this.onclose(); }
 }
 
+/** Is this request from another website? Browsers send Origin on cross-site requests; apps and scripts (curl, Home
+ * Assistant) send none. A page somewhere on the internet must not be able to change the lights or settings. */
+export function foreignOrigin(req) {
+  const o = req.headers.origin; if (!o) return false;
+  try { const h = new URL(o).host.toLowerCase(), extra = (process.env.TEMPOLIGHT_ALLOWED_ORIGINS || "").toLowerCase().split(",").map(x => x.trim().replace(/^https?:\/\//, "")).filter(Boolean);
+    return h !== String(req.headers.host || "").toLowerCase() && !extra.includes(h); } catch { return true; } // behind a reverse proxy that changes Host: list your address in TEMPOLIGHT_ALLOWED_ORIGINS
+}
 /** Attach to an http.Server; `onConnect(client, req)` is called for every connection to `path`. */
 export function attachWebSocket(server, path, onConnect) {
   const clients = new Set();
@@ -55,6 +62,7 @@ export function attachWebSocket(server, path, onConnect) {
     const url = new URL(req.url, "http://x");
     if (url.pathname !== path || (req.headers.upgrade || "").toLowerCase() !== "websocket") { socket.destroy(); return; }
     const key = req.headers["sec-websocket-key"]; if (!key) { socket.destroy(); return; }
+    if (foreignOrigin(req)) { socket.end("HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n"); return; } // another website's page
     const accept = crypto.createHash("sha1").update(key + GUID).digest("base64");
     socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
     const c = new WsClient(socket, req); clients.add(c);

@@ -4,6 +4,11 @@ Everything the web app does goes through this API, so anything else can do it to
 When a PIN lock is set, calls marked **admin** need the header `x-tempolight-token: <token>` from `POST /api/unlock`.
 Calls marked with a guest area (effects, scenes, pads, brightness) work without it if that area is allowed in Settings.
 
+Calls that change something are refused (403) when a browser sends them from another website (its `Origin` doesn't
+match the address Tempolight is reached at), and so are WebSocket connections from other websites. Scripts, Home
+Assistant and other apps send no `Origin` and aren't affected. Behind a reverse proxy that changes the `Host` header, list
+the public address in `TEMPOLIGHT_ALLOWED_ORIGINS` (comma-separated, for example `lights.example.com`).
+
 ## State
 
 | Call | Area | What it does |

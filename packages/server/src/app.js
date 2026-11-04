@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { createStore, newId, hashPin, checkPin } from "./store.js";
 import { createRuntime } from "./runtime.js";
 import { createCore, HttpError } from "./core.js";
-import { attachWebSocket } from "./ws.js";
+import { attachWebSocket, foreignOrigin } from "./ws.js";
 import { startOsc } from "./osc.js";
 import * as io from "./node-io.js";
 import { startHomeAssistant } from "./homeassistant.js";
@@ -63,6 +63,7 @@ export async function createApp(opts) {
     const send = (code, obj) => { res.writeHead(code, { "content-type": "application/json", "cache-control": "no-store" }); res.end(JSON.stringify(obj)); };
     try {
       if (url.pathname.startsWith("/api/")) {
+        if (req.method !== "GET" && foreignOrigin(req)) return send(403, { error: "Requests from other websites aren't allowed" }); // stops cross-site requests changing things
         const body = req.method === "GET" ? {} : await readBody(req);
         return send(200, await core.handle(req.method, url.pathname, { headers: req.headers, query: Object.fromEntries(url.searchParams), body }));
       }
