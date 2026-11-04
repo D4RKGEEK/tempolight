@@ -95,3 +95,34 @@ test("your own effects: every pattern, axis and drive renders, and they join the
     assert.ok(lit > 0, `${c.id} is dark`); }
   assert.equal(createEffects(layout).list.length, 95, "custom effects don't leak into other rooms");
 });
+
+test("your own effects: bad saved values can't break rendering, replace a built-in or blow the frame budget", () => {
+  const big = buildLayout([{ type: "line", count: 600, pts: [[0.5, 1], [15.5, 1]], dev: "a" }, { type: "circle", count: 400, cx: 8, cy: 5, size: 2.5, dev: "a" }]);
+  const custom = [
+    { id: "u-nan", pattern: "chase", axis: "x", drive: "beat", speed: "fast", width: NaN, bg: -5, cycles: 1e9, colors: ["#ff0066"] },
+    { id: "u-big", pattern: "wave", speed: 1e12, width: Infinity, bg: 99, cycles: -3, colors: "palette" },
+    { id: "shock", name: "Not the real one", pattern: "fill", colors: "palette" }, // same id as a built-in
+    { id: "u-big", name: "Twice", pattern: "pulse" }, { id: "u-x", pattern: "<img src=x>" }, null, "junk", { pattern: "wave" },
+    ...["wave", "chase", "pulse", "sparkle", "fill", "breathe", "gradient"].map(p => ({ id: `u-p-${p}`, pattern: p, axis: "around", drive: "kick", speed: 2, width: 0.3, cycles: 3 })),
+  ];
+  const f = createEffects(big, { custom }), col = new Float32Array(big.N * 3);
+  assert.equal(f.list.find(e => e.id === "shock").name, "Kick Shockwave", "a built-in can't be replaced");
+  assert.equal(f.list.filter(e => e.id === "u-big").length, 1, "each id once"); assert.ok(!f.list.some(e => e.id === "u-x"), "unknown patterns are skipped");
+  assert.equal(f.list.length, 95 + 2 + 7); assert.equal(f.pools.drop.filter(id => id === "shock").length, 1);
+  assert.equal(createEffects(big, { custom: { not: "a list" } }).list.length, 95);
+  for (const e of f.list.filter(e => e.custom)) {
+    let total = 0;
+    for (let k = 0; k < 40; k++) { const t = k / 60 + 0.3, S = buildSignals(metronomeView(t, 128), t, { pal: f.palettes.neon, fixed: true });
+      const s0 = performance.now(); f.render(e.id, S, col); if (k >= 10) total += performance.now() - s0;
+      for (let i = 0; i < col.length; i++) assert.ok(Number.isFinite(col[i]) && col[i] >= 0, `${e.id} gave ${col[i]}`); }
+    assert.ok(total / 30 < 4 * (process.env.CI ? 3 : 1), `${e.id} took ${(total / 30).toFixed(2)} ms per frame`);
+  }
+});
+
+test("metronome on a moved grid (a DJ deck's beats): the clock runs on, beats land where the grid says", () => {
+  const P = 60 / 125, grid = { P, off: 0.123 - 40 * P, barOff: (40 - 2) % 4 }; // beat 40 at 0.123 s is the deck's 3rd beat of the bar
+  const V = metronomeView(0.123 + P * 0.25, 125, grid);
+  assert.equal(V.g.idx, 40); assert.equal(V.g.beatInBar, 2); assert.ok(Math.abs(V.kick - 0.123) < 1e-9); assert.ok(Math.abs(V.g.phase - 0.25) < 1e-9);
+  let last = -1; for (let t = 1; t < 9; t += 0.05) { const g = metronomeView(t, 125, grid).g; assert.ok(g.idx >= last, "the beat count never goes back"); last = g.idx; }
+  const plain = metronomeView(3.3, 128), P2 = 60 / 128; assert.equal(plain.g.idx, Math.floor(3.3 / P2)); assert.equal(plain.g.beatInBar, Math.floor(3.3 / P2) % 4); // unchanged without a grid
+});

@@ -96,6 +96,7 @@ export function createDirector(layout, fx) {
     if (settings.plan && settings.plan.length) { const b = showAt(settings.plan, t); // a show timeline for this song: play it
       if (b && ids.has(b.effect)) { if (st.cur !== b.effect) { st.prev = st.cur; st.cur = b.effect; st.xfadeT = t; st.palIdx++; } return; } }
     const ST = style(V);
+    if (g.has && g.idx < st.lastSwitchBeat) st.lastSwitchBeat = g.idx; // the beat count restarted (another music source): count from here
     const sec = ST.mode === "sections" ? (V.state === "silent" ? "calm" : V.state) : V.level, pool = withPrefs(ST.pools[sec] || ST.pools.calm || ST.pools.low);
     const wrongPool = !pool.includes(st.cur), hot = sec === "drop" || sec === "peak";
     const barReady = g.has && g.beatInBar === 0 && g.idx - st.lastSwitchBeat >= settings.everyBeats * ST.every * (hot ? 1 : 2);

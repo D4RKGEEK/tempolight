@@ -147,7 +147,7 @@ export function createCore({ store, runtime, env }) {
     if (b.songMemory !== undefined) s.songMemory = !!b.songMemory;
     if (b.requests !== undefined) s.requests = !!b.requests;
     if (b.shows !== undefined) s.shows = !!b.shows;
-    if (b.djlink) Object.assign(s.djlink, { enabled: b.djlink.enabled ?? s.djlink.enabled, port: b.djlink.port !== undefined ? Math.round(num(b.djlink.port, 1024, 65535)) : s.djlink.port });
+    if (b.djlink) Object.assign(s.djlink, { enabled: b.djlink.enabled !== undefined ? b.djlink.enabled === true : s.djlink.enabled, port: b.djlink.port !== undefined && Number.isFinite(Number(b.djlink.port)) ? Math.round(num(b.djlink.port, 1024, 65535)) : s.djlink.port });
     if (b.mqtt) { const m = s.mqtt; for (const k of ["url", "username", "prefix", "base"]) if (b.mqtt[k] !== undefined) m[k] = String(b.mqtt[k]).trim().slice(0, 200);
       if (b.mqtt.password) m.password = String(b.mqtt.password).slice(0, 200); if (b.mqtt.clearPassword) m.password = ""; if (b.mqtt.enabled !== undefined) m.enabled = !!b.mqtt.enabled;
       if (m.enabled && !m.url) throw new HttpError(400, "Enter your MQTT broker's address, for example mqtt://192.168.1.10:1883"); }
@@ -183,7 +183,8 @@ export function createCore({ store, runtime, env }) {
     else runtime.action({ type: a.slice(1), on: v === undefined ? undefined : !!v, color: typeof v === "string" ? v : undefined, value: v });
   }
   let djlink = null;
-  function restartDjLink() { if (djlink) { djlink.close(); djlink = null; } const o = data().settings.djlink; if (o && o.enabled && env.startProLink) { djlink = env.startProLink(b => runtime.djBeat(b), { port: o.port }); runtime.note(`Pro DJ Link: listening for CDJ beats on UDP ${o.port}`); } }
+  function restartDjLink() { if (djlink) { djlink.close(); djlink = null; } const o = data().settings.djlink; if (o && o.enabled && env.startProLink) {
+    djlink = env.startProLink(b => runtime.djBeat(b), { port: o.port, onAir: a => runtime.djOnAir(a), onError: m => runtime.note(`Pro DJ Link can't listen: ${m}`, "warn") }); runtime.note(`Pro DJ Link: listening for CDJ beats on UDP ${o.port}`); } }
   function restartOsc() { if (osc) { osc.close(); osc = null; } const o = data().settings.osc; if (o.enabled) { if (!env.startOsc) return; osc = env.startOsc(o.port, m => { try { oscMessage(m); } catch {} }); runtime.note(`OSC listening on UDP ${o.port}`); } }
 
   // ---------------------------------------------------------------- API routes
@@ -197,7 +198,7 @@ export function createCore({ store, runtime, env }) {
   route("GET", "/api/effects", null, () => runtime.effects.list);
   route("GET", "/api/layout", null, () => runtime.layoutInfo());
   route("GET", "/api/update", "admin", () => env.update ? env.update.check() : { method: "demo", canUpdate: false, message: "The online demo is always the latest version." });
-  route("POST", "/api/update", "admin", async () => { if (!env.update) throw new HttpError(400, "Nothing to update in the online demo"); try { const r = await env.update.apply(); runtime.note("Updating Tempolight and restarting…"); return r; } catch (e) { throw new HttpError(400, e.message); } });
+  route("POST", "/api/update", "admin", async () => { if (!env.update) throw new HttpError(400, "Nothing to update in the online demo"); try { const r = await env.update.apply(); runtime.note("Updating Tempolight and restarting…"); return r; } catch (e) { throw new HttpError(e.code === 409 ? 409 : 400, e.message); } });
   route("GET", "/api/songs", null, () => data().songs.map(e => ({ id: e.id, name: e.name, bpm: e.bpm, dur: e.dur, style: e.style, drops: e.drops.length, at: e.at })));
   const songById = id => { const e = data().songs.find(x => x.id === id); if (!e) throw new HttpError(404, "That song isn't remembered"); return e; };
   route("GET", "/api/songs/:id/show", null, (ctx, p) => { const e = songById(p.id); if (!e.show) { e.show = runtime.planFor(e, e.name); store.save(); } return { id: e.id, name: e.name, dur: e.dur, edited: !!e.showEdited, show: e.show || [] }; });
@@ -233,20 +234,32 @@ export function createCore({ store, runtime, env }) {
   // your own effects, made from parts
   const PATTERNS = ["wave", "chase", "pulse", "sparkle", "fill", "breathe", "gradient"], AXES = ["along", "x", "y", "around", "centre"], DRIVES = ["beat", "kick", "bass", "loud", "time"];
   function cleanCustom(b, id) {
-    const pick = (v, list, def) => list.includes(v) ? v : def, num = (v, lo, hi, def) => v === undefined || v === null || v === "" ? def : Math.max(lo, Math.min(hi, Number(v) || def));
+    const pick = (v, list, def) => list.includes(v) ? v : def, num = (v, lo, hi, def) => { const x = v === undefined || v === null || v === "" ? NaN : Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : def; }; // 0 is a value (no background glow)
     const hexOk = c => /^#[0-9a-f]{6}$/i.test(c);
-    if (!b || !PATTERNS.includes(b.pattern)) throw new HttpError(400, `Pattern is one of: ${PATTERNS.join(", ")}`);
-    const colors = Array.isArray(b.colors) ? (b.colors.length === 2 && b.colors.every(hexOk) ? b.colors.map(c => c.toLowerCase()) : (() => { throw new HttpError(400, "Colours are two like #ff0066"); })()) : "palette";
+    if (!b || typeof b !== "object" || !PATTERNS.includes(b.pattern)) throw new HttpError(400, `Pattern is one of: ${PATTERNS.join(", ")}`);
+    const colors = Array.isArray(b.colors) ? (b.colors.length === 2 && b.colors.every(c => typeof c === "string" && hexOk(c)) ? b.colors.map(c => c.toLowerCase()) : (() => { throw new HttpError(400, "Colours are two like #ff0066"); })()) : "palette";
     return { id, name: String(b.name || "My effect").trim().slice(0, 40) || "My effect", tag: pick(b.tag, ["calm", "build", "drop", "home"], "drop"), pattern: b.pattern, axis: pick(b.axis, AXES, "along"),
       drive: pick(b.drive, DRIVES, "beat"), colors, speed: num(b.speed, 0.1, 8, 1), width: num(b.width, 0.01, 1, 0.15), bg: num(b.bg, 0, 0.5, 0.05), cycles: num(b.cycles, 0.25, 8, 1) };
   }
+  // custom effects from a backup or an old settings file: keep the ones that make sense, at most 100, each id once
+  const cleanCustoms = list => { const out = [], seen = new Set(); for (const e of Array.isArray(list) ? list : []) { if (out.length >= 100) break;
+    const id = typeof e?.id === "string" && /^u-[\w-]{1,40}$/.test(e.id) && !seen.has(e.id) ? e.id : null; if (!id) continue; try { out.push(cleanCustom(e, id)); seen.add(id); } catch {} } return out; };
+  // a deleted effect: nothing may keep pointing at it (the shown effect, the accent layer, ambient, zones, scenes, likes, song shows)
+  function forgetEffect(id) {
+    const d = data(), sh = d.show, builtin = tag => runtime.effects.list.find(e => e.tag === tag && !e.custom && e.id !== id)?.id || "shock";
+    if (sh.effect === id) { sh.effect = "shock"; sh.mode = "auto"; } if (sh.layer?.effect === id) sh.layer = null; if (sh.params) delete sh.params[id];
+    if (d.settings.ambient === id) d.settings.ambient = DEFAULTS().settings.ambient; if (d.settings.effectPrefs) delete d.settings.effectPrefs[id];
+    for (const z of d.room.zones || []) if (z.effect === id) { z.effect = null; if (z.mode === "effect") z.mode = "follow"; }
+    for (const sc of d.scenes) { const s = sc.show || {}; if (s.effect === id) { s.effect = "shock"; if (s.mode === "manual") s.mode = "auto"; } if (s.layer?.effect === id) s.layer = null; if (s.params) delete s.params[id]; }
+    for (const e of d.songs) if (e.show?.some(x => x.effect === id)) { if (e.showEdited) e.show = e.show.map(x => x.effect === id ? { ...x, effect: builtin(x.part) } : x); else e.show = null; } // a new show is planned when it's next needed
+  }
   route("GET", "/api/custom-effects", null, () => data().customEffects);
   route("POST", "/api/custom-effects", "effects", (ctx) => { const l = data().customEffects; if (l.length >= 100) throw new HttpError(400, "That's 100 of your own effects already: delete some first");
-    const e = cleanCustom(ctx.body, "u-" + env.newId("")); l.push(e); runtime.rebuild(); runtime.note(`New effect: ${e.name}`); changed("effects"); return e; });
+    const e = cleanCustom(ctx.body, "u-" + env.newId("")); l.push(e); runtime.rebuildEffects(); runtime.note(`New effect: ${e.name}`); changed("effects"); return e; });
   route("PUT", "/api/custom-effects/:id", "effects", (ctx, p) => { const l = data().customEffects, i = l.findIndex(e => e.id === p.id); if (i < 0) throw new HttpError(404, "No such effect");
-    l[i] = cleanCustom(ctx.body, p.id); runtime.rebuild(); changed("effects"); return l[i]; });
+    l[i] = cleanCustom(ctx.body, p.id); runtime.rebuildEffects(); changed("effects"); return l[i]; });
   route("DELETE", "/api/custom-effects/:id", "effects", (ctx, p) => { const l = data().customEffects, i = l.findIndex(e => e.id === p.id); if (i < 0) throw new HttpError(404, "No such effect");
-    l.splice(i, 1); if (data().show.effect === p.id) { data().show.effect = "shock"; data().show.mode = "auto"; } runtime.rebuild(); changed("effects"); return { ok: true }; });
+    l.splice(i, 1); forgetEffect(p.id); runtime.rebuildEffects(); changed("effects"); return { ok: true }; });
   route("GET", "/api/network", null, () => ({ addresses: env.lan ? env.lan() : [] })); // for the phone QR code
   route("GET", "/api/log", null, () => runtime.log.slice(-100));
 
@@ -366,7 +379,7 @@ export function createCore({ store, runtime, env }) {
   route("GET", "/api/backup", "admin", () => { const d = JSON.parse(JSON.stringify(data())); delete d.lock; return { tempolight: env.version, savedAt: new Date().toISOString(), data: d }; });
   route("POST", "/api/restore", "admin", (ctx) => {
     const d = ctx.body.data || ctx.body; if (!d || !Array.isArray(d.devices) || !d.room || !Array.isArray(d.room.shapes)) throw new HttpError(400, "That doesn't look like a Tempolight backup");
-    const lock = data().lock, fresh = merge(DEFAULTS(), d); fresh.lock = lock; // keep the current PIN
+    const lock = data().lock, fresh = merge(DEFAULTS(), d); fresh.lock = lock; fresh.customEffects = cleanCustoms(fresh.customEffects); // keep the current PIN
     for (const k of Object.keys(data())) delete data()[k]; Object.assign(data(), fresh);
     runtime.rebuild(); runtime.note(`Restored a backup: ${d.devices.length} devices, ${d.room.shapes.length} shapes, ${(d.scenes || []).length} scenes`); changed("all"); return { ok: true };
   });
@@ -402,6 +415,7 @@ export function createCore({ store, runtime, env }) {
   runtime.listeners.add(e => broadcast({ type: "log", ...e }));
 
   // ---------------------------------------------------------------- background jobs
+  if (!Array.isArray(data().customEffects)) data().customEffects = []; // a hand-edited settings file
   const sched = startScheduler(() => data().schedules, runSchedule, env.now, () => data().settings.location);
   restartOsc(); restartDjLink();
   async function firstRunDiscovery() {

@@ -19,13 +19,16 @@ export function createEffects(layout, opts = {}) {
 
   /** A user-made effect: {id, name, tag, pattern, axis, drive, colors: "palette"|[hex, hex], speed, width, bg, cycles} */
   function customEffect(d) {
-    if (!d || !d.id || !d.pattern) return null;
+    if (!d || typeof d.id !== "string" || !d.id || !CUSTOM_PATTERNS.includes(d.pattern)) return null;
     const AX = { along: LS, x: Float32Array.from(PX, v => v / 1.7778), y: PY, around: LA, centre: LD }[d.axis] || LS;
-    const speed = d.speed ?? 1, w = Math.max(0.01, d.width ?? 0.15), bg = d.bg ?? 0.05, cyc = d.cycles ?? 1, fixed = Array.isArray(d.colors) ? d.colors.map(hex) : null;
+    // the numbers come from saved files and backups too: anything missing, not a number or out of range gets a sensible value
+    const num = (v, lo, hi, def) => { const x = typeof v === "number" ? v : v == null || v === "" ? NaN : Number(v); return Number.isFinite(x) ? Math.max(lo, Math.min(hi, x)) : def; };
+    const speed = num(d.speed, 0.1, 8, 1), w = num(d.width, 0.01, 1, 0.15), bg = num(d.bg, 0, 0.5, 0.05), cyc = num(d.cycles, 0.25, 8, 1);
+    const fixed = Array.isArray(d.colors) && d.colors.length === 2 && d.colors.every(c => /^#[0-9a-f]{6}$/i.test(c)) ? d.colors.map(hex) : null;
     const drive = S => d.drive === "kick" ? S.kickE : d.drive === "bass" ? S.bassL : d.drive === "loud" ? S.loud : d.drive === "time" ? 1 : S.pulse;
     const phase = S => d.drive === "time" ? S.t * speed * 0.25 : (S.g.idx + S.g.phase) * speed / 4; // beat-driven patterns move one step a bar at speed 1
-    return { id: d.id, name: d.name || "My effect", tag: ["calm", "build", "drop", "home"].includes(d.tag) ? d.tag : "drop", custom: true, run(S) {
-      const [A, B] = fixed || S.pal, dv = Math.max(0, Math.min(1.5, drive(S))), ph = phase(S);
+    return { id: d.id, name: String(d.name || "My effect").slice(0, 40), tag: ["calm", "build", "drop", "home"].includes(d.tag) ? d.tag : "drop", custom: true, run(S) {
+      const [A, B] = fixed || S.pal, dv = Math.max(0, Math.min(1.5, drive(S) || 0)), ph = phase(S) || 0, gph = d.pattern === "gradient" ? ph * 0.25 : 0;
       for (let i = 0; i < N; i++) { const u = AX[i]; let k = 0;
         switch (d.pattern) {
           case "wave": k = (0.5 + 0.5 * Math.sin(2 * Math.PI * (u * cyc - ph))) * (0.35 + 0.65 * dv); break;
@@ -36,9 +39,11 @@ export function createEffects(layout, opts = {}) {
           case "breathe": k = (0.5 + 0.5 * Math.sin(2 * Math.PI * S.t * speed * 0.2)) * (0.6 + 0.4 * dv); break;
           default: k = 0.5 * (0.4 + 0.6 * dv); // gradient
         }
-        add(i, lerp3(A, B, ((u * cyc + (d.pattern === "gradient" ? ph * 0.25 : 0)) % 1 + 1) % 1), bg + (1 - bg) * k);
+        const m = ((u * cyc + gph) % 1 + 1) % 1, a = bg + (1 - bg) * k, j = i * 3; // the colour between A and B, without a new array per LED
+        COL[j] += (A[0] + (B[0] - A[0]) * m) * a; COL[j + 1] += (A[1] + (B[1] - A[1]) * m) * a; COL[j + 2] += (A[2] + (B[2] - A[2]) * m) * a;
       } } };
   }
+  const CUSTOM_PATTERNS = ["wave", "chase", "pulse", "sparkle", "fill", "breathe", "gradient"];
 
   const FX = [
     { id: "aurora", name: "Aurora Drift", tag: "calm", run(S) { const a = hex("#2a10a0"), b = hex("#00b3a5");
@@ -504,7 +509,8 @@ export function createEffects(layout, opts = {}) {
 
   FX.push(...FX2);
   // ---- your own effects, built from parts in the Effects page (no code): a pattern, what moves it, a direction, colours
-  const customs = (opts.custom || []).map(customEffect).filter(Boolean);
+  // a custom effect can't replace a built-in one, and each id counts once (backups and hand-edited files can have anything)
+  const taken = new Set(FX.map(f => f.id)), customs = (Array.isArray(opts.custom) ? opts.custom.slice(0, 100) : []).map(customEffect).filter(c => c && !taken.has(c.id) && taken.add(c.id));
   FX.push(...customs);
   const FXI = Object.fromEntries(FX.map((f, i) => [f.id, i]));
   const POOLS = { calm: ["northern", "galaxy", "vocal", "aurora", "embers", "neon", "colorchord", "fireflies", "stars", "lavablobs", "ocean", "hypno", "lava", "twinkle", "plasma", "flow"],

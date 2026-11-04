@@ -31,13 +31,13 @@ export function songView(pre, t) {
     kick, snare: si >= 0 ? pre.snares[si] : -9, hat: hi >= 0 ? pre.hats[hi] : -9, pulses, snares, pulseN: ki };
 }
 
-/** A steady beat with no audio, for demos and hardware tests. */
-export function metronomeView(t, bpm = 128) {
-  const P = 60 / bpm, idx = Math.floor(t / P), ph = t / P - idx, bib = idx % 4;
-  const kick = idx * P, pulses = [kick, kick - P, kick - 2 * P].filter(x => x >= 0);
+/** A steady beat with no audio, for demos and hardware tests. grid ({P, off, barOff}, as for gridAt) puts the beats
+ * somewhere else than on whole multiples of the beat length, e.g. on a DJ deck's beats. */
+export function metronomeView(t, bpm = 128, grid = null) {
+  const g = gridAt(grid || { P: 60 / bpm, off: 0, barOff: 0 }, t), { P, idx, phase: ph, beatInBar: bib } = g;
+  const kick = g.beatT, pulses = [kick, kick - P, kick - 2 * P].filter(x => x >= 0);
   const snare = bib % 2 ? kick : kick - P;
-  return { g: { has: true, P, phase: ph, idx, beatInBar: bib, env: Math.exp(-ph * P / 0.18), barPhase: (bib + ph) / 4, beatT: kick },
-    bpm, style: "party", loud: 0.8, level: "peak", state: "drop", buildP: ((idx >> 2) % 4 + ph / 4 + bib / 4) / 4, dropT: -9, nextDrop: null,
+  return { g, bpm, style: "party", loud: 0.8, level: "peak", state: "drop", buildP: ((((idx - bib) / 4) % 4 + 4) % 4 + ph / 4 + bib / 4) / 4, dropT: -9, nextDrop: null,
     kick, snare, hat: kick + P / 2 <= t ? kick + P / 2 : kick - P / 2, pulses, snares: [snare], pulseN: idx };
 }
 

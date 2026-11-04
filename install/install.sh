@@ -62,6 +62,8 @@ Wants=network-online.target
 [Service]
 User=$(id -un)
 Environment=TEMPOLIGHT_DATA=$HOME/.tempolight
+# one-click updates exit with code 3 and systemd starts the new version
+Environment=TEMPOLIGHT_SUPERVISED=1
 ExecStart=$(command -v node) $DEST/packages/server/src/index.js --port 8080
 Restart=always
 RestartSec=3

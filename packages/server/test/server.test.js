@@ -424,3 +424,98 @@ test("your own effects: create, play, change, delete", async () => {
     const st = (await s.call("GET", "/api/state")).body; assert.ok(!st.effects.some(x => x.id === e.id)); assert.equal(st.show.mode, "auto", "deleting the playing effect goes back to automatic");
   } finally { await s.done(); wled.close(); }
 });
+
+test("Pro DJ Link: real packet layout, mixers and other packets, no tempo", async () => {
+  const { parseBeat, parseOnAir, beatPacket, onAirPacket } = await import("../src/prolink.js");
+  const b = beatPacket({ device: 3, name: "XDJ-XZ", bpm: 120, pitch: 0.95, beatInBar: 4 });
+  assert.equal(b.length, 0x60); assert.equal(b[0x0a], 0x28); assert.equal(b.readUInt16BE(0x5a), 12000); assert.equal(b.readUIntBE(0x55, 3), Math.round(0.95 * 0x100000)); assert.equal(b[0x5c], 4); assert.equal(b[0x5f], 3);
+  assert.equal(b.readUInt32BE(0x24), Math.round(60000 / 114), "next beat in ms");
+  assert.equal(parseBeat(b).bpm, 114);
+  const zero = beatPacket({ beatInBar: 0 }); assert.equal(parseBeat(zero).beatInBar, 0, "beat-in-bar 0 means unknown");
+  const stopped = beatPacket({ pitch: 0 }); assert.equal(parseBeat(stopped), null, "pitch at -100%: no tempo");
+  const other = Buffer.from(b); other[0x0a] = 0x02; assert.equal(parseBeat(other), null, "fader start and other packets aren't beats");
+  assert.equal(parseBeat(b.subarray(0, 0x50)), null); assert.equal(parseBeat("text"), null);
+  assert.deepEqual(parseOnAir(onAirPacket([2, 3])).onAir, { 1: false, 2: true, 3: true, 4: false }); assert.equal(parseOnAir(b), null);
+});
+
+test("Pro DJ Link: one deck leads, the grid is smooth and counts on, and a stopped deck lets go", async () => {
+  const s = await setup();
+  try {
+    await s.call("POST", "/api/devices", { virtual: true });
+    const rt = s.app.runtime, P = 60000 / 128, beat = (device, at, beatInBar, extra = {}) => rt.djBeat({ device, name: `CDJ ${device}`, bpm: 128, trackBpm: 128, pitch: 1, beatInBar, at, ...extra });
+    const t0 = performance.now() - 20 * P, jitter = [0, 7, -4, 9, 2, -6, 8, 1, -3, 6, 0, 5, -2, 9, 3, -5];
+    for (let k = 0; k < 16; k++) { beat(1, t0 + k * P + jitter[k], (k % 4) + 1); beat(2, t0 + k * P + 190, ((k + 2) % 4) + 1); } // deck 2 plays too, off the beat
+    assert.equal(rt.rt.dj.device, 1, "the deck that was leading keeps the grid"); assert.equal(rt.rt.dj.beatInBar, 4);
+    assert.ok(Math.abs(rt.rt.dj.at - (t0 + 15 * P)) < 6, `Wi-Fi jitter is smoothed (${(rt.rt.dj.at - t0 - 15 * P).toFixed(1)} ms off)`);
+    const n = rt.rt.dj.n; assert.ok(n >= 15, "the beat counter counts on");
+    beat(1, t0 + 17 * P, 2); assert.equal(rt.rt.dj.n, n + 2, "a lost packet still counts its beat");
+    beat(1, t0 + 18 * P, 0); assert.equal(rt.rt.dj.beatInBar, 3, "beat-in-bar 0: counted on from the last beat");
+    // a mixer echoing the tempo doesn't take over from a player; the mixer's on-air channels do decide between two players
+    beat(0x21, t0 + 18 * P + 100, 1); assert.equal(rt.rt.dj.device, 1);
+    rt.djOnAir({ device: 0x21, onAir: { 1: false, 2: true }, at: performance.now() }); beat(2, t0 + 18 * P + 190, 1);
+    assert.equal(rt.rt.dj.device, 2, "the deck on air takes over"); assert.ok(rt.rt.dj.n > n + 2, "and the count doesn't go back");
+    rt.djOnAir({ device: 0x21, onAir: { 1: true, 2: true }, at: performance.now() });
+    // no audio: a steady show on the deck's beat; the grid in the view matches the deck
+    for (let k = 19; k <= 20; k++) beat(2, performance.now() - (20 - k) * P - 5, ((k + 1) % 4) + 1);
+    await sleep(60); let st = rt.status(); assert.equal(st.source, "djlink"); assert.equal(st.beat, rt.rt.dj.beatInBar - 1); assert.equal(rt.rt.view.g.idx, rt.rt.dj.n);
+    // the deck stops: within about two beats the room falls back to nothing playing
+    await sleep(2 * P + 400); st = rt.status(); assert.equal(st.source, "idle"); assert.equal(st.djlink, null);
+    beat(1, performance.now(), 1); assert.equal(rt.rt.dj.device, 1, "a deck that starts later leads once the other has stopped");
+  } finally { await s.done(); }
+});
+
+test("Pro DJ Link: in automatic mode the effect still changes every few bars", async () => {
+  const s = await setup();
+  try {
+    await s.call("POST", "/api/devices", { virtual: true }); await s.call("PATCH", "/api/show", { mode: "auto", everyBeats: 4, style: "party" });
+    const rt = s.app.runtime, P = 60000 / 180; let k = 0, seen = new Set();
+    const timer = setInterval(() => rt.djBeat({ device: 1, name: "CDJ", bpm: 180, trackBpm: 180, pitch: 1, beatInBar: (k++ % 4) + 1, at: performance.now() }), P);
+    await until(() => { seen.add(rt.status().effect); return seen.size >= 3; }, 9000); clearInterval(timer);
+    assert.ok(seen.size >= 3, `effects shown: ${[...seen].join(", ")}`);
+  } finally { await s.done(); }
+});
+
+test("Pro DJ Link: a port another app holds is reported, not silently ignored", async () => {
+  const s = await setup(), port = 52000 + Math.floor(Math.random() * 900), hog = dgram.createSocket({ type: "udp4", reuseAddr: false });
+  try {
+    await new Promise(r => hog.bind(port, r));
+    await s.call("PATCH", "/api/settings", { djlink: { enabled: true, port } });
+    assert.ok(await until(() => s.app.runtime.log.some(e => e.level === "warn" && /DJ Link can't listen.*in use/.test(e.msg))), "a warning in the log");
+    await s.call("PATCH", "/api/settings", { djlink: { enabled: "false" } }); assert.equal(s.app.store.data.settings.djlink.enabled, false);
+  } finally { hog.close(); await s.done(); }
+});
+
+test("your own effects: deleting one leaves nothing pointing at it; backups are checked; saving keeps the pads", async () => {
+  const s = await setup();
+  try {
+    await s.call("POST", "/api/devices", { virtual: true });
+    const e = (await s.call("POST", "/api/custom-effects", { name: "<img src=x onerror=alert(1)>", pattern: "breathe", tag: "calm", bg: 0, width: 0, speed: "NaN" })).body;
+    assert.equal(e.bg, 0, "no background glow is a choice, not a missing value"); assert.equal(e.width, 0.01); assert.equal(e.speed, 1);
+    assert.equal((await s.call("POST", "/api/custom-effects", "wave")).status, 400);
+    // use it everywhere, then delete it
+    await s.call("PATCH", "/api/settings", { ambient: e.id }); await s.call("PATCH", "/api/show", { layer: { effect: e.id, amount: 0.5 } });
+    await s.call("PATCH", `/api/effects/${e.id}`, { pref: 1, params: { speed: 2 } });
+    const sc = (await s.call("POST", "/api/scenes", { name: "Mine", show: { mode: "manual", effect: e.id, layer: { effect: e.id, amount: 1 } } })).body;
+    await s.call("PUT", "/api/zones", { zones: [{ id: "z1", name: "Desk", mode: "effect", effect: e.id }] });
+    const d = s.app.store.data; d.songs.push({ id: "m1", name: "Song", show: [{ t0: 0, t1: 10, part: "calm", effect: e.id }], showEdited: true }, { id: "m2", name: "Other", show: [{ t0: 0, t1: 10, part: "drop", effect: e.id }] });
+    await s.call("PATCH", "/api/show", { effect: e.id }); assert.ok(await until(() => s.app.runtime.director.state.cur === e.id));
+    s.app.runtime.action({ type: "blackout", on: true });
+    assert.equal((await s.call("PUT", `/api/custom-effects/${e.id}`, { ...e, colors: ["#112233", "#445566"] })).status, 200);
+    assert.equal(s.app.runtime.director.state.overlay.blackout, true, "saving an effect doesn't undo the blackout pad"); assert.equal(s.app.runtime.director.state.cur, e.id);
+    s.app.runtime.action({ type: "cancel" });
+    assert.equal((await s.call("DELETE", `/api/custom-effects/${e.id}`)).status, 200);
+    const st = (await s.call("GET", "/api/state")).body, used = JSON.stringify({ settings: st.settings, show: st.show, scenes: st.scenes, room: st.room, songs: d.songs });
+    assert.ok(!used.includes(e.id), "nothing points at the deleted effect"); assert.equal(st.settings.ambient, "northern", "the room doesn't go dark when idle");
+    assert.equal(st.scenes.find(x => x.id === sc.id).show.mode, "auto"); assert.equal(st.room.zones[0].mode, "follow");
+    assert.equal(d.songs[0].show[0].part, "calm"); assert.ok(st.effects.find(x => x.id === d.songs[0].show[0].effect).tag === "calm", "a hand-edited show gets a built-in effect for that part");
+    assert.equal(d.songs[1].show, null, "a planned show is planned again");
+    assert.equal((await s.call("PUT", "/api/songs/m1/show", { show: d.songs[0].show })).status, 200, "the edited show can still be saved");
+    // restore: bad entries are dropped, ids are checked, at most 100
+    const backup = (await s.call("GET", "/api/backup")).body;
+    backup.data.customEffects = [{ id: "shock", pattern: "wave" }, { id: 'u-1"><script>', pattern: "wave" }, { id: "u-ok", pattern: "nope" }, { id: "u-good", pattern: "chase", speed: 1e9 }, { id: "u-good", pattern: "fill" },
+      ...Array.from({ length: 150 }, (_, i) => ({ id: `u-n${i}`, pattern: "wave" }))];
+    assert.equal((await s.call("POST", "/api/restore", backup)).status, 200);
+    const ce = (await s.call("GET", "/api/custom-effects")).body; assert.equal(ce.length, 100); assert.equal(ce[0].id, "u-good"); assert.equal(ce[0].speed, 8); assert.equal(ce[0].pattern, "chase");
+    assert.equal((await s.call("POST", "/api/custom-effects", { pattern: "wave" })).status, 400, "the 100-effect cap");
+  } finally { await s.done(); }
+});
