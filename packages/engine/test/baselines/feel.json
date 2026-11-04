@@ -9,40 +9,40 @@
   ]
  },
  "analysis": {
-  "bpm": 63.9,
-  "bpmOk": false,
+  "bpm": 127.998,
+  "bpmOk": true,
   "drops": [
-   15.255,
-   45.302
+   15.001,
+   45.001
   ],
-  "style": "hiphop"
+  "style": "party"
  },
  "whole": {
-  "kickContrast": 0.706,
-  "kickContrastP10": 0.269,
+  "kickContrast": 0.694,
+  "kickContrastP10": 0.324,
   "kickLagMs": 12.5,
   "lum": {
-   "intro": 0.143,
-   "build": 0.203,
-   "drop": 0.194,
-   "break": 0.138,
-   "outro": 0.132,
-   "silence": 0.082
+   "intro": 0.162,
+   "build": 0.219,
+   "drop": 0.207,
+   "break": 0.097,
+   "outro": 0.071,
+   "silence": 0.081
   },
-  "dropBreak": 1.408,
+  "dropBreak": 2.126,
   "preDropDip": [
-   0.359,
-   0.393
+   0.442,
+   0.311
   ],
-  "preDropDipWorst": 0.393,
+  "preDropDipWorst": 0.442,
   "dropImpact": [
-   0.705,
-   0.872
+   6.135,
+   4.496
   ],
-  "dropImpactMin": 0.705,
-  "changes": 6,
-  "onDownbeat": 0,
-  "on4Bar": 0,
+  "dropImpactMin": 4.496,
+  "changes": 8,
+  "onDownbeat": 1,
+  "on4Bar": 0.75,
   "shortEffects": 0
  },
  "live": {

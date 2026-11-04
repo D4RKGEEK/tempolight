@@ -8,7 +8,7 @@ in [`packages/server/src/runtime.js`](../../packages/server/src/runtime.js) (the
 
 ## What is stored
 
-A compact copy of a whole-song analysis, about 10-20 kB of JSON, in `tempolight.json` under `songs`:
+A compact copy of a whole-song analysis, about 10-30 kB of JSON (18 kB for 2 minutes, 31 kB for 4), in `tempolight.json` under `songs`:
 
 | Field | What |
 | --- | --- |
@@ -20,11 +20,18 @@ A compact copy of a whole-song analysis, about 10-20 kB of JSON, in `tempolight.
 | `fp` | base64: the loudness fingerprint, `fingerprint(pre.env)`: 10 bytes a second, `log10` loudness quantised to 0-255 |
 | `ch` | base64: the chroma fingerprint (`packChroma`), 6 bytes per 200 ms; missing in entries from older versions |
 | `key`, `mode`, `keyConfidence`, `mood` | when known |
+| `bx` | base64, 4 bytes a bar, in the order of `bars`: energy (0-255), danceability (0-255), chord (0-23 into `CHORDS`, 255 none), singing (0/1). Missing in older entries, and in maps whose bars were laid out again |
+| `ks` | base64, one byte per kick (`kickStrength x 255`), aligned with `kicks`; missing when the counts don't match |
+| `sec` | sections as `[[bar0, bar1, label, state], ...]` (bar indices into `bars`, `bar1` exclusive); kept only when they fit the bars |
+| `phrase` | `{len: 8 or 16, first}`: the phrase grid, bar indices |
 | `show`, `showEdited`, `colors`, `cues`, `bright` | the song's show timeline (see [director and effects](director-and-effects.md#shows-and-timelines)) |
 | `spotifyId`, `isrc`, `src`, `cov`, `gridSec` | added by Sync with Spotify: the track ID, where the map came from (`learned`, `shared`, `spotify-analysis`), and for partly learned songs the covered stretches `[[t0, t1], ...]` |
 
 `memoryAnalysis(e)` turns an entry back into an analysis that `songView()` can use (the envelope expanded to 20 ms
-steps). Shaped fingerprints and unpacked chroma are cached per entry in a `WeakMap`, never on the entry, so they
+steps). The newer fields come back as in the analysis (bars get `energy`, `dance`, `chord`, `vocal`; `kickStrength`,
+`sections` with `t0`/`t1` from the bars, `phrase`). An older entry without `bx` but with `ch` still gets each bar's
+`chord`, worked out from the stored chroma (`barChords(unpackChroma(ch), 5, bars)`); one without either simply has
+none of them, and everything else works as before. Shaped fingerprints and unpacked chroma are cached per entry in a `WeakMap`, never on the entry, so they
 can't end up in the saved file.
 
 **When.** `runtime.setSong()` remembers every song played in the browser that is longer than 20 s (with
@@ -39,25 +46,45 @@ in `localStorage` (~5 MB), which these limits fit.
 
 ```mermaid
 flowchart TD
-  Q["live: the last 12 s of fingerprint bytes; query: bpm, chroma window, drumless"] --> SH["shape: change from a 1 s running mean, clipped to ±25"]
-  SH --> FLAT{"too flat? norm under 30 and no chroma"}
+  Q["live: the last 6-12 s of fingerprint bytes; query: bpm, chroma window (6-12 s), drumless"] --> V["per speed 0.94-1.06 (steps of 2%): the window stretched to song time and shaped; per speed and note shift: the chroma"]
+  V --> FLAT{"all too flat and no chroma?"}
   FLAT -- yes --> NONE["null"]
   FLAT -- no --> E["for each remembered song"]
-  E --> T{"tempo fits? live bpm vs song bpm within 6% at x0.5, x1, x2; skipped when either side is drumless"}
-  T -- no --> E
-  T -- yes --> C1{"chroma quick pass: best 12 s average anywhere under 0.65?"}
+  E --> T["tempo hint: live bpm vs song bpm at 1:1, 2:1, 1:2, 3:2, 2:3 within 7%; fits: only speeds near it; doesn't: all speeds, stricter limits, ranked lower"]
+  T --> C1{"chroma quick pass: best 6-12 s average anywhere, any speed, under 0.65?"}
   C1 -- yes --> E
-  C1 -- no --> LD["loudness: normalised correlation at every 100 ms offset"]
-  LD --> OK{"best over 0.6, margin over the runner-up 0.4 s or more away over 0.08, chroma there over 0.6?"}
-  OK -- yes --> F["found: id, pos, score, margin"]
-  OK -- no --> CS["chroma-led search: up to 6 best 12 s stretches, frame by frame near each, 100 ms either side of the best"]
-  CS --> OK2{"chroma over 0.85, 0.05 clear of any other place, loudness not below 0.1?"}
+  C1 -- no --> LD["loudness: 2.5/s pass at every 4th place, 5/s around the best 16, 10/s around the best 8 (speed 1 and the two best other speeds)"]
+  LD --> OK{"best over 0.67, margin over 0.08, chroma there over 0.7, no other loud place with better notes?"}
+  OK -- yes --> F["found: id, pos, rate, score, margin"]
+  OK -- no --> CS["chroma-led search (speed 1 and the best other): up to 6 best stretches, frame by frame near each"]
+  CS --> OK2{"chroma over 0.85, 0.05 clear, loudness not below 0.1 (0.35 with drums), a note-for-note repeat elsewhere told apart?"}
   OK2 -- yes --> F
   OK2 -- no --> E
-  F --> BEST["keep the best score over all songs"]
+  F --> BEST["keep the best (tempo misfits ranked 0.05 lower)"]
 ```
 
-- **Loudness fingerprint.** 10 values a second; a match looks at 12 s (120 values). Shaping (high-pass against a
+The limits above are for a 12 s window; while fewer than 12 s have been heard (from 6 s) they rise linearly to
++0.1 on the loudness score, +0.04 on its margin and +0.03 on the chroma, and a tempo misfit adds +0.05, +0.03 and
++0.02.
+
+- **Shorter windows.** `ChromaTap.window(n = 60, min = 30)` returns the last 12 s of chroma, or as little as 6 s while
+  less has been heard, and the loudness window is the last 12 s or less (at least 6 s). On the synthetic songs a first
+  match comes at 6-7 s, and the runtime's lock (two matches a second apart) at about 8 s instead of 14.
+- **Speed.** A DJ may play a song a few percent fast or slow. The live window is resampled to song time at 0.94, 0.96,
+  ... 1.06 x; the chroma is also tried moved by `12·log2(rate)` semitones (rounded to a half; a song sped up without key
+  lock sounds higher, with key lock it doesn't). Speeds other than 1 need a slightly better score (`0.03 + 0.5·|rate - 1|`).
+  A runner-up at another speed counts only if it is further than `3 + 60·|Δrate|` steps away (the same place shows a
+  little further off at another speed). The result carries `rate` (song seconds per live second). Half-semitone shifts
+  (3% without key lock) smear the chroma, so a drumless song sped up 3% like a record is often not found; with drums the
+  loudness finds it.
+- **Tempo as a hint.** The live tempo used to skip songs whose stored tempo didn't fit (x0.5, x1, x2 within 6%); a pop
+  song through a bad speaker heard at 77.5 BPM instead of 116 was then never found. Now a fitting tempo (1:1, 2:1, 1:2,
+  3:2, 2:3) narrows the speeds to those near it; a misfit only makes the limits stricter and ranks it lower.
+- **Cost.** Each search runs coarse to fine with running sums for the norms; the live side is prepared once per query
+  (cached on the `live` array, checked against its length and newest values) and shared by every song. Searching 7
+  speeds costs about as much per song as the old single-speed search with a tempo that fits (about 1 ms for a 4-minute
+  song on a laptop), and about 1.5 x without one.
+- **Loudness fingerprint.** 10 values a second; a match looks at up to 12 s (120 values). Shaping (high-pass against a
   running mean) makes the volume irrelevant; clipping keeps one big jump (a song's end) from deciding alone. The
   runner-up must be at least 0.4 s away, because in a steady part a beat or a bar off looks alike, and following the
   right song a beat late is still wrong.
@@ -65,9 +92,18 @@ flowchart TD
   the live window is paired into 5-a-second frames two ways (to line up with even and odd 100 ms song offsets),
   centred per frame. The quick pass compares 12 s *averages* from running sums (12 numbers per position, cheap on a
   Raspberry Pi); only near the best few is it correlated frame by frame. A loudness match must also agree in chroma
-  (> 0.6) or it is dropped; a chroma match must not be contradicted by the loudness. Old entries without `ch` are
+  (> 0.7) or it is dropped, and in a song that loops a place a few bars on with nearly the same loudness and better
+  notes wins; a chroma match must not be contradicted by the loudness, and where a section comes back note for note
+  (a second drop) the loudness of the stretch before must tell the two apart. Old entries without `ch` are
   matched on loudness alone.
-- `pos` is the song position at the end of the live window, in seconds.
+- `pos` is the song position at the end of the live window, in seconds; `rate` the speed it was found at.
+- `matchAt(live, e, pos, range, {chroma, rate})` follows at a given speed; `chromaMatch(chroma, e, pos, rate)` likewise.
+
+**Measured** (synthetic songs: two EDM tracks, pop, two ballads; 8 conditions, from the start and from 40% in, a lock
+= two agreeing matches a second apart): found 42/80 before, 64/80 now; median time to lock 14 s before, 8 s now; songs
+played 3% faster or 4% slower (or 3% faster in a noisy room) were never found before, now 20 of 30 are. Low-passed pop (whose live tempo read wrong)
+is found now. The remaining wrong locks are between the two EDM test tracks, which are the same chords, tempo and
+structure at the same times. Unrelated songs (same key, chords and tempo) still never lock.
 
 ## Following: the lock
 
@@ -125,4 +161,7 @@ off. See [api.md](../api.md#music).
 up; never locking onto a repetitive part at the wrong beat; `matchAt` confirming the song where it should be and not
 another; kicks lining up for a song played faster; drumless ballads recognised from the middle though the stored tempo
 is off; unrelated songs in the same key, chords and tempo never locking; entries without chroma still matching on
-loudness; and entries surviving a save and load unchanged. See [testing](testing.md).
+loudness; and entries surviving a save and load unchanged. `analysis.test.js`: recognised after 8-9 s; low-passed
+pop recognised with a wrong live tempo, and at 1:2, 3:2 and 2:3; songs 3% faster and 4% slower recognised with their
+speed, and with key lock; the newer fields surviving a save, older entries without them still working, and a 4-minute
+entry under 34 kB. See [testing](testing.md).
