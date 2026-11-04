@@ -43,6 +43,7 @@ function connect() {
     else if (m.type === "status") onStatus(m);
     else if (m.type === "log") { app.log.push(m); if (app.log.length > 200) app.log.shift(); app.page?.onLog?.(m); }
     else if (m.type === "changed") scheduleRefresh(m.what);
+    else if (m.type === "screen-refused") app.screen?.stop(m.error); // locked, or another browser already shares
   };
 }
 function resendAudio() { const a = app.audio.state; ws.send({ type: "audio-start", rate: 22050, label: a.mode === "song" ? `Song: ${a.label}` : a.label }); }
@@ -224,7 +225,7 @@ function musicPage(el) {
     ${panel("Song memory", `<span id="m-memn"></span>`, `<label class="check"><input type="checkbox" id="m-mem" ${s.songMemory ? "checked" : ""}> On</label>`, `<div class="pb stack">
       <p class="muted">Songs you play here are remembered. When one plays again from anywhere else (Spotify, a DJ, the radio) while Tempolight listens live, it is recognised after about 15 seconds and the lights follow its full beat map: build-ups and drops are known ahead.</p>
       <div class="tablewrap"><table><tbody id="m-songs"><tr><td class="faint">Loading…</td></tr></tbody></table></div></div>`, "span-6")}
-    ${panel("Screen sync", `<span id="m-scrst">${app.screen?.state.active ? "Sharing" : "Off"}</span>`, `<button class="btn" id="m-scr" type="button">${app.screen?.state.active ? "Stop sharing" : "Share a screen…"}</button>`, `<div class="pb stack">
+    ${panel("Screen sync", `<span id="m-scrst">${app.screen?.state.active ? `Sharing ${esc(app.screen.state.label)}` : "Off"}</span>`, `<button class="btn" id="m-scr" type="button">${app.screen?.state.active ? "Stop sharing" : "Share a screen…"}</button>`, `<div class="pb stack">
       <p class="muted">Share a film, a game or a music video and the room takes its colours, like a big ambilight. Turns on the Screen Sync effect; pick another effect to go back.</p>
       <span class="help" id="m-scrhelp">${navigator.mediaDevices?.getDisplayMedia ? "Works in Chrome, Edge and Firefox on a computer. Keep the shared tab or window visible." : "This browser can't share its screen. Use a computer."}</span></div>`, "span-6")}
     ${DEMO ? "" : panel("Listen on the server", "For a Raspberry Pi or PC next to the speakers, with no browser open", `<button class="btn" id="m-cap" type="button"></button>`, `<div class="pb stack">
@@ -250,9 +251,10 @@ function musicPage(el) {
   guestUrl("/request").then(async url => { const { qrSvg } = await import("/qr.js"), box = $("#m-reqqr"); if (!box) return; box.innerHTML = qrSvg(url, { px: 4 }); $("#m-requrl").innerHTML = `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`; });
   $("#m-mem").onchange = e => act(() => api("PATCH", "/api/settings", { songMemory: e.target.checked }), e.target.checked ? "Song memory on" : "Song memory off").then(refreshState).catch(() => {});
   if (!canShare) $("#m-scr").disabled = true;
+  if (!guestOk("effects") && !app.screen?.state.active) { $("#m-scr").disabled = true; $("#m-scrhelp").textContent = "Locked with a PIN: guests can't pick effects, so they can't share a screen."; }
   $("#m-scr").onclick = async () => { if (!app.screen) { const { createScreenShare } = await import("/screen.js"); app.screen = createScreenShare({ ws, onChange: sc => { if (sc.error) toast(sc.error, true); const b = $("#m-scr"), t = $("#m-scrst"); if (b) b.textContent = sc.active ? "Stop sharing" : "Share a screen…"; if (t) t.textContent = sc.active ? `Sharing ${sc.label}` : "Off"; } }); }
     if (app.screen.state.active) { app.screen.stop(); return; }
-    if (await app.screen.start()) act(() => api("PATCH", "/api/show", { effect: "screen" }), "Screen Sync is on").catch(() => {}); };
+    if (await app.screen.start()) act(() => api("PATCH", "/api/show", { effect: "screen" }), "Screen Sync is on").catch(e => { if (e.status === 403) app.screen.stop("Tempolight is locked, so the screen can't be shared."); }); };
   if (!canShare) $("#m-system").hidden = true; // phones can't share system sound: use songs or the microphone
 
   const lockedOut = !unlocked();

@@ -43,7 +43,7 @@ export function roomPage(el) {
     $("#r-sum").textContent = `${draft.length} shape${draft.length === 1 ? "" : "s"}, ${total} LEDs${dirty ? " · not saved" : ""}`;
     $("#r-rows").innerHTML = draft.map((s, i) => { const r = ranges[i];
       return `<tr class="${i === sel ? "sel" : ""}" data-row="${i}"><td><input value="${esc(s.name)}" data-k="name" data-i="${i}" style="width:150px"></td>
-        <td>${s.type === "points" ? '<span class="faint">Panels</span>' : `<select data-k="type" data-i="${i}">${Object.entries(TYPES).map(([k, v]) => opt(k, v, k === s.type)).join("")}</select>`}</td>
+        <td>${s.type === "points" ? '<span class="faint" title="One LED at each point: from camera mapping, Nanoleaf panels or Hue lights">Points</span>' : `<select data-k="type" data-i="${i}">${Object.entries(TYPES).map(([k, v]) => opt(k, v, k === s.type)).join("")}</select>`}</td>
         <td><select data-k="dev" data-i="${i}">${devs.map(d => opt(d.id, d.name, d.id === s.dev)).join("")}</select></td>
         <td class="num"><input type="number" min="0" placeholder="auto" value="${s.from ?? ""}" data-k="from" data-i="${i}"></td>
         <td class="num">${s.type === "matrix" ? `${s.cols}×${s.rows}` : s.type === "points" ? s.count : `<input type="number" min="1" max="8192" value="${s.count}" data-k="count" data-i="${i}">`}</td>
@@ -73,8 +73,8 @@ export function roomPage(el) {
     </div>`;
     $$("#r-geo [data-g]").forEach(x => x.onchange = () => { const v = Number(x.value), k = x.dataset.g; if (!Number.isFinite(v)) return;
       if (k === "x" || k === "y") { const cc = center(s); move(s, k === "x" ? v - cc[0] : 0, k === "y" ? v - cc[1] : 0); }
-      else if (k === "len") scaleLine(s, v / Math.max(0.01, length(s)));
-      else if (k === "rot" && s.pts) { rotatePts(s, v - (s.rot || 0)); s.rot = v; }
+      else if (k === "len") { scaleLine(s, v / Math.max(0.01, length(s))); move(s, 0, 0); }
+      else if (k === "rot" && s.pts) { rotatePts(s, v - (s.rot || 0)); s.rot = v; move(s, 0, 0); } // move(0, 0) pushes it back inside the wall view
       else if (k === "cols" || k === "rows") { s[k] = Math.max(1, Math.round(v)); s.count = s.cols * s.rows; }
       else s[k] = v;
       touch(); });
@@ -112,7 +112,10 @@ export function roomPage(el) {
   // ---- geometry helpers (stage units: 16 wide, 9 high)
   const pts = s => s.pts || null;
   function center(s) { if (pts(s)) { const p = s.pts; return [p.reduce((a, q) => a + q[0], 0) / p.length, p.reduce((a, q) => a + q[1], 0) / p.length]; } return [s.cx ?? 8, s.cy ?? 4.5]; }
-  function move(s, dx, dy) { if (pts(s)) s.pts = s.pts.map(([x, y]) => [clamp(x + dx, 0, STAGE_W), clamp(y + dy, 0, STAGE_H)]); else { s.cx = clamp((s.cx ?? 8) + dx, 0, STAGE_W); s.cy = clamp((s.cy ?? 4.5) + dy, 0, STAGE_H); } }
+  // a shape with points moves as a whole and stops at the edge (clamping each point would squash a mapped shape flat)
+  function move(s, dx, dy) { if (pts(s)) { const xs = s.pts.map(p => p[0]), ys = s.pts.map(p => p[1]);
+      dx = clamp(dx, -Math.min(...xs), STAGE_W - Math.max(...xs)); dy = clamp(dy, -Math.min(...ys), STAGE_H - Math.max(...ys));
+      s.pts = s.pts.map(([x, y]) => [x + dx, y + dy]); } else { s.cx = clamp((s.cx ?? 8) + dx, 0, STAGE_W); s.cy = clamp((s.cy ?? 4.5) + dy, 0, STAGE_H); } }
   function length(s) { let l = 0; for (let i = 1; i < (s.pts || []).length; i++) l += Math.hypot(s.pts[i][0] - s.pts[i - 1][0], s.pts[i][1] - s.pts[i - 1][1]); return l; }
   function scaleLine(s, k) { const [cx, cy] = center(s); s.pts = s.pts.map(([x, y]) => [cx + (x - cx) * k, cy + (y - cy) * k]); }
   function rotatePts(s, deg) { const [cx, cy] = center(s), a = deg * Math.PI / 180, c = Math.cos(a), n = Math.sin(a); s.pts = s.pts.map(([x, y]) => [cx + (x - cx) * c - (y - cy) * n, cy + (x - cx) * n + (y - cy) * c]); }

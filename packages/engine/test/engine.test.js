@@ -126,3 +126,27 @@ test("metronome on a moved grid (a DJ deck's beats): the clock runs on, beats la
   let last = -1; for (let t = 1; t < 9; t += 0.05) { const g = metronomeView(t, 125, grid).g; assert.ok(g.idx >= last, "the beat count never goes back"); last = g.idx; }
   const plain = metronomeView(3.3, 128), P2 = 60 / 128; assert.equal(plain.g.idx, Math.floor(3.3 / P2)); assert.equal(plain.g.beatInBar, Math.floor(3.3 / P2) % 4); // unchanged without a grid
 });
+
+test("Screen Sync: black bars of a film are cut off, a dark scene isn't, and the room takes the picture's colours", async () => {
+  const { createLetterbox } = await import("../src/index.js");
+  const W = 16, H = 9, pic = (fill, at) => { const px = new Uint8Array(W * H * 3); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) px.set(fill(x, y), (y * W + x) * 3); return { w: W, h: H, px, at }; };
+  const film = (x, y) => y < 2 || y > 6 ? [0, 0, 0] : y < 5 ? [220, 20, 20] : [20, 20, 220]; // letterboxed: 2 black rows above and below
+  const lb = createLetterbox();
+  assert.deepEqual(lb(pic(film, 0)), { x0: 0, x1: 15, y0: 2, y1: 6 }, "the bars are found straight away");
+  let c; for (let t = 1000; t <= 15000; t += 1000) c = lb(pic((x, y) => y === 4 && x === 8 ? [60, 60, 60] : [0, 0, 0], t)); // 15 s of a dark scene with one candle
+  assert.deepEqual(c, { x0: 0, x1: 15, y0: 2, y1: 6 }, "a dark scene keeps the picture's size");
+  for (let t = 16000; t <= 18000; t += 1000) c = lb(pic(() => [0, 0, 0], t)); assert.deepEqual(c, { x0: 0, x1: 15, y0: 2, y1: 6 }, "a fade to black too");
+  for (let t = 19000; t <= 40000; t += 1000) c = lb(pic((x, y) => y === 4 && x === 8 ? [60, 60, 60] : [0, 0, 0], t));
+  assert.ok(c.y0 > 2 && c.x0 > 0, "only after 20 s of black does an edge count as a bar");
+  assert.deepEqual(lb(pic(() => [90, 90, 90], 41000)), { x0: 0, x1: 15, y0: 0, y1: 8 }, "a full-screen picture uses everything again at once");
+  assert.deepEqual(createLetterbox()(pic(() => [0, 0, 0], 0)), { x0: 0, x1: 15, y0: 0, y1: 8 }, "an all-black picture isn't cut");
+  assert.deepEqual(createLetterbox()(pic((x, y) => x < 2 || x > 13 ? [0, 0, 0] : [99, 99, 99], 0)), { x0: 2, x1: 13, y0: 0, y1: 8 }, "pillarbox bars at the sides");
+  // the effect: strips along the top and the bottom of the room show the film's top (red) and bottom (blue), not the black bars
+  const L = buildLayout([{ type: "line", count: 30, pts: [[1, 0.5], [15, 0.5]], dev: "d" }, { type: "line", count: 30, pts: [[1, 8.5], [15, 8.5]], dev: "d" }]), F = createEffects(L), out = new Float32Array(L.N * 3);
+  const S0 = buildSignals(metronomeView(0, 120), 0, { pal: F.palettes.neon, fixed: true });
+  for (let k = 0; k < 20; k++) F.render("screen", { ...S0, screen: pic(film, k * 50) }, out);
+  const avg = (a, b) => { const c = [0, 0, 0]; for (let i = a; i < b; i++) for (let j = 0; j < 3; j++) c[j] += out[i * 3 + j] / (b - a); return c; }, top = avg(0, 30), bottom = avg(30, 60);
+  assert.ok(top[0] > 0.5 && top[0] > 4 * top[2], `top of the room is red, not black (${top.map(v => v.toFixed(2))})`);
+  assert.ok(bottom[2] > 0.5 && bottom[2] > 4 * bottom[0], `bottom of the room is blue, not black (${bottom.map(v => v.toFixed(2))})`);
+  F.render("screen", { ...S0, screen: null }, out); assert.ok(out.some(v => v > 0.01), "with nothing shared it still glows softly");
+});
