@@ -75,8 +75,8 @@ that was left meanwhile is not drawn. The first visit only downloads what Home n
 
 Songs: `audio.js` decodes the file, runs `preAnalyseCore` (progress on the Music page), posts `POST /api/song {name,
 analysis, clientId: ws.id}`, plays it with Web Audio and sends `{type: "clock"}` every 500 ms and on every change, with
-`outputLatency + baseLatency` taken off. While it plays it also streams the song's own PCM as a live source (`Song:
-<name>`), so spectrum effects get real bands.
+`outputLatency + baseLatency` taken off. While it plays it also streams the song's own PCM as a live source
+(`Song: <name>`), so spectrum effects get real bands.
 
 ## Demo mode
 

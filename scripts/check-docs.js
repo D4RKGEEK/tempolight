@@ -121,6 +121,10 @@ function checkLinks(file, prose) {
 const HTML_TAGS = new Set(("a abbr address area article aside audio b bdi bdo blockquote br button canvas caption cite code col colgroup data dd del details dfn dialog div dl dt em embed fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hr i iframe img input ins kbd label legend li main map mark menu meter nav noscript object ol optgroup option output p picture pre progress q rp rt ruby s samp section select small source span strong sub summary sup table tbody td template textarea tfoot th thead time tr track u ul var video wbr svg path g circle rect line polyline polygon defs radialgradient lineargradient stop text tspan font center").split(" "));
 const VUE_COMPONENTS = new Set(["Badge", "ClientOnly", "Content", "Mermaid", "VPTeamMembers"]);
 function checkSiteSafety(file, prose) {
+  // a line that starts with <word is an HTML block to Markdown before code spans are even looked at, so a `code span`
+  // that wraps onto a new line starting with <name> breaks the Vue build
+  prose.forEach((raw, i) => { const m = /^ {0,3}<\/?([A-Za-z][\w-]*)(?=[\s/>]|$)/.exec(raw);
+    if (m && !HTML_TAGS.has(m[1].toLowerCase()) && !VUE_COMPONENTS.has(m[1])) report(file, i + 1, `line starts with <${m[1]}: Markdown reads it as raw HTML (rewrap the line so it doesn't start with <)`); });
   const text = stripInlineCode(stripHtmlComments(prose.join("\n"))).split("\n");
   text.forEach((raw, i) => {
     const line = raw.replace(/\\[<{]/g, "  ");
