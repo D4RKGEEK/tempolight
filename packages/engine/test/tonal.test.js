@@ -21,8 +21,8 @@ test("key: whole-song analysis finds the key and mode of every test piece", () =
   assert.ok(got.every(g => g.conf >= 0.3), `confident: ${got.map(g => g.conf).join(", ")}`);
 });
 
-test("key: the EDM test track (Am F C G) comes out as A minor or its relative, C major", async () => {
-  const p = await preAnalyseCore(edm(sr).x, sr); assert.ok(["A minor", "C major"].includes(`${p.key} ${p.mode}`), `${p.key} ${p.mode}`);
+test("key: the EDM test track (Am F C G) comes out as A minor (not its relative, C major)", async () => {
+  const p = await preAnalyseCore(edm(sr).x, sr); assert.equal(`${p.key} ${p.mode}`, "A minor");
   assert.ok(p.mood.energy > 0.7, `the drop makes it energetic (${p.mood.energy})`);
 });
 
