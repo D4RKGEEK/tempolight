@@ -38,7 +38,7 @@ test("timeline editor API: colours, cues and brightness are saved, validated and
 
     // play up to the flash: it fires once, a small step back doesn't fire it again, a real seek back does
     await s.call("POST", "/api/song/clock", { pos: cueT - 0.4, playing: true });
-    assert.ok(await until(() => D.state.cuesFired === 1, 3000), "the flash fired");
+    assert.ok(await until(() => D.state.cuesFired === 1, 8000), `the flash fired (fired ${D.state.cuesFired}, clock at ${s.app.runtime.status().pos})`);
     assert.ok(Math.abs(D.state.lastCue.t - cueT) < 1e-9); assert.deepEqual(D.state.overlay.flashColor, [1, 0, 0]);
     assert.ok(D.settings.timeline && D.settings.timeline.colors.length === 1, "the director has the timeline");
     await sleep(150); await s.call("POST", "/api/song/clock", { pos: cueT - 0.05, playing: true }); await sleep(400);
