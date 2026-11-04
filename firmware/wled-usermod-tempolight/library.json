@@ -1,0 +1,8 @@
+{
+  "name": "tempolight",
+  "version": "0.1.0",
+  "description": "Tempolight Lite: kicks, tempo, build-ups and drops from AudioReactive, with Tempolight effects (TL ...) and an automatic mode.",
+  "license": "MIT",
+  "build": { "libArchive": false },
+  "dependencies": {}
+}

@@ -1,0 +1,12 @@
+{
+  "name": "Tempolight Lite (WLED + AudioReactive + Tempolight usermod)",
+  "version": "dev",
+  "home_assistant_domain": "wled",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32",
+      "parts": [{ "path": "tempolight-lite-esp32.bin", "offset": 0 }]
+    }
+  ]
+}

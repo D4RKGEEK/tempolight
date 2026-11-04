@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install Tempolight Lite</title>
+<meta name="description" content="Flash WLED with Tempolight Lite onto an ESP32 from your browser: music-reactive lights with a microphone, no computer needed.">
+<link rel="icon" href="../images/logo.svg" type="image/svg+xml">
+<!-- ESP Web Tools (https://esphome.github.io/esp-web-tools/): the install button, flashing over Web Serial -->
+<script type="module" src="https://unpkg.com/esp-web-tools@10.1.1/dist/web/install-button.js?module"></script>
+<style>
+:root { --bg: #0e1014; --panel: #161a20; --line: #262b34; --text: #e8ebf0; --muted: #9aa3b2; --accent: #f5a524; --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; color-scheme: dark; }
+@media (prefers-color-scheme: light) { :root { --bg: #f7f7f5; --panel: #ffffff; --line: #e1e2e6; --text: #15171c; --muted: #5d6573; --accent: #b86e00; color-scheme: light; } }
+* { box-sizing: border-box; }
+html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 var(--sans); }
+a { color: var(--accent); }
+.wrap { max-width: 760px; margin: 0 auto; padding: 0 16px 48px; }
+header { display: flex; align-items: center; gap: 12px; padding: 18px 0; }
+header img { width: 30px; height: 30px; }
+h1 { font-size: clamp(28px, 6vw, 40px); line-height: 1.15; margin: 24px 0 10px; letter-spacing: -0.02em; }
+.lead { color: var(--muted); font-size: 18px; margin: 0 0 24px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 18px 20px; margin: 16px 0; }
+.card h2 { font-size: 18px; margin: 0 0 8px; }
+.card p, .card li { color: var(--muted); }
+ol { padding-left: 20px; margin: 8px 0 0; }
+li { margin: 4px 0; }
+code { font: 14px var(--mono); }
+table { border-collapse: collapse; width: 100%; font-size: 15px; }
+td, th { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-weight: 600; }
+esp-web-install-button { display: inline-block; margin: 6px 0 2px; }
+esp-web-install-button button[slot="activate"] { background: var(--accent); color: #1c1406; border: 0; border-radius: 8px; padding: 12px 22px; font: 600 16px var(--sans); cursor: pointer; }
+.note { font-size: 14px; color: var(--muted); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header><img src="../images/logo.svg" alt=""><b>Tempolight Lite</b></header>
+
+  <h1>Music-reactive lights without a computer</h1>
+  <p class="lead">An ESP32 with a microphone listens for the kick, the tempo, the build-up and the drop, and drives your
+    WLED lights with Tempolight effects on its own. This installs WLED with AudioReactive and the Tempolight usermod.</p>
+
+  <div class="card">
+    <h2>Install</h2>
+    <p>Plug the ESP32 into this computer with a USB data cable, then press the button. Works in Chrome and Edge on a
+      computer (Web Serial). Installing erases the board: copy your WLED settings first if it already runs WLED
+      (Config &rarr; Security &amp; Updates &rarr; Backup).</p>
+    <esp-web-install-button manifest="manifest.json">
+      <button slot="activate">Install Tempolight Lite</button>
+      <span slot="unsupported">This browser can't flash boards: use Chrome or Edge on a computer.</span>
+      <span slot="not-allowed">Open this page over https (or from localhost) to flash.</span>
+    </esp-web-install-button>
+    <p class="note">Classic ESP32 boards (ESP32-WROOM / esp32dev, 4 MB flash). Already on WLED 16? Download
+      <code>tempolight-lite-esp32-update.bin</code> from the release and use WLED's own Config &rarr; Security &amp;
+      Updates &rarr; Manual OTA update instead; your settings stay.</p>
+  </div>
+
+  <div class="card">
+    <h2>Wire the microphone (INMP441)</h2>
+    <table>
+      <tr><th>INMP441</th><th>ESP32</th></tr>
+      <tr><td>VDD</td><td>3V3</td></tr>
+      <tr><td>GND</td><td>GND</td></tr>
+      <tr><td>L/R</td><td>GND (left channel)</td></tr>
+      <tr><td>WS</td><td>GPIO 15</td></tr>
+      <tr><td>SCK</td><td>GPIO 14</td></tr>
+      <tr><td>SD</td><td>GPIO 32</td></tr>
+    </table>
+    <p class="note">LEDs: data on GPIO 16 (WLED's default; change it in Config &rarr; LED Preferences). Other pins can be
+      chosen in Config &rarr; Usermods &rarr; AudioReactive.</p>
+  </div>
+
+  <div class="card">
+    <h2>After flashing</h2>
+    <ol>
+      <li>Set up Wi-Fi: the installer may offer it right after flashing, or join the <code>WLED-AP</code> network
+        (password <code>wled1234</code>) and follow WLED's setup page.</li>
+      <li>Set your LEDs in Config &rarr; LED Preferences.</li>
+      <li>Pick the effect <b>TL Auto</b>: it follows the music, calm &rarr; build-up &rarr; drop. The other
+        <b>TL</b> effects stay on one look.</li>
+      <li>Tempolight Lite shows in Info with its tempo and song part, and an on/off button.</li>
+    </ol>
+    <p class="note">What Lite can and can't do, compared with the full app: <a href="https://github.com/D4RKGEEK/tempolight/blob/main/docs/tempolight-lite.md">docs/tempolight-lite.md</a>.
+      Drop Strobe flashes at most 3 times a second; tick "No flashes" on any effect to turn flashes off.</p>
+  </div>
+</div>
+</body>
+</html>

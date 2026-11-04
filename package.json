@@ -31,6 +31,7 @@
     "docs": "node scripts/gen-docs.js",
     "test:browser": "node scripts/e2e-browser.js",
     "site": "node scripts/build-site.js",
-    "test:demo": "node scripts/e2e-demo.js"
+    "test:demo": "node scripts/e2e-demo.js",
+    "test:firmware": "bash firmware/test/run.sh"
   }
 }
