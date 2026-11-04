@@ -122,9 +122,17 @@ await step("effects: make your own effect, show it, share it, delete it", async 
   await page.uncheck("#u-pal"); await page.fill("#u-c1", "#ff0000"); await page.click("#u-save");
   await until(() => app.store.data.customEffects.length === 1 && app.store.data.show.effect === app.store.data.customEffects[0].id, 4000, "not saved and shown");
   await page.waitForSelector("#u-del:not([hidden])", { timeout: 4000 }); await sleep(600); ok(lum(A) > 1, "custom effect is dark");
-  await page.click("#u-share"); ok((await page.inputValue("#u-code")).startsWith("TL1:"), "no share code");
+  await page.click("#u-share"); const code = await page.inputValue("#u-code"); ok(code.startsWith("TL1:"), "no share code");
   await page.click('#e-tags [data-tag="mine"]'); ok(/E2E waves/.test(await page.textContent("#e-grid")), "not under Mine"); await shot("07d-custom");
   await page.click("#u-del"); await until(() => app.store.data.customEffects.length === 0, 4000, "not deleted");
+  await page.fill("#u-code", code); await page.click("#u-import"); ok(await page.inputValue("#u-name") === "E2E waves" && await page.inputValue("#u-pattern") === "chase", "share code didn't import");
+  // a hostile share code: HTML in the name, junk numbers and colours. It imports as plain text and sane values.
+  const evil = "TL1:" + Buffer.from(JSON.stringify({ name: '<img src=x onerror="window.__xss=1">', pattern: "wave", speed: "NaN", width: 1e9, colors: ["red"], tag: "<b>" })).toString("base64");
+  await page.fill("#u-code", evil); await page.click("#u-import"); ok(await page.inputValue("#u-speed") === "1", "junk speed imported"); await page.click("#u-save");
+  await until(() => app.store.data.customEffects.length === 1, 4000, "hostile code not saved"); await sleep(300);
+  ok(/<img src=x/.test(await page.textContent("#e-grid")) && !(await page.evaluate(() => window.__xss)), "effect name ran as HTML");
+  await page.waitForSelector("#u-del:not([hidden])", { timeout: 4000 }); await page.click("#u-del"); await until(() => app.store.data.customEffects.length === 0, 4000, "not deleted");
+  await page.fill("#u-code", "TL1:" + "A".repeat(5000)); await page.click("#u-import"); ok(await page.inputValue("#u-name") !== "", "a huge code broke the form");
 });
 await step("room: a zone switched off goes dark on its controller", async () => {
   await go("room"); await page.click("#z-add"); await until(() => (app.store.data.room.zones || []).length === 1, 3000, "zone not created");

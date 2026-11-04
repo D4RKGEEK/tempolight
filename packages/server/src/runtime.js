@@ -52,6 +52,16 @@ export function createRuntime(store, { io, logger = console } = {}) {
     col8 = new Uint8Array(L.N * 3);
     syncDirector();
   }
+  // your own effects changed: only the effects and the director are made again (not the layout or the connections to
+  // the controllers), and what the director was doing carries over (the effect showing, pads like blackout or strobe)
+  function rebuildEffects() {
+    const keep = { ...D.settings }, old = D.state;
+    fx = createEffects(L, { custom: data().customEffects || [] }); D = createDirector(L, fx); Object.assign(D.settings, keep);
+    const ids = new Set(fx.list.map(e => e.id)), st = D.state;
+    Object.assign(st, { palIdx: old.palIdx, lastSwitchBeat: old.lastSwitchBeat, poolIdx: old.poolIdx, overlay: old.overlay, styleName: old.styleName, lastState: old.lastState });
+    if (ids.has(old.cur)) { st.cur = old.cur; st.showing = old.showing; }
+    syncDirector();
+  }
   function syncDirector() {
     const s = data().settings, sh = data().show;
     const night = !!rt.night; // night mode: no strobing, warm colours
@@ -98,13 +108,27 @@ export function createRuntime(store, { io, logger = console } = {}) {
     note(`Song ready: ${rt.song.name} (${Math.round(pre.bpm)} BPM, ${fx.styles[pre.style]?.name || pre.style})`);
   }
   // ---------------------------------------------------------------- Pro DJ Link: the decks' beat grid
+  // One deck leads: the deck already leading keeps the grid while it plays, so two decks playing at once don't make
+  // the lights jump between their beats. A player beats the mixer (which echoes the master tempo), and a deck whose
+  // channel the mixer says is on air beats one that isn't. Beats arrive a few ms late and uneven over Wi-Fi, so the
+  // grid follows them smoothly; a beat far off the grid (the DJ cued or jumped) re-anchors it. The beat counter keeps
+  // counting through deck changes, so "change effect every N beats" keeps working.
+  const djP = d => 60000 / d.bpm; // ms per beat
+  const djLive = (d, now) => !!d && now - d.raw < Math.max(1200, 2 * djP(d) + 250); // two beats missed: that deck stopped
+  const djRank = (b, now) => { const a = rt.djAir && now - rt.djAir.at < 5000 ? rt.djAir.onAir : null; return (b.device === 0x21 ? 0 : 2) + (a && a[b.device] ? 1 : 0); };
   function djBeat(b) { // b.at is performance.now() when the beat arrived
-    const d = rt.dj; if (d && d.device !== b.device && b.at - d.at < 400 && d.beats < 4) return; // two decks: keep the one that's been steady
-    rt.dj = { ...b, beats: d && d.device === b.device ? d.beats + 1 : 1 };
+    const d = rt.dj, P = djP(b), bib = b.beatInBar >= 1 && b.beatInBar <= 4 ? b.beatInBar : 0;
+    if (djLive(d, b.at) && d.device !== b.device && djRank(b, b.at) <= djRank(d, b.at)) return;
+    if (djLive(d, b.at) && d.device === b.device) {
+      if (b.at - d.raw < 30) return; // the same beat twice
+      const k = Math.max(1, Math.round((b.at - d.at) / P)), pred = d.at + k * P, err = b.at - pred, near = k <= 4 && Math.abs(err) < P * 0.15;
+      rt.dj = { ...b, beatInBar: bib || ((d.beatInBar + k - 1) % 4) + 1, at: near ? pred + err * 0.25 : b.at, raw: b.at, n: d.n + k };
+    } else rt.dj = { ...b, beatInBar: bib || 1, at: b.at, raw: b.at, n: rt.view?.g?.has ? rt.view.g.idx + 1 : d ? d.n + 1 : 0 };
   }
-  const djFresh = now => rt.dj && now - rt.dj.at < 2500;
-  // the beat grid from the last deck beat, on the clock `t` that corresponds to wall time `now`
-  function djGrid(now, t) { const d = rt.dj, P = 60 / d.bpm, beatT = t - (now - d.at) / 1000; return { P, off: beatT, barOff: (((1 - d.beatInBar) % 4) + 4) % 4 }; }
+  function djOnAir(a) { rt.djAir = a; }
+  const djFresh = now => djLive(rt.dj, now);
+  // the beat grid from the leading deck, on the clock `t` that corresponds to wall time `now`: beat number n is at the last deck beat
+  function djGrid(now, t) { const d = rt.dj, P = 60 / d.bpm, beatT = t - (now - d.at) / 1000; return { P, off: beatT - d.n * P - 1e-6, barOff: (((d.n - d.beatInBar + 1) % 4) + 4) % 4 }; }
 
   // ---------------------------------------------------------------- song memory
   function remember(name, pre) {
@@ -170,8 +194,8 @@ export function createRuntime(store, { io, logger = console } = {}) {
       if (V.state === "silent" && V.quietFor > (s.idleAfterSec ?? 8)) { rt.source = "idle"; rt.sourceLabel = `${rt.live.label} (quiet)`; return { V: null, t: now / 1000 }; }
       return { V, t, extra: an.extras() };
     }
-    if (djFresh(now)) { const t = now / 1000, G = djGrid(now, t), k = (((rt.dj.beatInBar || 1) - 1) % 4 + 4) % 4, tm = t - G.off + k * G.P, V = metronomeView(tm, rt.dj.bpm); // decks but no audio: a steady show on their beat
-      rt.source = "djlink"; rt.sourceLabel = `DJ Link: ${rt.dj.name} ${rt.dj.bpm.toFixed(1)} BPM`; return { V, t: tm }; }
+    if (djFresh(now)) { const t = now / 1000, V = metronomeView(t, rt.dj.bpm, djGrid(now, t)); // decks but no audio: a steady show on their beat
+      rt.source = "djlink"; rt.sourceLabel = `DJ Link: ${rt.dj.name} ${rt.dj.bpm.toFixed(1)} BPM`; return { V, t }; }
     if (s.metronome.enabled) { const t = now / 1000; rt.source = "metronome"; rt.sourceLabel = `Metronome ${Math.round(s.metronome.bpm)} BPM`; return { V: metronomeView(t, s.metronome.bpm), t }; }
     rt.source = "idle"; rt.sourceLabel = "Nothing playing"; return { V: null, t: now / 1000 };
   }
@@ -357,8 +381,8 @@ export function createRuntime(store, { io, logger = console } = {}) {
 
   return {
     get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, rt, log, listeners, previewClients, phones, health,
-    rebuild, syncDirector, startLoop, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
-    identify, syncSegments, setPower, action, status, setScreen, remember, forget, djBeat, planFor, mapLight, layoutInfo, checkDevice, note,
+    rebuild, rebuildEffects, syncDirector, startLoop, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
+    identify, syncSegments, setPower, action, status, setScreen, remember, forget, djBeat, djOnAir, planFor, mapLight, layoutInfo, checkDevice, note,
     close() { clearInterval(timer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
   };
 }

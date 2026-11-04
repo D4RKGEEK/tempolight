@@ -438,7 +438,14 @@ function effectsPage(el) {
   U("new").onclick = () => fillForm(null);
   U("del").onclick = async () => { if (!editing || !confirm("Delete this effect?")) return; await act(() => api("DELETE", `/api/custom-effects/${editing}`), "Deleted").catch(() => {}); await refreshState(); route(); };
   U("share").onclick = async () => { const code = "TL1:" + btoa(unescape(encodeURIComponent(JSON.stringify(readForm())))); U("code").value = code; try { await navigator.clipboard.writeText(code); toast("Share code copied"); } catch { U("code").select(); toast("Copy the code from the box"); } };
-  U("import").onclick = () => { const c = U("code").value.trim(); try { if (!c.startsWith("TL1:")) throw 0; const d = JSON.parse(decodeURIComponent(escape(atob(c.slice(4))))); fillForm(null); fillForm({ ...readForm(), ...d }); editing = null; U("editing").textContent = "Imported: press Save"; U("new").hidden = U("del").hidden = true; U("save").textContent = "Save and show it"; }
+  // a share code is someone else's text: take only the parts the form knows, each only if it fits
+  const fromCode = (c, base) => { if (!c.startsWith("TL1:") || c.length > 4000) throw 0; const d = JSON.parse(decodeURIComponent(escape(atob(c.slice(4))))); if (!d || typeof d !== "object" || Array.isArray(d)) throw 0;
+    const out = { ...base }, sel = k => [...U(k).options].some(o => o.value === d[k]);
+    if (typeof d.name === "string") out.name = d.name.slice(0, 40); for (const k of ["pattern", "axis", "drive", "tag"]) if (sel(k)) out[k] = d[k];
+    out.colors = Array.isArray(d.colors) && d.colors.length === 2 && d.colors.every(x => /^#[0-9a-f]{6}$/i.test(x)) ? d.colors.map(x => x.toLowerCase()) : "palette";
+    for (const [k, id] of [["speed", "speed"], ["width", "width"], ["cycles", "cyc"], ["bg", "bg"]]) { const v = Number(d[k]); if (d[k] !== null && d[k] !== "" && Number.isFinite(v)) out[k] = Math.max(Number(U(id).min), Math.min(Number(U(id).max), v)); }
+    if (!out.pattern || out.pattern !== d.pattern) throw 0; return out; };
+  U("import").onclick = () => { const c = U("code").value.trim(); try { const d = fromCode(c, readForm()); fillForm(null); fillForm(d); editing = null; U("editing").textContent = "Imported: press Save"; U("new").hidden = U("del").hidden = true; U("save").textContent = "Save and show it"; }
     catch { toast("That isn't a Tempolight share code", true); } };
   if (!can) $$("#u-form input, #u-form select, #u-form button").forEach(x => x.disabled = true);
   let lastFx = null, followed = true;

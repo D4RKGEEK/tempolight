@@ -51,6 +51,7 @@ catch (e) {
   if (e.code === "EADDRINUSE") { console.error(`Port ${port} is already in use. Is Tempolight already running? Or start it on another port: --port ${port + 1}`); process.exit(1); }
   throw e;
 }
+delete process.env.TEMPOLIGHT_RESTART_WAIT; // only for this start: a copy started later by hand shouldn't wait for a busy port
 const lan = localIPv4().map(a => `http://${a.address}:${bound}`);
 console.log(`\n  Tempolight ${JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8")).version} is running\n`);
 console.log(`  On this computer:  http://localhost:${bound}`);

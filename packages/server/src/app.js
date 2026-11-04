@@ -34,7 +34,7 @@ async function readBody(req) {
 export async function createApp(opts) {
   const store = createStore(opts.dataDir);
   let closeApp = async () => {};
-  const updater = opts.updater || createUpdater(ROOT, { exit: async code => { try { await closeApp(); } catch {} process.exit(code); } });
+  const updater = opts.updater || createUpdater(ROOT, { exit: async (code, then) => { try { await closeApp(); } catch {} try { then?.(); } catch {} process.exit(code); } }); // then: after the port is free (start the new copy)
   const runtime = createRuntime(store, { io, logger: opts.logger === undefined ? console : opts.logger });
   const core = createCore({ store, runtime, env: {
     version: pkg.version, newId, hashPin, checkPin, randomToken: () => crypto.randomBytes(16).toString("hex"),
