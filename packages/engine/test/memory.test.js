@@ -119,3 +119,14 @@ test("song memory: matchAt with chroma keeps following a ballad and doesn't conf
   listen(song.x, a => other.push(matchAt(a.tap.q, e, a.t, 0.2, a.memoryQuery())?.score ?? 0));
   assert.ok(Math.min(...own) > 0.6, `own song ${Math.min(...own).toFixed(2)}`); assert.ok(Math.max(...other) < 0.45, `another song ${Math.max(...other).toFixed(2)}`);
 });
+
+test("shows: an automatic show is what the live director would play (as many changes, same effects)", async () => {
+  const { songView } = await import("../src/signals.js");
+  const L = buildLayout(exampleRoom()), F = createEffects(L), D = createDirector(L, F), live = [];
+  for (let t = 0; t < pre.dur; t += 1 / 30) { D.frame(songView(pre, t), t, {}, t); if (live.at(-1) !== D.state.showing) live.push(D.state.showing); }
+  const plan = planShow(pre, F).map(b => b.effect), drops = planShow(pre, F).filter(b => b.part === "drop").length;
+  const strip = a => a.filter((x, i) => x !== a[i - 1]);
+  assert.ok(Math.abs(strip(plan).length - strip(live).length) <= 3, `changes: show ${plan.length}, live ${live.length}`);
+  const common = plan.filter(x => live.includes(x)).length; assert.ok(common >= plan.length - 2, `same effects: ${plan} vs ${live}`);
+  assert.ok(drops >= 3, `drops change effect every 2 bars (${drops} blocks)`);
+});
