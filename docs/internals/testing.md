@@ -1,0 +1,102 @@
+# Testing
+
+Everything is tested with Node's built-in runner (`node:test`, `node:assert`): no test framework, no packages.
+Hardware and outside services are replaced by small pretend servers that speak the real protocols on 127.0.0.1, so the
+tests check real bytes on real sockets.
+
+| Command | What | Needs |
+| --- | --- | --- |
+| `npm test` | every unit and integration test (`node --test`) | Node 20+ |
+| `node --test packages/engine/test/live.test.js` | one file | |
+| `npm run test:browser` | `scripts/e2e-browser.js`: the web app in Chromium against a real server | Playwright (CI also installs ffmpeg) |
+| `npm run site && npm run test:demo` | `scripts/e2e-demo.js`: the built online demo as static files | Playwright |
+| `npm run test:firmware` | `firmware/test/run.sh`: Tempolight Lite's C++ core on the host | g++ or clang++ |
+| `npm run smoke` | `scripts/smoke.js`: start a build, check it answers, stop it | |
+| `node scripts/bench.js` | CPU per part of the server | |
+
+CI (`.github/workflows/ci.yml`) runs `npm test` on Linux, Windows and macOS with Node 20, 22 and 24, starts the server
+and checks `/api/health` and `/`, then runs both browser tests on Linux. `firmware.yml` runs the firmware host tests
+with g++ (plus the usermod against WLED) and clang++.
+
+## Unit and integration tests: `npm test`
+
+`node --test` with no arguments runs every `*.test.js` and every file in a `test/` folder. Files in `test/` that
+contain no tests (the pretend servers, `synth.js`) are imported by others and pass trivially.
+
+| Folder | Files | Covers |
+| --- | --- | --- |
+| `packages/engine/test` | `engine.test.js`, `live.test.js`, `memory.test.js`, `timeline.test.js`, `tonal.test.js` | analysis of synthetic songs, the layout, every effect (finite colours, the 4 ms budget for 1,000 LEDs), custom effects, the live analyser, the director, song memory, shows and timelines, key and mood |
+| `packages/outputs/test` | `outputs.test.js`, `discover.test.js`, `dmx.test.js`, `dtls.test.js`, `govee.test.js`, `lights.test.js`, `openrgb.test.js`, `smartlights.test.js` | packets byte by byte (DDP, audio sync, E1.31, Art-Net, segments), mDNS parsing and scans, DMX profiles, the DTLS client against a separate server and the published PRF test vector, every smart-light protocol |
+| `packages/server/test` | `server.test.js`, `lights.test.js`, `latency.test.js`, `perf.test.js`, `pro.test.js`, `home.test.js`, `timeline.test.js`, `mqtt.test.js`, `homekit.test.js`, `nowplaying.test.js`, `spotify.test.js`, `integrations.test.js`, `streamdeck.test.js`, `update.test.js`, `wifi.test.js`, `env-settings.test.js` | the whole app through HTTP and WebSocket: routes, the PIN lock, Origin checks, devices of every kind, the frame loop's output, latency and performance, DMX, MIDI clock and Link, home and sleep with an injected clock, MQTT against a tiny broker, HomeKit pairing as an iPhone would, now playing with fake players, Spotify against a fake Web API, integrations against fake OBS, Twitch and Discord |
+| `apps/web` | `calibrate.test.js`, `mapping.test.js`, `qr.test.js` | the pure helpers of the timing fix, camera mapping and the QR code maker |
+| `scripts` | `bundle.test.js`, `release-manifests.test.js`, `gen-api-routes.test.js` | the one-file bundler (the bundled server starts and serves), package manifests, and that [api.md](../api.md) documents every route |
+
+A full run takes about 3 minutes (most of it real-time audio and network tests). Timing-sensitive assertions get 3 x
+the budget when `CI` is set.
+
+### Synthetic songs
+
+[`packages/engine/test/synth.js`](../../packages/engine/test/synth.js) is a small deterministic synth: `edm()` (128 BPM,
+4 bars intro, 4 bars snare-roll build-up, 8 bars drop, 2 bars outro, Am F C G), `ballad()`, `voice()`, `pluck()`,
+`piece()`, `minorBallad()`, `majorPop()`. Songs with known structure mean analysis can be tested without shipping
+audio files. (`scripts/test-songs/*.py` make longer WAV files for listening by hand.)
+
+### Pretend devices and services
+
+| File | Pretends to be |
+| --- | --- |
+| [`scripts/fake-wled.js`](../../scripts/fake-wled.js) | a WLED controller: `/json/info`, `/json/state`, segments, and DDP frames (counted). `startFakeWled({name, leds, httpPort, ddpPort})` for tests; `npm run fake-wled -- --leds 300 --name Desk --http 18080 --ddp 4048` by hand |
+| [`scripts/fake-link.js`](../../scripts/fake-link.js) | an Ableton Link peer with a deliberately offset session clock |
+| [`packages/outputs/test/fake-lights.js`](../../packages/outputs/test/fake-lights.js) | LIFX, WiZ, Kasa, Yeelight and Twinkly lights, each recording what it was sent |
+| [`packages/outputs/test/dtls-server.js`](../../packages/outputs/test/dtls-server.js) | a DTLS 1.2 PSK server (own record and handshake code) for Hue fast mode |
+| [`packages/server/test/fake-spotify.js`](../../packages/server/test/fake-spotify.js) | the Spotify Web API on a test clock: jitter, seeks, pauses, skips, volume, `timestamp` behaving as it really does, audio analysis 403/fixture/404, 429 with Retry-After |
+| `packages/server/test/fixtures/` | what `osascript`, `playerctl`, `dbus-send` and PowerShell print (now playing), CS2 and Dota 2 GSI posts, a Spotify audio analysis |
+
+The server tests start the real app in-process with `createApp({dataDir: <temp dir>, logger: null, discover: false,
+...})` and its injection points: `now` (wall clock), `host` (pretend computer for the performance mode), `nowPlaying`
+(command runner, platform, fetch), `spotify` (clock), `homekit` (no mDNS, port), `integrations` (open, fetch, URLs), and
+`wifi`.
+
+## Browser tests
+
+- **`scripts/e2e-browser.js`** starts two pretend WLED controllers and a Tempolight server, then clicks through every
+  page like a user: add devices, lay out the room, play the demo song (`apps/playground/demo.mp3`), listen to Chromium's fake microphone, live
+  pads, effects, scenes, schedules, the lock. Needs Playwright (`npm i -g playwright && npx playwright install
+  chromium`; CI runs it with `NODE_PATH=$(npm root -g)`).
+- **`scripts/e2e-demo.js`** serves `dist/site` (from `npm run site`) as plain static files, no Tempolight server, and
+  checks the demo works as Cloudflare serves it: the in-browser core and runtime, pretend controllers, the service
+  worker.
+- `scripts/screenshots.js` reuses the same set-up to photograph each page for `docs/images`.
+
+## Firmware host tests
+
+`firmware/test/run.sh` compiles Tempolight Lite's core (`firmware/core/tempolight_lite.cpp`) with the C++17
+compiler it finds (`CXX` to choose; address and undefined-behaviour sanitizers when available) and runs
+`test/test_lite.cpp`: the analysis and effects against synthetic songs fed through an emulation of WLED
+AudioReactive's GEQ (`test/synth.h`). With `WLED_DIR` set to a WLED checkout it also compiles the usermod against a
+small WLED stub (`test/wled_stub`, using WLED's bundled ArduinoJson) and runs a smoke test. No ESP32 needed. See
+[tempolight-lite.md](../tempolight-lite.md).
+
+## Bench and smoke
+
+**`node scripts/bench.js [--seconds 20] [--leds 700] [--songs 12] [--mode auto|full|lite] [--speed 1] [--json]`** runs
+the real server and runtime headless with pretend DDP controllers, a synthetic song fed through the live analyser in
+real time, remembered songs to recognise, browsers watching the preview and phones as lights. It reports CPU
+milliseconds per second for each part (`analysis`, `memory`, `render`, `output`, `broadcast`; 1,000 ms/s is one core),
+the worst frame and the p99. A frame longer than the frame time (16.7 ms at 60 fps) is a visible stutter.
+
+**`node scripts/smoke.js <command...>`** starts a build on a free port with a throwaway data folder, checks
+`/api/health`, the web app, `/api/state` and `/api/update`, and stops it. It takes any way of starting Tempolight:
+
+```sh
+node scripts/smoke.js node packages/server/src/index.js   # the sources (npm run smoke)
+node scripts/smoke.js node dist/tempolight.cjs            # the bundled script (scripts/bundle.js)
+node scripts/smoke.js dist/tempolight-linux-x64           # the one-file app (scripts/build-sea.js --smoke)
+```
+
+## Docs checks
+
+- `node scripts/gen-api-routes.js --check docs/api.md` (also part of `npm test` through `scripts/gen-api-routes.test.js`):
+  the route table in [api.md](../api.md) matches the code and every route is described. After adding a route, run
+  `node scripts/gen-api-routes.js --write docs/api.md` and describe it in its section.
+- `npm run docs` regenerates [effects.md](../effects.md) from the engine.

@@ -1,52 +1,262 @@
 # API
 
-Everything the web app does goes through this API, so anything else can do it too. All bodies are JSON.
-When a PIN lock is set, calls marked **admin** need the header `x-tempolight-token: <token>` from `POST /api/unlock`.
-Calls marked with a guest area (effects, scenes, pads, brightness) work without it if that area is allowed in Settings.
+Everything the web app does goes through this API, so anything else can do it too: scripts, Home Assistant, a Stream
+Deck, a lighting desk. It is plain HTTP with JSON bodies on the same port as the web app (8080 by default), plus one
+WebSocket for live data. The routes are registered in `packages/server/src/core.js` and the modules it plugs in; the
+[route table](#all-routes) below is generated from the code (`node scripts/gen-api-routes.js`), and `npm test` fails
+when a route is missing from this page.
 
-Calls that change something are refused (403) when a browser sends them from another website (its `Origin` doesn't
-match the address Tempolight is reached at), and so are WebSocket connections from other websites. Scripts, Home
-Assistant and other apps send no `Origin` and aren't affected. Behind a reverse proxy that changes the `Host` header, list
-the public address in `TEMPOLIGHT_ALLOWED_ORIGINS` (comma-separated, for example `lights.example.com`).
+```sh
+TL=http://tempolight.local:8080
+curl -s $TL/api/status | jq '{source, bpm, part, effect}'
+curl -s -X POST $TL/api/power -H 'content-type: application/json' -d '{"on": true}'
+curl -s -X PATCH $TL/api/show -H 'content-type: application/json' -d '{"effect": "laser"}'
+curl -s -X POST $TL/api/action -H 'content-type: application/json' -d '{"type": "flash", "color": "#ff0066"}'
+curl -s -X POST $TL/api/scenes/party/apply
+```
+
+## Conventions
+
+- **Bodies** are JSON (`content-type: application/json`; an empty body is `{}`), at most 12 MB. Answers are JSON with
+  `cache-control: no-store`.
+- **Ids** are short random strings: devices `d…`, scenes `s…` (the five built-in scenes are `party`, `chill`, `movie`,
+  `focus`, `relax`), schedules `t…`, songs `m…`, custom effects `u-…`, requests `r…`, fixtures `f…`.
+- **Times** in songs and shows are seconds on the song's clock; wall-clock times are ISO strings or `HH:MM`, and
+  `sunrise`/`sunset` with an optional offset in minutes (`sunset+30`, `sunrise-15`) once a location is set.
+- **Colours** are `#rrggbb`. Brightness values are 0 to 1.
+- Numbers out of range are clamped; unknown values (an effect id, a mode) are a 400 error.
+- In the online demo the same calls run inside the browser; routes that need the computer (Hue pairing, now playing,
+  integrations, HomeKit, updates) answer that they need Tempolight running on your network, or don't exist.
+
+## Auth
+
+Without a PIN lock, every call works for everyone who can reach the port. With a lock (`POST /api/lock`):
+
+- calls in the **admin** area need an unlock token: `POST /api/unlock {pin}` gives `{token}`, valid for 12 hours (kept
+  in memory: a restart logs everyone out). Send it as the header `x-tempolight-token: <token>` or as `?token=<token>`;
+- calls in a **guest area** (`effects`, `scenes`, `pads`, `brightness`) work without a token when that area is allowed in
+  Settings (`settings.guest`, all four by default), else they need one too;
+- **open** calls always work. A few check something of their own: the wake-up and sleep calls also take the wake-up
+  link key (`?key=`, header `x-tempolight-key` or `key` in the body), the game-state posts need the game's token, and
+  song requests need `settings.requests` on.
+
+```sh
+TOKEN=$(curl -s -X POST $TL/api/unlock -H 'content-type: application/json' -d '{"pin": "1234"}' | jq -r .token)
+curl -s -X PATCH $TL/api/settings -H "x-tempolight-token: $TOKEN" -H 'content-type: application/json' -d '{"fps": 50}'
+```
+
+**Origin rule.** Calls that change something (any method but `GET`) are refused with 403 when a browser sends them
+from another website: their `Origin` header's host doesn't match the `Host` Tempolight was reached at. WebSocket
+connections from other websites are refused the same way. Scripts, Home Assistant and other apps send no `Origin` and
+aren't affected. Behind a reverse proxy that changes the `Host` header, list the public address in
+`TEMPOLIGHT_ALLOWED_ORIGINS` (comma-separated, for example `lights.example.com`). More in
+[internals/security.md](internals/security.md).
+
+## Errors
+
+A failed call answers with an HTTP status and `{"error": "<a sentence for people>"}`:
+
+| Status | When |
+| --- | --- |
+| 400 | the body is not valid JSON, or a value is wrong (`Unknown effect "x"`, `The PIN must be 4 to 8 digits`, a device that can't be reached when adding it) |
+| 403 | locked (`Settings are locked. Unlock with the PIN in Settings.`), wrong PIN, wrong link key or game token, song requests off, or a request from another website |
+| 404 | no such id (`No such device`), or no such route (`No API route GET /api/x`) |
+| 409 | `POST /api/wake` while wake-up is off; `POST /api/update` when an update can't be applied now |
+| 413 | a body over 12 MB |
+| 429 | too many song requests (30 a minute), game-state posts (40 a second) or wrong game tokens |
+| 502 | `POST /api/wifi/setup` when the Wi-Fi setup service fails |
+| 500 | anything unexpected (the message says what) |
+
+Inside the server these are `HttpError(code, message)` (`core.js`); anything else thrown becomes a 500.
+
+## All routes
+
+<!-- routes:begin (generated by scripts/gen-api-routes.js, do not edit by hand) -->
+110 routes. Area: **open** needs nothing, **admin** needs an unlock token while a PIN lock is set, **guest: <area>** works
+without one when that guest area is allowed in Settings (see [Auth](#auth)).
+
+| Call | Area | Defined in |
+| --- | --- | --- |
+| `POST /api/action` | guest: pads | [core.js](../packages/server/src/core.js) |
+| `GET /api/audio/sources` | open | [core.js](../packages/server/src/core.js) |
+| `GET /api/backup` | admin | [core.js](../packages/server/src/core.js) |
+| `POST /api/brightness` | guest: brightness | [core.js](../packages/server/src/core.js) |
+| `GET /api/custom-effects` | open | [core.js](../packages/server/src/core.js) |
+| `POST /api/custom-effects` | guest: effects | [core.js](../packages/server/src/core.js) |
+| `PUT /api/custom-effects/:id` | guest: effects | [core.js](../packages/server/src/core.js) |
+| `DELETE /api/custom-effects/:id` | guest: effects | [core.js](../packages/server/src/core.js) |
+| `GET /api/devices` | open | [core.js](../packages/server/src/core.js) |
+| `POST /api/devices` | admin | [core.js](../packages/server/src/core.js) |
+| `PATCH /api/devices/:id` | admin | [core.js](../packages/server/src/core.js) |
+| `DELETE /api/devices/:id` | admin | [core.js](../packages/server/src/core.js) |
+| `POST /api/devices/:id/check` | open | [core.js](../packages/server/src/core.js) |
+| `POST /api/devices/:id/fixtures` | admin | [pro-api.js](../packages/server/src/pro-api.js) |
+| `PATCH /api/devices/:id/fixtures/:fid` | admin | [pro-api.js](../packages/server/src/pro-api.js) |
+| `DELETE /api/devices/:id/fixtures/:fid` | admin | [pro-api.js](../packages/server/src/pro-api.js) |
+| `POST /api/devices/:id/identify` | open | [core.js](../packages/server/src/core.js) |
+| `POST /api/devices/:id/segments` | admin | [core.js](../packages/server/src/core.js) |
+| `POST /api/discover` | admin | [core.js](../packages/server/src/core.js) |
+| `GET /api/dmx` | open | [pro-api.js](../packages/server/src/pro-api.js) |
+| `GET /api/dmx/profiles` | open | [pro-api.js](../packages/server/src/pro-api.js) |
+| `GET /api/effects` | open | [core.js](../packages/server/src/core.js) |
+| `PATCH /api/effects/:id` | guest: effects | [core.js](../packages/server/src/core.js) |
+| `POST /api/gsi/:game` | game token | [integrations/index.js](../packages/server/src/integrations/index.js) |
+| `GET /api/health` | open | [core.js](../packages/server/src/core.js) |
+| `GET /api/home` | open | [home.js](../packages/server/src/home.js) |
+| `PUT /api/home` | admin | [home.js](../packages/server/src/home.js) |
+| `GET /api/homekit` | admin | [homekit/index.js](../packages/server/src/homekit/index.js) |
+| `PATCH /api/homekit` | admin | [homekit/index.js](../packages/server/src/homekit/index.js) |
+| `DELETE /api/homekit/pairings/:id` | admin | [homekit/index.js](../packages/server/src/homekit/index.js) |
+| `POST /api/homekit/reset` | admin | [homekit/index.js](../packages/server/src/homekit/index.js) |
+| `GET /api/integrations` | admin | [integrations/index.js](../packages/server/src/integrations/index.js) |
+| `PATCH /api/integrations/discord` | admin | [integrations/index.js](../packages/server/src/integrations/index.js) |
+| `POST /api/integrations/discord/test` | admin | [integrations/index.js](../packages/server/src/integrations/index.js) |
+| `PATCH /api/integrations/games/:game` | admin | [integrations/index.js](../packages/server/src/integrations/index.js) |
+| `GET /api/integrations/games/:game/cfg` | admin | [integrations/index.js](../packages/server/src/integrations/index.js) |
+| `POST /api/integrations/games/:game/test` | admin | [integrations/index.js](../packages/server/src/integrations/index.js) |
+| `POST /api/integrations/games/:game/token` | admin | [integrations/index.js](../packages/server/src/integrations/index.js) |
+| `PATCH /api/integrations/obs` | admin | [integrations/index.js](../packages/server/src/integrations/index.js) |
+| `GET /api/integrations/streamdeck/plugin` | open | [integrations/index.js](../packages/server/src/integrations/index.js) (plain HTTP) |
+| `PATCH /api/integrations/twitch` | admin | [integrations/index.js](../packages/server/src/integrations/index.js) |
+| `POST /api/integrations/twitch/login` | admin | [integrations/index.js](../packages/server/src/integrations/index.js) |
+| `DELETE /api/integrations/twitch/login` | admin | [integrations/index.js](../packages/server/src/integrations/index.js) |
+| `POST /api/integrations/twitch/test` | admin | [integrations/index.js](../packages/server/src/integrations/index.js) |
+| `GET /api/layout` | open | [core.js](../packages/server/src/core.js) |
+| `POST /api/lock` | admin | [core.js](../packages/server/src/core.js) |
+| `DELETE /api/lock` | admin | [core.js](../packages/server/src/core.js) |
+| `GET /api/log` | open | [core.js](../packages/server/src/core.js) |
+| `POST /api/map` | admin | [core.js](../packages/server/src/core.js) |
+| `GET /api/network` | open | [core.js](../packages/server/src/core.js) |
+| `GET /api/nowplaying` | open | [nowplaying.js](../packages/server/src/nowplaying.js) |
+| `PATCH /api/nowplaying` | admin | [nowplaying.js](../packages/server/src/nowplaying.js) |
+| `DELETE /api/nowplaying/spotify` | admin | [nowplaying.js](../packages/server/src/nowplaying.js) |
+| `GET /api/nowplaying/spotify/callback` | open | [nowplaying.js](../packages/server/src/nowplaying.js) (plain HTTP) |
+| `POST /api/nowplaying/spotify/code` | admin | [nowplaying.js](../packages/server/src/nowplaying.js) |
+| `POST /api/nowplaying/spotify/login` | admin | [nowplaying.js](../packages/server/src/nowplaying.js) |
+| `POST /api/power` | guest: brightness | [core.js](../packages/server/src/core.js) |
+| `POST /api/quit` | admin | [core.js](../packages/server/src/core.js) |
+| `GET /api/requests` | open | [core.js](../packages/server/src/core.js) |
+| `POST /api/requests` | open | [core.js](../packages/server/src/core.js) |
+| `DELETE /api/requests` | admin | [core.js](../packages/server/src/core.js) |
+| `PATCH /api/requests/:id` | admin | [core.js](../packages/server/src/core.js) |
+| `DELETE /api/requests/:id` | admin | [core.js](../packages/server/src/core.js) |
+| `POST /api/requests/:id/vote` | open | [core.js](../packages/server/src/core.js) |
+| `POST /api/reset` | admin | [core.js](../packages/server/src/core.js) |
+| `POST /api/restore` | admin | [core.js](../packages/server/src/core.js) |
+| `GET /api/room` | open | [core.js](../packages/server/src/core.js) |
+| `PUT /api/room` | admin | [core.js](../packages/server/src/core.js) |
+| `POST /api/room/identify` | open | [core.js](../packages/server/src/core.js) |
+| `POST /api/room/preset` | admin | [core.js](../packages/server/src/core.js) |
+| `GET /api/scenes` | open | [core.js](../packages/server/src/core.js) |
+| `POST /api/scenes` | guest: scenes | [core.js](../packages/server/src/core.js) |
+| `PUT /api/scenes/:id` | guest: scenes | [core.js](../packages/server/src/core.js) |
+| `DELETE /api/scenes/:id` | guest: scenes | [core.js](../packages/server/src/core.js) |
+| `POST /api/scenes/:id/apply` | guest: scenes | [core.js](../packages/server/src/core.js) |
+| `GET /api/schedules` | open | [core.js](../packages/server/src/core.js) |
+| `POST /api/schedules` | admin | [core.js](../packages/server/src/core.js) |
+| `PUT /api/schedules/:id` | admin | [core.js](../packages/server/src/core.js) |
+| `DELETE /api/schedules/:id` | admin | [core.js](../packages/server/src/core.js) |
+| `POST /api/schedules/:id/run` | admin | [core.js](../packages/server/src/core.js) |
+| `PATCH /api/settings` | admin | [core.js](../packages/server/src/core.js) |
+| `PATCH /api/show` | guest: effects | [core.js](../packages/server/src/core.js) |
+| `POST /api/sleep` | brightness or link key | [home.js](../packages/server/src/home.js) |
+| `DELETE /api/sleep` | brightness or link key | [home.js](../packages/server/src/home.js) |
+| `POST /api/song` | open | [core.js](../packages/server/src/core.js) |
+| `DELETE /api/song` | open | [core.js](../packages/server/src/core.js) |
+| `POST /api/song/clock` | open | [core.js](../packages/server/src/core.js) |
+| `GET /api/songs` | open | [core.js](../packages/server/src/core.js) |
+| `DELETE /api/songs/:id` | admin | [core.js](../packages/server/src/core.js) |
+| `GET /api/songs/:id/show` | open | [core.js](../packages/server/src/core.js) |
+| `PUT /api/songs/:id/show` | guest: effects | [core.js](../packages/server/src/core.js) |
+| `DELETE /api/songs/:id/show` | guest: effects | [core.js](../packages/server/src/core.js) |
+| `PUT /api/songs/:id/show/draft` | guest: effects | [core.js](../packages/server/src/core.js) |
+| `DELETE /api/songs/:id/show/draft` | guest: effects | [core.js](../packages/server/src/core.js) |
+| `GET /api/spotify` | open | [spotify.js](../packages/server/src/spotify.js) |
+| `PATCH /api/spotify` | admin | [spotify.js](../packages/server/src/spotify.js) |
+| `POST /api/spotify/colors` | guest: effects | [spotify.js](../packages/server/src/spotify.js) |
+| `GET /api/state` | open | [core.js](../packages/server/src/core.js) |
+| `GET /api/status` | open | [core.js](../packages/server/src/core.js) |
+| `POST /api/unlock` | open | [core.js](../packages/server/src/core.js) |
+| `GET /api/update` | admin | [core.js](../packages/server/src/core.js) |
+| `POST /api/update` | admin | [core.js](../packages/server/src/core.js) |
+| `POST /api/wake` | brightness or link key | [home.js](../packages/server/src/home.js) |
+| `DELETE /api/wake` | brightness or link key | [home.js](../packages/server/src/home.js) |
+| `POST /api/wake/key` | admin | [home.js](../packages/server/src/home.js) |
+| `POST /api/wake/snooze` | brightness or link key | [home.js](../packages/server/src/home.js) |
+| `POST /api/wake/stop` | brightness or link key | [home.js](../packages/server/src/home.js) |
+| `GET /api/wifi` | open | [core.js](../packages/server/src/core.js) |
+| `POST /api/wifi/setup` | admin | [core.js](../packages/server/src/core.js) |
+| `PUT /api/zones` | guest: effects | [core.js](../packages/server/src/core.js) |
+<!-- routes:end -->
+
+Besides the API, the server answers `GET /ws` (the [WebSocket](#websocket-ws)), the web app's files, `/engine/…`
+(the engine's modules), `/packages/…`, and the pages `/phone` (a phone as a light), `/request` (guest song requests),
+`/obs` (the OBS browser source), `/playground` (the effects playground) and `/demo.mp3`.
 
 ## State
 
 | Call | Area | What it does |
 | --- | --- | --- |
-| `GET /api/state` | | Settings, show, devices, room, scenes, schedules, effects, styles, palettes, presets |
-| `GET /api/status` | | What is happening now: source, effect, tempo, song part, level, spectrum, device health. Each of `devices[]` also has the latency meter: `latencyMs` (sound to light, `null` when off or offline), `latency: {audioMs, analysisMs, networkMs, frameMs, offsetMs}`, `latencyLevel` (`good` under 40 ms, `ok` under 80, `slow`), `rttMs` (WLED's HTTP round trip) and `warnings: [{kind: "offline"\|"wifi"\|"frames"\|"notlive"\|"power"\|"slow", text}]` |
-| `GET /api/health` | | `{ok, version, uptime, fps, leds}` for monitoring |
-| `GET /api/layout` | | LED positions for drawing the room |
-| `GET /api/log` | | The last 100 activity messages |
+| `GET /api/state` | open | Everything the web app draws: `{version, canQuit, settings, show, devices, room, scenes, schedules (each with next), locked, effects: [{id, name, tag, custom?}], styles: {id: name}, palettes: [ids], presets, captureSources: [{id, label}], firstRun}`. Secrets are left out (`settings.mqtt.password` is blank, `hasPassword` says one is saved) |
+| `GET /api/status` | open | What is happening now; the [same object](#status) as the WebSocket's status messages |
+| `GET /api/health` | open | `{ok, version, uptime, fps, leds}`, for monitoring |
+| `GET /api/effects` | open | `[{id, name, tag, custom?}]`: every effect, built-in and your own |
+| `GET /api/layout` | open | LED positions for drawing the room: `{N, x: [], y: [], shape: [] (shape index per LED), chainStart, ranges: [{dev, start, end}], shapes}` |
+| `GET /api/log` | open | The last 100 activity messages `[{t, level: "info"\|"warn"\|"error", msg}]` |
+| `GET /api/network` | open | `{addresses}`: this computer's LAN addresses (for the phone QR code) |
 
-## Lights
+## Lights and show
 
 | Call | Area | Body |
 | --- | --- | --- |
-| `POST /api/power` | brightness | `{on: true}` (no body toggles) |
-| `POST /api/brightness` | brightness | `{value: 0.6}` (0 to 1) |
-| `PATCH /api/show` | effects | any of `{mode: "auto"\|"manual", effect, style, palette, everyBeats, speed, layer: {effect, amount} \| null}`. Setting `effect` alone switches to manual |
-| `PATCH /api/effects/:id` | effects | `{pref: 1}` like, `{pref: -1}` ban, `{pref: 0}` neither; `{params: {speed, intensity, hue, saturation, mirror}}` or `{params: null}` to reset |
-| `GET /api/custom-effects` | | your own effects |
-| `POST /api/custom-effects` | effects | `{name, pattern: "wave"\|"chase"\|"pulse"\|"sparkle"\|"fill"\|"breathe"\|"gradient", axis: "along"\|"x"\|"y"\|"around"\|"centre", drive: "beat"\|"kick"\|"bass"\|"loud"\|"time", tag: "calm"\|"build"\|"drop"\|"home", colors: "palette" \| ["#ff0066", "#00ccff"], speed, width, cycles, bg}`; returns it with an id (`u-…`) to use like any effect |
-| `PUT /api/custom-effects/:id`, `DELETE /api/custom-effects/:id` | effects | |
-| `PUT /api/zones` | effects | `{zones: [{id, name, mode: "follow"\|"effect"\|"ambient"\|"off", effect, brightness}]}`; shapes join a zone with their `zone` field |
-| `POST /api/action` | pads | `{type: "flash", color: "#ff0000"}`, `{type: "strobe", on: true}`, `blackout`, `freeze`, `hold` (`color` or none to release), `boost` (`value` 0–2), `next`, `drop`, `build` (`seconds`), `tap`, `cancel`, `identify` (`device` or `shape`), `fog` (`on: true` while held, at most 10 s; DMX fog must be on) |
+| `POST /api/power` | guest: brightness | `{on: true}` (no body toggles); answers the show |
+| `POST /api/brightness` | guest: brightness | `{value: 0.6}`; answers `{brightness}` |
+| `PATCH /api/show` | guest: effects | any of `{mode: "auto"\|"manual", effect, style: "auto"\|<style>, palette, everyBeats: 1-64, speed: 0.1-4, layer: {effect, amount: 0-1.5} \| null}`. Setting `effect` alone switches to manual. Answers the show |
+| `PATCH /api/effects/:id` | guest: effects | `{pref: 1}` like, `{pref: -1}` ban, `{pref: 0}` neither (automatic mode); `{params: {speed: 0.1-4, intensity: 0-3, hue: -180..180, saturation: 0-2, mirror}}`, or `{params: null}` to reset. Answers `{id, pref, params}` |
+| `PUT /api/zones` | guest: effects | `{zones: [{id, name, mode: "follow"\|"effect"\|"ambient"\|"off", effect, brightness}]}` (at most 32); shapes join a zone with their `zone` field |
+| `POST /api/action` | guest: pads | A live pad (below). Answers the pads' state `{strobe, blackout, freeze, hold, boost, forced}` |
+
+Actions for `POST /api/action` (also over the WebSocket, OSC and MQTT):
+
+| `type` | Fields | What |
+| --- | --- | --- |
+| `flash` | `color?` | a flash, white or the colour |
+| `strobe`, `blackout`, `freeze` | `on?` | on, off, or toggle when left out |
+| `hold` | `color?` | hold one colour everywhere; no colour releases it |
+| `boost` | `value: 0-2` | brightness gain; no value toggles 1 / 1.5 |
+| `next` | | the next effect from the drop pool |
+| `drop` | | a drop now (8 s) |
+| `build` | `seconds?` (default 8) | a build-up, then a drop |
+| `cancel` | | ends build/drop and every pad |
+| `tap` | | tap tempo: 3 taps or more set the BPM (and the live beat phase) |
+| `identify` | `device` or `shape` | light that device's shapes, or one shape, for 4 s |
+| `fog` | `on` | the DMX fog pad, while held (at most 10 s; fog must be on in the DMX settings) |
+
+### Your own effects
+
+| Call | Area | Body |
+| --- | --- | --- |
+| `GET /api/custom-effects` | open | your effects |
+| `POST /api/custom-effects` | guest: effects | `{name, pattern: "wave"\|"chase"\|"pulse"\|"sparkle"\|"fill"\|"breathe"\|"gradient", axis: "along"\|"x"\|"y"\|"around"\|"centre", drive: "beat"\|"kick"\|"bass"\|"loud"\|"time", tag: "calm"\|"build"\|"drop"\|"home", colors: "palette" \| ["#ff0066", "#00ccff"], speed: 0.1-8, width: 0.01-1, cycles: 0.25-8, bg: 0-0.5}`; answers it with an id (`u-…`) to use like any effect. At most 100 |
+| `PUT /api/custom-effects/:id` | guest: effects | the same body |
+| `DELETE /api/custom-effects/:id` | guest: effects | removes it and every reference to it (the shown effect, layer, ambient, zones, scenes, likes, song shows) |
 
 ## Scenes and schedules
 
 | Call | Area | Body |
 | --- | --- | --- |
-| `GET /api/scenes` | | |
-| `POST /api/scenes` | scenes | `{name}` saves the current look; or `{name, show, brightness}` |
-| `PUT /api/scenes/:id` | scenes | `{name?, show?, brightness?}` |
-| `POST /api/scenes/:id/apply` | scenes | |
-| `DELETE /api/scenes/:id` | scenes | |
-| `GET /api/schedules` | | each has `next`, the next time it runs |
-| `POST /api/schedules` | admin | `{name, time: "19:00", days: [1,2,3,4,5], action: {type: "scene", scene: "<id>"}}`; action types `scene`, `on`, `off`, `brightness` (`value`) |
-| `PUT /api/schedules/:id`, `DELETE /api/schedules/:id`, `POST /api/schedules/:id/run` | admin | |
+| `GET /api/scenes` | open | `[{id, name, show, brightness}]` |
+| `POST /api/scenes` | guest: scenes | `{name}` saves the current look; or `{name, show, brightness}` |
+| `PUT /api/scenes/:id` | guest: scenes | `{name?, show?, brightness?}` |
+| `POST /api/scenes/:id/apply` | guest: scenes | applies it (and turns the lights on); answers the show |
+| `DELETE /api/scenes/:id` | guest: scenes | |
+| `GET /api/schedules` | open | each with `next`, the next time it runs (ISO) |
+| `POST /api/schedules` | admin | `{name, time: "19:00"\|"sunset+30", days: [1,2,3,4,5] (0 = Sunday), action: {type: "scene", scene: "<id>"} \| {type: "on"} \| {type: "off"} \| {type: "brightness", value}, enabled?}` |
+| `PUT /api/schedules/:id` | admin | fields to change |
+| `DELETE /api/schedules/:id` | admin | |
+| `POST /api/schedules/:id/run` | admin | runs it now |
 
-## Home & sleep
+## Home and sleep
 
 Sunrise alarm, sleep timer and the ambient plan for the day; see [wake-up.md](wake-up.md) for phone automations.
 The wake and sleep calls work for guests when the brightness area is allowed, or with the link key
@@ -54,56 +264,94 @@ The wake and sleep calls work for guests when the brightness area is allowed, or
 
 | Call | Area | Body |
 | --- | --- | --- |
-| `GET /api/home` | | `{wake, sleep, plan, status}`; `wake.key` only when unlocked |
-| `PUT /api/home` | admin | any of `{wake: {enabled, source: "times"\|"phone", days: ["", "07:00", ...] (7, Sunday first), duration: 10–40, target: "all"\|"zone:<id>"\|"dev:<id>", endColor, endBrightness, holdMin, snoozeMin}, sleep: {minutes}, plan: {enabled, fade, reset: true, rows: [{name, from, to, look: "white"\|"night"\|<effect>, palette, kelvin, brightness}]}}` |
-| `POST /api/wake` | brightness or key | `{inMinutes?, at?: "07:00"\|ISO date\|ms, duration?}`: full light at that time (none: start now). 409 when wake-up is off |
-| `POST /api/wake/snooze` | brightness or key | `{minutes?}` |
-| `POST /api/wake/stop` | brightness or key | stops the running sunrise |
-| `DELETE /api/wake` | brightness or key | cancels the next sunrise, or skips the next weekly alarm |
-| `POST /api/sleep`, `DELETE /api/sleep` | brightness or key | `{minutes?}` (1–180): fade out and turn off; cancelled by a brightness or power change |
-| `POST /api/wake/key` | admin | makes a new link key |
+| `GET /api/home` | open | `{wake, sleep, plan, status}`; `wake.key` only when unlocked |
+| `PUT /api/home` | admin | any of `{wake: {enabled, source: "times"\|"phone", days: ["", "07:00", ...] (7, Sunday first), duration: 10-40, target: "all"\|"zone:<id>"\|"dev:<id>", endColor, endBrightness, holdMin, snoozeMin}, sleep: {minutes}, plan: {enabled, fade, reset: true, rows: [{name, from, to, look: "white"\|"night"\|<effect>, palette, kelvin, brightness}]}}` |
+| `POST /api/wake` | brightness or link key | `{inMinutes?, at?: "07:00"\|ISO date\|ms, duration?: 1-120}`: full light at that time (none: start now). 409 when wake-up is off |
+| `POST /api/wake/snooze` | brightness or link key | `{minutes?}` |
+| `POST /api/wake/stop` | brightness or link key | stops the running sunrise |
+| `DELETE /api/wake` | brightness or link key | cancels the next sunrise, or skips the next weekly alarm |
+| `POST /api/sleep` | brightness or link key | `{minutes?}` (1-180): fade out and turn off; cancelled by a brightness or power change |
+| `DELETE /api/sleep` | brightness or link key | cancels the sleep timer |
+| `POST /api/wake/key` | admin | makes a new link key: `{key}` |
 
-`GET /api/status` has `home: {wake: {phase: "pending"|"rising"|"snoozed"|"holding"|"ending", start, end, progress, snoozeUntil} | null, nextWake, sleep: {end, progress, left} | null, plan: {name, night, fading} | null}`.
-The Home Assistant device also gets the buttons Sleep timer, Snooze wake-up and Stop wake-up (`tempolight/action/set` with `sleep`, `wake_snooze`, `wake_stop`).
+These answer the home status: `{wake: {phase: "pending"|"rising"|"snoozed"|"holding"|"ending", start, end, progress,
+snoozeUntil} | null, nextWake, sleep: {start, end, progress, left} | null, plan: {name, index, night, fading} | null}`,
+which is also `status.home`. The Home Assistant device also gets the buttons Sleep timer, Snooze wake-up and Stop
+wake-up (`tempolight/action/set` with `sleep`, `wake_snooze`, `wake_stop`).
 
 ## Devices and room
 
 | Call | Area | Body |
 | --- | --- | --- |
-| `GET /api/devices` | | |
-| `POST /api/devices` | admin | `{host: "192.168.1.42", name?, ddpPort?, force?}` (reads the LED count from WLED); `{virtual: true}` for a pretend room; `{host, kind: "govee", goveeMode?: "color"\|"segments"}` for a Govee light (beta); `{host: "127.0.0.1", kind: "openrgb", index}` for a device in OpenRGB (LED count is read from it); `{host, kind: "hue"}` for a Hue bridge (press its link button first); `{host, kind: "nanoleaf"}` for Nanoleaf panels (hold the power button first; the panels are placed as a `points` shape); `{host, kind: "lifx"\|"wiz"\|"kasa"\|"yeelight"\|"twinkly", name?, force?}` for smart lights (asked what they are: bulbs become one point, strips a line, a mapped Twinkly its layout as `points`; `force` adds one that doesn't answer). Returns the device with `light: {...}` (what was found, for example `zones`) |
-| `PATCH /api/devices/:id` | admin | `{name?, host?, leds?, ddpPort?, enabled?, maxAmps?, mAperLed?, protocol?: "ddp"\|"e131"\|"artnet", universe?, goveeMode?, goveeSegments?}`; `maxAmps` caps brightness to the power supply. Smart lights: `{light: {music: false}}` (Yeelight: no music mode), `{light: {perZone: true}}` (Kasa strip: a colour per zone, beta), `{light: {rtPort}}` (Twinkly realtime port). Hue: `{hueFast: true, hueArea?}` turns on fast mode (Entertainment streaming) with that area (the first one by default); a bridge paired before needs its link button pressed first, and the call says so; `{hueFast: false}` back to basic. Hue devices show `hue: {lights, names, fast, area, areas: [{id, name}], fastKey}`; the user name and client key never leave the server |
+| `GET /api/devices` | open | the devices, each with `health` (the last check) |
+| `POST /api/devices` | admin | add one, by kind (below); answers the device |
+| `PATCH /api/devices/:id` | admin | `{name?, host?, leds?, ddpPort?, enabled?, maxAmps?: 0-500, mAperLed?: 5-200, protocol?: "ddp"\|"e131"\|"artnet", universe?, goveeMode?, goveeSegments?}`; `maxAmps` caps brightness to the power supply. Smart lights: `{light: {music: false}}` (Yeelight: no music mode), `{light: {perZone: true}}` (Kasa strip: a colour per zone, beta), `{light: {rtPort}}` (Twinkly realtime port). Hue: `{hueFast: true, hueArea?}` turns on fast mode (Entertainment streaming) with that area (the first by default); a bridge paired before needs its link button pressed first, and the call says so; `{hueFast: false}` back to basic |
 | `DELETE /api/devices/:id` | admin | also removes its shapes |
-| `POST /api/devices/:id/identify` | | lights that controller's shapes |
-| `POST /api/devices/:id/segments` | admin | writes the room's LED ranges into WLED as segments |
-| `POST /api/devices` (DMX) | admin | `{kind: "dmx", host: "192.168.1.60", name?, protocol?: "artnet"\|"e131", universe?}`: one DMX universe on an Art-Net or sACN node (Art-Net counts from 0, sACN from 1) |
-| `POST /api/devices/:id/fixtures` | admin | `{profile, address: 1-512, name?, channels? (custom), pattern?, target?, x?, y?}`. Profiles: `rgb`, `rgbw`, `rgba`, `dimmer`, `strobe`, `moving-head`, `moving-head-16`, `moving-head-wheel`, `moving-head-wheel-16`, `laser`, `fog`, `custom` (`channels: ["dimmer", "red", "green", "blue", "fixed:0", ...]`, types from `GET /api/dmx/profiles`). Moving heads: `pattern: "circle"\|"figure8"\|"sweep"\|"point"\|"still"`, `target: [x, y]` (room position, for `point`), `cycle` (beats per loop, 8), `size` (0-0.5), `home: [pan, tilt]`, `panRange`/`tiltRange` (degrees). Also `wheel: [{value, color: [r,g,b]}]`, `gobos`, `patterns`, `shutter: {open, closed, strobe: [lo, hi]}` for fixtures that differ. Each fixture is a point of the device's `points` shape in the room; `x, y` place it. Returns `{fixture, warnings}` (overlapping channels) |
-| `PATCH /api/devices/:id/fixtures/:fid`, `DELETE /api/devices/:id/fixtures/:fid` | admin | |
-| `GET /api/dmx` | | `{settings, status: {lasers: {on, why}, fog: {on, why, duty, maxDuty, cooldownLeft}}, devices: [{id, values: [512], fixtures: [{..., kind, live: [{n, type, value}]}], warnings}]}`: every channel's value now |
-| `GET /api/dmx/profiles` | | built-in profiles with their channels, channel types, movement patterns |
-| `POST /api/discover` | admin | `{scan: true}` returns WLED controllers found by mDNS and a network scan, Govee lights (`kind: "govee"`), OpenRGB devices on this computer (`kind: "openrgb"`, `index`) and LIFX, WiZ, Kasa, Yeelight and Twinkly lights (`kind`, `added`) |
-| `GET /api/room`, `PUT /api/room` | admin | `{name, shapes: [...]}` |
-| `POST /api/room/preset` | admin | `{id: "fourwalls"}`, built for your controllers |
-| `POST /api/map` | admin | camera mapping: `{device, led}` lights only that LED (`-1`: all dark), `{end: true}` goes back to the show; also over the WebSocket as `{type: "map", device, led}`. Stops by itself after 5 s without news, or as soon as the WebSocket that started it closes |
+| `POST /api/devices/:id/check` | open | checks it now; answers its health |
+| `POST /api/devices/:id/identify` | open | lights that controller's shapes |
+| `POST /api/devices/:id/segments` | admin | writes the room's LED ranges into WLED as segments; answers `{segments}` |
+| `POST /api/discover` | admin | `{scan: true, hosts?: [ip]}`: WLED controllers by mDNS and a network scan, Govee lights (`kind: "govee"`), OpenRGB devices on this computer (`kind: "openrgb"`, `index`) and LIFX, WiZ, Kasa, Yeelight and Twinkly lights, each with `added` |
 
-A shape: `{type: "line"|"pole"|"free"|"circle"|"rect"|"hex"|"tri"|"matrix"|"points", name, dev: "<device id>", count, from: <first LED or null for "after the previous shape">, rev, ...}` plus
-`pts: [[x, y], ...]` for lines (and for `points`: one LED exactly at each point, used by camera mapping and Nanoleaf), or `cx, cy, size` (and `w, h` for rectangles, `cols, rows, w, h` for matrices). Positions are on a 16 × 9 wall view, y = 0 at the top.
+`POST /api/devices` bodies:
+
+| Kind | Body |
+| --- | --- |
+| WLED | `{host: "192.168.1.42", name?, ddpPort?, leds?, force?}`: the LED count is read from WLED; `force` adds one that doesn't answer |
+| virtual | `{virtual: true, name?, leds?}`: a pretend room that sends nothing |
+| Govee (beta) | `{host, kind: "govee", goveeMode?: "color"\|"segments", leds?}` |
+| OpenRGB | `{host: "127.0.0.1", kind: "openrgb", index, ddpPort?: 6742}`: one OpenRGB device; the LED count is read from it |
+| Hue | `{host, kind: "hue", name?}`: press the bridge's link button first |
+| Nanoleaf | `{host, kind: "nanoleaf", name?}`: hold the power button for 5-7 s first; the panels are placed as a `points` shape |
+| Smart lights | `{host, kind: "lifx"\|"wiz"\|"kasa"\|"yeelight"\|"twinkly", name?, force?}`: bulbs become one point, strips a line, a mapped Twinkly its layout; answers the device with `light: {...}` (what was found, for example `zones`) |
+| DMX | `{host: "192.168.1.60", kind: "dmx", name?, protocol?: "artnet"\|"e131", universe?}`: one DMX universe on an Art-Net or sACN node (Art-Net counts from 0, sACN from 1) |
+
+Hue devices show `hue: {lights, names, fast, area, areas: [{id, name}], fastKey}`; Nanoleaf devices `nanoleaf: {panels}`.
+The Hue user name and client key and the Nanoleaf token never leave the server.
+
+| Call | Area | Body |
+| --- | --- | --- |
+| `GET /api/room` | open | `{name, shapes, zones}` |
+| `PUT /api/room` | admin | `{name, shapes: [...]}` (zones are kept) |
+| `POST /api/room/preset` | admin | `{id: "fourwalls"}`: a ready-made layout (`presets` in `GET /api/state`), built for your controllers |
+| `POST /api/room/identify` | open | `{shape: <index>}` lights one shape |
+| `POST /api/map` | admin | camera mapping: `{device, led, level?}` lights only that LED (`-1`: all dark), `{end: true}` goes back to the show; also over the WebSocket as `{type: "map", device, led}`. Stops by itself after 5 s without news, or as soon as the WebSocket that started it closes |
+
+A shape: `{type: "line"|"pole"|"free"|"circle"|"rect"|"hex"|"tri"|"matrix"|"points", name, dev: "<device id>",
+count (1-8192), from: <first LED or null for "after the previous shape">, rev, rot, start, zone}` plus `pts: [[x, y],
+...]` for lines (and for `points`: one LED exactly at each point, used by camera mapping, Nanoleaf, bulbs and DMX), or
+`cx, cy, size` (and `w, h` for rectangles, `cols, rows, w, h` for matrices). Positions are on a 16 x 9 wall view,
+y = 0 at the top. All fields: [internals/data-model.md](internals/data-model.md#room).
+
+## DMX
+
+| Call | Area | Body |
+| --- | --- | --- |
+| `POST /api/devices/:id/fixtures` | admin | `{profile, address: 1-512, name?, channels? (custom), pattern?, target?, x?, y?}`. Profiles: `rgb`, `rgbw`, `rgba`, `dimmer`, `strobe`, `moving-head`, `moving-head-16`, `moving-head-wheel`, `moving-head-wheel-16`, `laser`, `fog`, `custom` (`channels: ["dimmer", "red", "green", "blue", "fixed:0", ...]`, types from `GET /api/dmx/profiles`). Moving heads: `pattern: "circle"\|"figure8"\|"sweep"\|"point"\|"still"`, `target: [x, y]` (room position, for `point`), `cycle` (beats per loop, 8), `size` (0-0.5), `home: [pan, tilt]`, `panRange`/`tiltRange` (degrees). Also `wheel: [{value, color: [r,g,b]}]`, `gobos`, `patterns`, `shutter: {open, closed, strobe: [lo, hi]}` for fixtures that differ. Each fixture is a point of the device's `points` shape in the room; `x, y` place it. Answers `{fixture, warnings}` (overlapping channels). At most 128 per universe |
+| `PATCH /api/devices/:id/fixtures/:fid` | admin | the same fields |
+| `DELETE /api/devices/:id/fixtures/:fid` | admin | |
+| `GET /api/dmx` | open | `{settings, status: {lasers: {on, why}, fog: {on, why, duty, maxDuty, cooldownLeft}}, devices: [{id, name, host, protocol, universe, enabled, values: [512], fixtures: [{..., kind, live: [{n, type, value}]}], warnings}]}`: every channel's value now |
+| `GET /api/dmx/profiles` | open | `{profiles: [{id, name, kind, channels}], channelTypes, patterns}` |
+
+DMX settings are in `PATCH /api/settings {dmx: {...}}` ([Settings](#settings)).
 
 ## Music
 
-| Call | Body |
-| --- | --- |
-| `POST /api/song` | `{name, analysis}`: the result of `preAnalyseCore()` from `/engine/analysis.js` |
-| `POST /api/song/clock` | `{pos: <seconds>, playing: true}` |
-| `DELETE /api/song` | |
-| `GET /api/songs` | song memory: `[{id, name, bpm, dur, style, drops, at}]` |
-| `DELETE /api/songs/:id` | admin: forget a song |
-| `GET /api/songs/:id/show` | the song's show: `{show: [{t0, t1, part, effect}], colors, cues, bright, edited}` (made automatically the first time), plus what the show editor draws: `P, off, barOff, bpm, bars, drops, env` (loudness, 10 values a second as base64 bytes) and `palettes` (`{id: ["#rrggbb", "#rrggbb"]}`) |
-| `PUT /api/songs/:id/show` | effects area: `{show: [...], colors?, cues?, bright?}` your own timeline; fields left out are kept. `colors: [{t0, t1, palette} \| {t0, t1, colors: ["#rrggbb", "#rrggbb"]}]` (no overlaps), `cues: [{t, type: "flash"\|"strobe"\|"blackout"\|"build"\|"drop", color? (flash), beats? (the others: 0.25–128)}]`, `bright: [{t, v: 0..1}]` (a straight line between keyframes). Times are seconds on the song's clock, kept to the millisecond; at most 500 of each |
-| `DELETE /api/songs/:id/show` | effects area: throw away edits (colours, cues and brightness too) and make a new show |
-| `PUT /api/songs/:id/show/draft`, `DELETE …/draft` | effects area: play an unsaved version (same body as `PUT …/show`) on the lights for two minutes without saving it; the show editor's live preview |
-| `GET /api/audio/sources` | sound inputs the server can capture from |
-| `PATCH /api/settings` | admin: `{capture: {enabled: true, source: "auto"\|<id>, command?}}` |
+| Call | Area | Body |
+| --- | --- | --- |
+| `POST /api/song` | open | `{name, analysis, clientId?}`: a song about to play in a browser; `analysis` is the result of `preAnalyseCore()` from `/engine/analysis.js` ([internals/engine-analysis.md](internals/engine-analysis.md#output)). With song memory on, songs over 20 s are remembered |
+| `POST /api/song/clock` | open | `{pos: <seconds>, playing: true, rate?: 1}`: where the song is now; send it on play, pause and seek, and every second or so (the WebSocket's `clock` message does the same) |
+| `DELETE /api/song` | open | the song stopped |
+| `GET /api/audio/sources` | open | `[{id, label}]`: sound inputs the server can capture from |
+| `GET /api/songs` | open | song memory: `[{id, name, bpm, dur, style, drops, at, spotifyId?, src?, cover?}]` (`src`: `learned`, `shared` or `spotify-analysis`; `cover`: percent learned of a partly learned song) |
+| `DELETE /api/songs/:id` | admin | forget a song |
+| `GET /api/songs/:id/show` | open | the song's show: `{id, name, dur, edited, show: [{t0, t1, part, effect}], colors, cues, bright}` (made automatically the first time), plus what the show editor draws: `bpm, P, off, barOff, style, drops, bars, env` (loudness, 10 values a second as base64 bytes) and `palettes` (`{id: ["#rrggbb", "#rrggbb"]}`) |
+| `PUT /api/songs/:id/show` | guest: effects | `{show: [...], colors?, cues?, bright?}`: your own timeline; fields left out are kept. `colors: [{t0, t1, palette} \| {t0, t1, colors: ["#rrggbb", "#rrggbb"]}]` (no overlaps), `cues: [{t, type: "flash"\|"strobe"\|"blackout"\|"build"\|"drop", color? (flash), beats? (the others: 0.25-128)}]`, `bright: [{t, v: 0..1}]` (a straight line between keyframes). Times are seconds on the song's clock, kept to the millisecond; at most 500 of each |
+| `DELETE /api/songs/:id/show` | guest: effects | throw away edits (colours, cues and brightness too) and make a new show |
+| `PUT /api/songs/:id/show/draft` | guest: effects | play an unsaved version (same body as `PUT …/show`) on the lights for two minutes without saving it: the show editor's live preview |
+| `DELETE /api/songs/:id/show/draft` | guest: effects | stop playing the draft |
+
+Live audio from a browser goes over the [WebSocket](#websocket-ws); from the server's sound card, turn on
+`PATCH /api/settings {capture: {enabled: true, source: "auto"|<id>, command?}}`.
 
 ## Now playing
 
@@ -115,13 +363,14 @@ the file name has one, and a length within 3 s), the lights follow that song's b
 position (`status.source` is `"nowplaying"`); otherwise it is only shown, and live audio still drives the lights.
 A song played in the web app comes first.
 
-| Call | Body |
-| --- | --- |
-| `GET /api/nowplaying` | `{enabled, supported, platform, state: "ok"\|"starting"\|"unavailable"\|"error"\|"off", message, method: "osascript"\|"playerctl"\|"dbus-send"\|"powershell", track, spotify: {clientId, connected, error, redirectUri}}` |
-| `PATCH /api/nowplaying` | admin: `{enabled?: true, spotifyClientId?: "<32 hex digits>"}` |
-| `POST /api/nowplaying/spotify/login` | admin: `{url}` to open: Spotify sign-in (PKCE, no client secret), which comes back to `redirectUri` (`http://127.0.0.1:<port>/api/nowplaying/spotify/callback`; add it to your Spotify app) |
-| `POST /api/nowplaying/spotify/code` | admin: `{url}`, the address Spotify sent the browser to, when signing in from another device |
-| `DELETE /api/nowplaying/spotify` | admin: disconnect |
+| Call | Area | Body |
+| --- | --- | --- |
+| `GET /api/nowplaying` | open | `{enabled, supported, platform, state: "ok"\|"starting"\|"unavailable"\|"error"\|"off", message, method: "osascript"\|"playerctl"\|"dbus-send"\|"powershell", track, spotify: {clientId, connected, error, redirectUri}}` |
+| `PATCH /api/nowplaying` | admin | `{enabled?: true, spotifyClientId?: "<32 hex digits>"}` |
+| `POST /api/nowplaying/spotify/login` | admin | answers `{url, redirectUri}`: open `url` for the Spotify sign-in (PKCE, no client secret), which comes back to `redirectUri` (`http://127.0.0.1:<port>/api/nowplaying/spotify/callback`; add it to your Spotify app) |
+| `GET /api/nowplaying/spotify/callback` | open | where Spotify sends the browser after signing in (`?code&state`); answers a small HTML page, not JSON |
+| `POST /api/nowplaying/spotify/code` | admin | `{url}`: the address Spotify sent the browser to, pasted, when signing in from another device (or `{code, state}`) |
+| `DELETE /api/nowplaying/spotify` | admin | disconnect |
 
 With Spotify connected, Spotify playing on any of your devices is used when nothing plays on this computer. The
 tokens are kept in `spotify-token.json` next to the settings and never sent to browsers (not in backups either).
@@ -135,11 +384,11 @@ The lights follow the Spotify track that plays (here, or anywhere with your acco
 learned by listening the first time, shared by other installs (optional) or from Spotify's own analysis (older Spotify
 apps). Details, set-up and the shared beat-map service: [spotify.md](spotify.md).
 
-| Call | Body |
-| --- | --- |
-| `GET /api/spotify` | settings, mode (`exact`, `shared`, `analysis`, `learning`, `live`, `paused`, `idle`, `off`), track, map, learning progress |
-| `PATCH /api/spotify` | admin: any of `{sync, learn, analysis, coverColours, pauseFade, muteDim, cloud: {url, use, share}}` |
-| `POST /api/spotify/colors` | effects area: `{art, colors: ["#rrggbb", ...]}`, the album cover's colours (the browser works them out) |
+| Call | Area | Body |
+| --- | --- | --- |
+| `GET /api/spotify` | open | `{settings, on, connected, mode, modeName, via, error, track, map, learn, locked, analysis, account, local, poll, cloud, colors}`; `mode` is `exact`, `shared`, `analysis`, `learning`, `live`, `paused`, `idle` or `off` |
+| `PATCH /api/spotify` | admin | any of `{sync, learn, analysis, coverColours, pauseFade, muteDim, cloud: {url, use, share}}` |
+| `POST /api/spotify/colors` | guest: effects | `{art, colors: ["#rrggbb", ...]}`: the album cover's colours (the browser works them out; 2 to 4) |
 
 `GET /api/status` has `spotify: {on, mode, modeName, via, track, map, learn, ...}` or `null` (online demo).
 
@@ -149,77 +398,133 @@ Guests open `/request` on their phone (QR code on the Music page). These calls a
 
 | Call | Area | Body |
 | --- | --- | --- |
-| `GET /api/requests` | | `{enabled, requests: [{id, title, by, votes, at}]}`, most votes first |
-| `POST /api/requests` | | `{title, by?}`; the same song again adds a vote instead (`merged: true`) |
-| `POST /api/requests/:id/vote` | | |
+| `GET /api/requests` | open | `{enabled, requests: [{id, title, by, votes, at}]}`, most votes first |
+| `POST /api/requests` | open | `{title, by?}`; the same song again adds a vote instead (`merged: true`). 403 when requests are off, 429 above 30 a minute |
+| `POST /api/requests/:id/vote` | open | |
 | `PATCH /api/requests/:id` | admin | `{done: true}` when it has been played |
-| `DELETE /api/requests/:id`, `DELETE /api/requests` | admin | remove one, or all |
+| `DELETE /api/requests/:id` | admin | remove one |
+| `DELETE /api/requests` | admin | remove all |
 
 Turn requests off with `PATCH /api/settings {requests: false}`.
 
-## Backup
+## Settings
 
-| Call | Body |
+`PATCH /api/settings` (admin) takes any part of `settings` and answers the settings. Every key, its type and its
+default: [internals/data-model.md](internals/data-model.md#settings).
+
+| Key | Value |
 | --- | --- |
-| `GET /api/backup` | admin: everything except the PIN, as one JSON file |
-| `POST /api/restore` | admin: a backup file; the current PIN is kept |
+| `brightness`, `fps`, `syncOffsetMs`, `idleBrightness`, `idleAfterSec` | numbers (0-1, 10-120, -500..500, 0-1, 1-600) |
+| `safe`, `predict`, `dropFlash`, `audioSync`, `autoDiscover`, `setupDone`, `songMemory`, `moodColours`, `requests`, `shows` | booleans |
+| `performance` | `"auto"`, `"full"` or `"lite"`: low-power mode for small computers. Lite caps the frame rate at 30 fps, sends the preview and phones 15 times a second and status twice a second, and the live analyser works out chroma every second frame and the vocal estimate at half rate. Auto picks lite on a Raspberry Pi Zero, 1, 2 or 3, a 32-bit ARM processor, one core or two slow ones, or when the frame loop can't keep up for 10 seconds. `status.perf` is `{mode, setting, why, fps, frameMs, cpu}` |
+| `ambient` | an effect id or `"off"` |
+| `capture` | `{enabled, source: "auto"\|<id>, command}` |
+| `metronome` | `{enabled, bpm: 40-220}` |
+| `osc` | `{enabled, port}`: OSC over UDP; addresses `/tempolight/effect <id>`, `/auto`, `/scene <id or name>`, `/brightness <0-1 or 0-255>`, `/power [0\|1]`, `/bpm <n>`, and any action type (`/flash`, `/strobe 1`, …) |
+| `guest` | `{effects, scenes, pads, brightness}` booleans |
+| `location` | `{lat, lon, name?}` or `null` |
+| `night` | `{enabled, from, to, maxBrightness, warm}` (times like `23:00`, `sunset` or `sunrise-30`) |
+| `text` | `{source: "song"\|"bpm"\|"clock"\|"custom", custom}`: the Text Scroller |
+| `mqtt` | `{enabled, url, username, password, clearPassword, prefix, base}` ([Home Assistant](#home-assistant)) |
+| `djlink` | `{enabled, port}`: Pioneer Pro DJ Link |
+| `link` | `{enabled, port}`: Ableton Link, listen-only; `status.link` is then `{peers, bpm, measured, playing, following, beat, error}` |
+| `dmx` | `{enabled, lasers, fog, fogWhen: "before"\|"drop", fogLead, fogBurst, fogCooldown, fogMaxDuty, fogLevel, laserMaxSec}`: lasers and fog are off by default; lasers run only during the first `laserMaxSec` seconds of a drop and never in photosensitive-safe or night mode; fog bursts `fogLead` s before a drop the song analysis knows, else at the drop, at least `fogCooldown` s apart and at most `fogMaxDuty` of any 5 minutes |
 
-`PATCH /api/settings {performance: "auto"|"full"|"lite"}` (default `auto`): low-power mode for small computers. Lite caps the
-frame rate at 30 fps, sends the preview and phones 15 times a second and status twice a second, and the live analyser works out
-chroma every second frame and the vocal estimate at half rate. Auto picks lite on a Raspberry Pi Zero, 1, 2 or 3, a 32-bit ARM
-processor, one core or two slow ones, or when the frame loop can't keep up for 10 seconds. `GET /api/status` has
-`perf: {mode: "full"|"lite", setting, why, fps, frameMs, cpu}` (`frameMs`: average work per frame; `cpu`: percent of one core
-the server uses). `node scripts/bench.js` measures each part's CPU time.
+`node scripts/bench.js` measures each part's CPU time ([internals/testing.md](internals/testing.md#bench-and-smoke)).
 
-Settings (`PATCH /api/settings`, admin) also take `setupDone: true|false` (the setup wizard opens by itself on a first start with no lights until it is finished or skipped), `link: {enabled, port}` (Ableton Link, listen-only; `GET /api/status` then has `link: {peers, bpm, measured, following, beat, playing, error}`),
-`dmx: {enabled, lasers, fog, fogWhen: "before"|"drop", fogLead, fogBurst, fogCooldown, fogMaxDuty, fogLevel, laserMaxSec}` (lasers and fog are off by
-default; lasers run only during the first `laserMaxSec` seconds of a drop and never in photosensitive-safe or night mode; fog bursts `fogLead` s
-before a drop the song analysis knows, else at the drop, at least `fogCooldown` s apart and at most `fogMaxDuty` of any 5 minutes), `songMemory: true|false`, `shows: true|false`, `requests: true|false`, `djlink: {enabled, port}`, `location: {lat, lon}`, `night: {enabled, from, to, maxBrightness, warm}`
-(times like `23:00`, `sunset` or `sunrise-30`) and `text: {source: "song"|"bpm"|"clock"|"custom", custom}` for the
-Text Scroller. Schedules accept `time: "sunset+30"` or `"sunrise-15"` once a location is set.
+## Backup, reset, updates, quit
 
-## Updates
-
-| Call | Body |
-| --- | --- |
-| `GET /api/update` | admin: `{method: "git"\|"docker"\|"manual", behind, changes: [...], canUpdate, message}` (fetches from GitHub) |
-| `POST /api/update` | admin: pulls the new version and restarts Tempolight (installs made with git or the installer) |
+| Call | Area | Body |
+| --- | --- | --- |
+| `GET /api/backup` | admin | `{tempolight: <version>, savedAt, data}`: everything except the PIN, as one JSON file (it does include saved passwords and tokens: keep it private) |
+| `POST /api/restore` | admin | a backup file (or its `data`); the current PIN is kept |
+| `POST /api/reset` | admin | back to the defaults: devices, room, scenes, schedules and settings |
+| `GET /api/update` | admin | `{method: "git"\|"docker"\|"npm"\|"binary"\|"manual", current?, behind?, ahead?, changes?: [...], dirty?, canUpdate, message}` (fetches from GitHub for git installs) |
+| `POST /api/update` | admin | pulls the new version and restarts Tempolight (installs made with git or the installer); 409 when it can't now |
+| `POST /api/quit` | admin | stops Tempolight; only the one-file app (`canQuit` in the state), elsewhere 400 |
 
 ## Wi-Fi (Raspberry Pi image)
 
 Only where the Wi-Fi setup service runs (the [Raspberry Pi image](raspberry-pi.md); Linux, `TEMPOLIGHT_WIFI_SETUP` set).
 
-| Call | Body |
-| --- | --- |
-| `GET /api/wifi` | `{available: false}` elsewhere; on the image `{available: true, mode: "watch"\|"hotspot"\|"connecting"\|"retry", ssid, hotspot, lastResult}` |
-| `POST /api/wifi/setup` | admin: leaves the current Wi-Fi and opens the Tempolight-Setup hotspot |
+| Call | Area | Body |
+| --- | --- | --- |
+| `GET /api/wifi` | open | `{available: false}` elsewhere; on the image `{available: true, mode: "watch"\|"hotspot"\|"connecting"\|"retry", ssid, hotspot, lastResult}` |
+| `POST /api/wifi/setup` | admin | leaves the current Wi-Fi and opens the Tempolight-Setup hotspot |
 
 ## Lock
 
-| Call | Body |
+| Call | Area | Body |
+| --- | --- | --- |
+| `POST /api/lock` | admin | `{pin: "1234"}` (4-8 digits); answers `{locked: true, token}` so you stay unlocked. Setting a PIN logs out every other token |
+| `POST /api/unlock` | open | `{pin}` answers `{token}`, valid 12 hours; 403 for a wrong PIN (each try takes 300 ms) |
+| `DELETE /api/lock` | admin | removes the PIN |
+
+## Status
+
+`GET /api/status` and the WebSocket's `status` messages (4 a second; 2 in low-power mode):
+
+| Field | Meaning |
 | --- | --- |
-| `POST /api/lock` | admin: `{pin: "1234"}` (4–8 digits); returns a token so you stay unlocked |
-| `POST /api/unlock` | `{pin}` returns `{token}`, valid 12 hours |
-| `DELETE /api/lock` | admin |
+| `source`, `sourceLabel` | `song`, `nowplaying`, `browser`, `capture`, `djlink`, `midiclock`, `link`, `metronome` or `idle`, and in words |
+| `fps`, `leds`, `uptime` | frames a second now, LEDs in the room, seconds since start |
+| `effect`, `effectName`, `style`, `styleName` | what shows now |
+| `bpm`, `part`, `beat` | tempo, `calm`/`build`/`drop`/`silent`/`idle`, beat in the bar (0-3) |
+| `level`, `bands` | loudness 0-1; with live audio 24 spectrum bands (else `null`) |
+| `key`, `mood`, `hears`, `vocal` | `{key, mode, name, confidence}`, `{valence, energy, name}`, `"A minor · melancholic"`, the live vocal estimate 0-1 |
+| `song` | `{memId, name, playing, pos, dur, bpm, style, drops}` while a browser plays a song |
+| `recognised` | `{id, name, pos, dur}` while song memory follows a song heard live |
+| `nowPlaying`, `spotify` | see [Now playing](#now-playing) and [Sync with Spotify](#sync-with-spotify) |
+| `capture` | `{label, running, error}` for the server's sound card |
+| `djlink`, `midiClock`, `link` | `{name, bpm, beatInBar}`; `{running, stopped, started, barKnown, bpm, beat, input}`; `{peers, bpm, measured, playing, following, beat, error}`; each `null` when off |
+| `power`, `brightness`, `night` | |
+| `overlay` | the pads: `{strobe, blackout, freeze, hold, boost, forced: "build"\|"drop"\|null}` |
+| `home` | the [home status](#home-and-sleep) |
+| `mqtt` | `{state: "connected"\|"connecting"\|"reconnecting"\|"error"\|"off", error}` or `null` |
+| `phones`, `screen`, `mapping` | phones connected as lights; the label of a shared screen; `{device, led}` while camera mapping |
+| `perf` | `{mode, setting, why, fps, frameMs, cpu}` |
+| `dmx` | `{lasers: {on, why}, fog: {...}}` when there are DMX devices, else `null` |
+| `devices[]` | per device: `id`, `online`, `version`, `ledsReported`, `lastSeen`, `error`, `rssi`, `signal`, `fps`, `live`, `power`, `maxPower` (WLED), `rttMs`; what we send: `sent`, `used`, `amps`, `limited`; the latency meter: `latencyMs` (sound to light, `null` when off or offline), `latency: {audioMs, analysisMs, networkMs, frameMs, offsetMs}`, `latencyLevel` (`good` under 40 ms, `ok` under 80, `slow`, `none`) and `warnings: [{kind: "offline"\|"wifi"\|"frames"\|"notlive"\|"power"\|"slow", text}]` |
+
+How these are worked out: [internals/runtime-and-outputs.md](internals/runtime-and-outputs.md#health-and-latency).
 
 ## WebSocket `/ws`
 
-Add `?token=` when locked. The server sends `{type: "status", ...}` four times a second, `{type: "log"}` and
-`{type: "changed", what}` when something changes. Send:
+One connection per browser: `ws://<host>:8080/ws`, with `?token=<token>` when locked (the token is checked per
+message, against the same areas as HTTP). Text messages are JSON objects with a `type`; binary messages start with a
+type byte. Connections from other websites are refused (the [Origin rule](#auth)).
 
-- `{type: "preview", on: true}` to get binary frames: byte 0 = 1, then R, G, B for every LED in layout order (30 fps)
-- `{type: "audio-start", rate: 22050, label, latencyMs?}` (`latencyMs`: the browser's estimate of its capture delay, for the latency meter) then binary messages of 16-bit little-endian mono samples to be a live audio source; `{type: "audio-stop"}`
-- `{type: "clock", pos, playing}` while a song plays
-- `{type: "action", action: {type: "flash"}}` for pads, with low delay
-- `{type: "midi-clock", events: [[code, at, value?], ...], now, label}` to follow MIDI clock: `code` 0xF8 clock, 0xFA start, 0xFB continue,
-  0xFC stop, 0xF2 song position (`value` in 16ths); `at` and `now` on the browser's `performance.now()` clock; `{type: "midi-clock", end: true, events: [], now}`
-  stops. One browser at a time. `status.midiClock` is `{running, stopped, barKnown, bpm, input}`. The beat grid comes from Pro DJ Link first, then
-  MIDI clock, then Ableton Link (`status.source` is `djlink`, `midiclock` or `link` when there's no audio)
-- `{type: "screen", w, h, px, label}` to feed the Screen Sync effect: `px` is base64 of `w × h` RGB bytes (up to 4,096 pixels), a few times a second;
-  `{type: "screen", end: true}` when sharing stops. One browser shares at a time: another one's pictures (or a guest's while the PIN lock
-  doesn't allow effects) get `{type: "screen-refused", why: "busy" | "locked", error}` back
-- `{type: "phone", on: true}` to be a phone light: binary messages, byte 0 = 2, then R, G, B and the phone's place in
-  the line-up (30 a second). `GET /api/network` lists this computer's addresses for the QR code; `status.phones` counts them
+### Server to client
+
+| Message | When | Content |
+| --- | --- | --- |
+| `{type: "hello", id, ...status}` | 10 ms after connecting | the connection's id (send it as `clientId` with `POST /api/song`) and a status |
+| `{type: "status", ...}` | every 250 ms (500 in low-power mode) | the [status](#status) |
+| `{type: "log", t, level, msg}` | each activity message | |
+| `{type: "changed", what}` | after anything is saved | `what`: `devices`, `room`, `zones`, `show`, `settings`, `scenes`, `schedules`, `songs`, `effects`, `requests`, `lock`, `home`, `all` (restore, reset), `nowplaying`, `spotify`, `homekit`, `integrations`: fetch what you show again |
+| `{type: "screen-refused", why: "busy"\|"locked", error}` | at most every 2 s | another browser already shares its screen, or the lock doesn't allow guests effects |
+| binary `[1, R, G, B, R, G, B, …]` | 30 fps (15 in lite), after `{type: "preview", on: true}` | every LED's colour in layout order (`GET /api/layout`) |
+| binary `[2, R, G, B, index]` | 30 a second (15 in lite), after `{type: "phone", on: true}` | this phone's colour (its slice of the room) and its place in the line-up (0-255) |
+
+A client that can't keep up (more than 256 KB queued) is skipped for previews and broadcasts until it catches up.
+
+### Client to server
+
+| Message | Area | What |
+| --- | --- | --- |
+| `{type: "preview", on: true\|false}` | open | start or stop the binary preview frames |
+| `{type: "audio-start", rate: 22050, label, latencyMs?}` | open | this connection becomes a live audio source; `latencyMs` is the browser's estimate of its capture delay (for the latency meter) |
+| binary: 16-bit little-endian mono samples | open | after `audio-start`, at that rate (the web app sends 512 samples, ~23 ms, a message). A browser that is sending wins over the server's sound card |
+| `{type: "audio-stop"}` | open | stop being an audio source |
+| `{type: "clock", pos, playing, rate?}` | open | the song's position (as `POST /api/song/clock`) |
+| `{type: "action", action: {type: "flash", ...}}` | pads | a live pad with low delay (the [actions](#lights-and-show)) |
+| `{type: "midi-clock", events: [[code, at, value?], ...], now, label}` | pads | follow MIDI clock: `code` 0xF8 clock, 0xFA start, 0xFB continue, 0xFC stop, 0xF2 song position (`value` in 16ths); `at` and `now` on the browser's `performance.now()` clock (mapped onto the server's with the smallest delay seen in 10 s); `{type: "midi-clock", end: true, events: [], now}` stops. One browser at a time |
+| `{type: "screen", w, h, px, label}` | effects | feed the Screen Sync effect: `px` is base64 of `w x h` RGB bytes (up to 4,096 pixels, 22,000 characters), a few times a second; `{type: "screen", end: true}` when sharing stops. One browser at a time |
+| `{type: "map", device, led, level?}`, `{type: "map", end: true}` | admin | camera mapping (as `POST /api/map`); ends when this connection closes |
+| `{type: "phone", on: true\|false}` | open | be a phone light. `GET /api/network` lists this computer's addresses for the QR code; `status.phones` counts them |
+
+When a connection closes, everything it started stops: its audio, its song, its screen share, its camera mapping and
+its MIDI clock.
 
 ## Home Assistant
 
@@ -245,10 +550,9 @@ Tempolight then appears in Home Assistant as one device with:
 Voice control through Home Assistant (Google Assistant, Alexa): see [voice.md](voice.md).
 
 `tempolight/availability` is `online` or `offline` (also set by the broker if Tempolight stops suddenly).
-`GET /api/status` has `mqtt: {state: "connected"|"connecting"|"reconnecting"|"error"|"off", error}`.
+`GET /api/status` has `mqtt: {state, error}`.
 
 ## Home Assistant without MQTT
-
 
 ```yaml
 rest_command:
@@ -290,27 +594,27 @@ backups never carry them.
 
 ## Integrations (OBS, games, Twitch, Discord, Stream Deck)
 
-Node server only (not the online demo). Everything here except `POST /api/gsi/<game>` and the plugin download is
+Node server only (not the online demo). Everything here except the game-state posts and the plugin download is
 admin-only: with a PIN lock it needs `x-tempolight-token`. Passwords, the Twitch sign-in and the Discord webhook are
 kept in the settings file under `integrations` and never sent back (`/api/state` doesn't include them). See
 [integrations.md](integrations.md) and [streamdeck.md](streamdeck.md).
 
-| Method | Path | What |
+| Call | Area | What |
 | --- | --- | --- |
-| GET | `/api/integrations` | Settings and live status of all of them (`obs.status`, `games.cs2.status`, `twitch.status`, `twitch.eventsub`, `discord.status`, `streamdeck.available`) |
-| PATCH | `/api/integrations/obs` | `{enabled, url, password, clearPassword, sceneMap: [{obs, scene}], onStreamStart, onStreamStop, onRecordStart, tally: {enabled, when: recording\|streaming\|either, target, color}}` |
-| PATCH | `/api/integrations/games/cs2` (or `dota2`) | `{enabled, intensity 0-1, mode: blend\|takeover, healthTarget, effectsTarget, manaTarget, ambientTarget, kills, flashbang, bomb, rounds, roshan, daynight}`; turning it on makes its token |
-| POST | `/api/integrations/games/<game>/token` | A new token (the installed config file stops working) |
-| GET | `/api/integrations/games/<game>/cfg?url=http://<tempolight>:8080` | `{filename, folder, content}`: the game's `gamestate_integration_tempolight.cfg` |
-| POST | `/api/integrations/games/<game>/test` | `{what: flash\|bomb\|kill\|win\|lose\|roshan\|night\|day\|low}`: pretend it happened |
-| POST | `/api/gsi/cs2`, `/api/gsi/dota2` | Where the games post (Valve GSI JSON with `auth.token`). 403 without the right token, 429 above 40 a second |
-| PATCH | `/api/integrations/twitch` | `{chat: {enabled, channel, prefix, who: everyone\|subscriber\|vip\|mod, cooldownSec, userCooldownSec, commands: {scene, effect, flash, color, strobe, drop}, scenes: [ids], effects: [ids]}, clientId, eventsOn, target, events: {follow\|subscribe\|resub\|gift\|raid\|cheer: {type: none\|flash\|color\|strobe\|scene\|effect\|drop, color, seconds, scene, effect, minBits}}}` |
-| POST | `/api/integrations/twitch/login` | `{clientId}`: starts the device-code sign-in, returns `{userCode, uri}` to enter at twitch.tv/activate |
-| DELETE | `/api/integrations/twitch/login` | Sign out |
-| POST | `/api/integrations/twitch/test` | `{kind: follow\|...}`: run that event's reaction |
-| PATCH | `/api/integrations/discord` | `{webhook, username, nowPlaying, scenes, twitch}` (`webhook: ""` removes it) |
-| POST | `/api/integrations/discord/test` | Posts a test message |
-| GET | `/api/integrations/streamdeck/plugin` | The `.streamDeckPlugin` file (or a redirect to the releases page) |
-| GET | `/obs` | The OBS browser source page (`?preview=0`, `?np=0`, `?corner=tl\|tr\|bl\|br`, `?scale=1.5`, `?bg=1`) |
+| `GET /api/integrations` | admin | Settings and live status of all of them (`obs.status`, `games.cs2.status`, `twitch.status`, `twitch.eventsub`, `discord.status`, `streamdeck.available`) |
+| `PATCH /api/integrations/obs` | admin | `{enabled, url, password, clearPassword, sceneMap: [{obs, scene}], onStreamStart, onStreamStop, onRecordStart, tally: {enabled, when: recording\|streaming\|either, target, color}}` |
+| `PATCH /api/integrations/games/:game` | admin | `:game` is `cs2` or `dota2`: `{enabled, intensity 0-1, mode: blend\|takeover, healthTarget, effectsTarget, manaTarget, ambientTarget, kills, flashbang, bomb, rounds, roshan, daynight}`; turning it on makes its token |
+| `POST /api/integrations/games/:game/token` | admin | A new token (the installed config file stops working) |
+| `GET /api/integrations/games/:game/cfg` | admin | `?url=http://<tempolight>:8080`: answers `{filename, folder, content}`, the game's `gamestate_integration_tempolight.cfg` |
+| `POST /api/integrations/games/:game/test` | admin | `{what: flash\|bomb\|kill\|win\|lose\|roshan\|night\|day\|low}`: pretend it happened |
+| `POST /api/gsi/:game` | game token | Where the games post (Valve GSI JSON with `auth.token`). 403 without the right token, 429 above 40 a second or after 30 wrong tokens in a minute |
+| `PATCH /api/integrations/twitch` | admin | `{chat: {enabled, channel, prefix, who: everyone\|subscriber\|vip\|mod, cooldownSec, userCooldownSec, commands: {scene, effect, flash, color, strobe, drop}, scenes: [ids], effects: [ids]}, clientId, eventsOn, target, events: {follow\|subscribe\|resub\|gift\|raid\|cheer: {type: none\|flash\|color\|strobe\|scene\|effect\|drop, color, seconds, scene, effect, minBits}}}` |
+| `POST /api/integrations/twitch/login` | admin | `{clientId}`: starts the device-code sign-in, answers `{userCode, uri}` to enter at twitch.tv/activate |
+| `DELETE /api/integrations/twitch/login` | admin | Sign out |
+| `POST /api/integrations/twitch/test` | admin | `{kind: follow\|subscribe\|resub\|gift\|raid\|cheer}`: run that event's reaction |
+| `PATCH /api/integrations/discord` | admin | `{webhook, username, nowPlaying, scenes, twitch}` (`webhook: ""` removes it) |
+| `POST /api/integrations/discord/test` | admin | Posts a test message |
+| `GET /api/integrations/streamdeck/plugin` | open | The `.streamDeckPlugin` file (or a redirect to the releases page); not JSON |
 
+The OBS browser source is the page `/obs` (`?preview=0`, `?np=0`, `?corner=tl|tr|bl|br`, `?scale=1.5`, `?bg=1`).
 A target is `all`, `off`, `zone:<zone id>` or `dev:<device id>`.

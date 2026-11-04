@@ -1,71 +1,256 @@
 # Architecture
 
+Tempolight is a Node.js 20+ app with no dependencies: ES modules, Node's built-ins, and a web app served as plain
+files (no build step). It has four parts with firm boundaries between them, and the same core code runs both in the
+server and, for the online demo, inside a browser.
+
+This page is the big picture. The details of each part are in [internals/](#where-to-read-next).
+
+## Packages and their boundaries
+
+| Part | Folder | May use | Job |
+| --- | --- | --- | --- |
+| **Engine** | `packages/engine/src` | nothing (pure functions and classes, no I/O, no timers except `setTimeout(0)` yields in long analyses) | whole-song and live analysis, song memory, room layout, effects, the director |
+| **Outputs** | `packages/outputs/src` | Node built-ins (`dgram`, `net`, `http`, `crypto`, `fetch`) | network protocols: DDP, E1.31/Art-Net, WLED JSON API, discovery, Hue (REST and Entertainment over DTLS), Nanoleaf, Govee, OpenRGB, LIFX, WiZ, Kasa, Yeelight, Twinkly, DMX universes, WLED audio sync |
+| **Server core** | `packages/server/src` (environment-free modules) | the engine, and browser-safe outputs modules (`dmx.js`) | the API, scenes, schedules, PIN lock, live connections (`core.js`), the frame loop and devices (`runtime.js`) and what they import: `home.js`, `pro-api.js`, `lights.js`, `fixtures.js`, `beatsources.js`, `midiclock.js`, `latency.js`, `perf.js`, `scheduler.js`, `sun.js`, `defaults.js` |
+| **Server Node layer** | `packages/server/src` (`app.js`, `node-io.js`, `index.js`, ...) | everything | HTTP server, static files, WebSocket, the settings file, sound capture, and the integrations that need sockets or files: Home Assistant (MQTT), HomeKit, now playing, Spotify, OSC, Pro DJ Link, Ableton Link, OBS/Twitch/Discord/games, updates, Wi-Fi setup |
+| **Web app** | `apps/web` | browser APIs; imports the engine (`/engine/...`) and, in demo mode, the server core (`/packages/...`) | the UI, browser audio (song playback, microphone, system sound), song analysis in the browser, camera mapping, screen sync |
+
+The boundary between the core and the Node layer is enforced: `scripts/build-site.js` follows every `import` from
+`core.js` and `runtime.js` and stops the online demo's build if any of them reaches a `node:` module or a package.
+Everything the core needs from the outside world comes in as **injected objects**:
+
+- `createRuntime(store, { io, logger, now, host, cpuUsage })`: `io` is the network and sound card. On a PC or Pi it is
+  `node-io.js` (re-exports of `packages/outputs` plus `capture.js` and `hostInfo()`); in the demo it is a set of pretend
+  WLED controllers in `apps/web/demo.js`.
+- `createCore({ store, runtime, env })`: `env` holds the version, id/token/PIN helpers, discovery and pairing
+  functions, `startOsc`, `startProLink`, `startLink`, `update`, `wifi`, `quit`, `lan`. A missing function means "not
+  available here" (the demo has no Hue pairing, so adding a Hue bridge answers *Hue needs Tempolight running on your
+  network*).
+- `store`: `{data, save(), flush(), reset(), firstRun}`. `store.js` keeps it in `tempolight.json`; the demo keeps it in
+  `localStorage`.
+
+```mermaid
+flowchart LR
+  subgraph Browser["Browser: apps/web"]
+    UI["app.js pages"]
+    AUD["audio.js + pcm-worklet.js"]
+    AN["engine analysis.js: preAnalyseCore"]
+    DEMO["demo.js: core + runtime in the page, FakeSocket, pretend WLED"]
+  end
+  subgraph Node["Server: packages/server"]
+    APP["app.js: HTTP, static files, /ws"]
+    CORE["core.js: routes, scenes, schedules, lock, live connections"]
+    RT["runtime.js: sources, frame loop, devices"]
+    IO["node-io.js: outputs + capture"]
+    INT["integrations: MQTT, HomeKit, now playing, Spotify, OSC, DJ Link, Link, OBS, Twitch, Discord, games"]
+    STORE["store.js: tempolight.json"]
+  end
+  subgraph Engine["packages/engine: pure"]
+    LIVE["live.js: LiveAnalyser"]
+    MEM["memory.js: song memory"]
+    DIR["director.js + effects.js + signals.js"]
+    LAY["layout.js + presets.js"]
+  end
+  subgraph Outputs["packages/outputs: protocols"]
+    DDP["ddp.js, e131.js, hue, nanoleaf, govee, openrgb, lights.js ..."]
+  end
+  LEDS[("WLED, DMX, Hue, smart lights")]
+  UI -- "REST /api" --> APP
+  AUD -- "PCM + clock over /ws" --> APP
+  AN -- "POST /api/song" --> APP
+  APP --> CORE
+  CORE --> RT
+  INT --> CORE
+  INT --> RT
+  CORE --> STORE
+  RT --> LIVE
+  RT --> MEM
+  RT --> DIR
+  RT --> LAY
+  RT -- "io" --> IO
+  IO --> DDP
+  DDP --> LEDS
+  DEMO -. "same core and runtime" .-> CORE
 ```
- browser: song file ─ decode + preAnalyseCore ─► beat map (POST /api/song) + playback clock ─┐
- browser: system sound / mic ─ AudioWorklet (22 kHz, 16-bit) ─► WebSocket ──────────────────┤
- server: sound card (parec / arecord / ffmpeg) ─────────────────────────────────────────────┤
-                                                                                             ▼
-                                                LiveAnalyser / songView ─► director ─► effects
-                                                                                      │
-                     room layout (shapes → per-LED coordinates, LED ranges per controller)
-                                                                                      ▼
-                                 per-controller buffers ─► DDP (UDP 4048) ─► WLED controllers
-                                                        └► preview frames ─► web UI (WebSocket)
+
+`app.js` starts things in this order: the store (and settings from the environment, `env-settings.js`), the updater,
+the runtime, the core, then Home Assistant, HomeKit, integrations, now playing and Spotify, each given `{core, store,
+runtime}`. Those modules plug in by adding routes with `core.route(...)`, hooking runtime fields (`rt.nowPlaying`,
+`rt.spotify`, `rt.pcmTap`, `rt.home`, `rt.mqtt`) and director hooks (`settings.ambientHook`, `settings.post`), and
+listening with `core.onChange` / `core.onScene`. The core never imports them, which is what keeps it
+environment-free.
+
+## The frame loop
+
+`runtime.startLoop()` runs `frame()` on a `setInterval` at `settings.fps` (default 60, at most 30 in low-power mode,
+see [perf](internals/runtime-and-outputs.md#performance-modes)). One frame:
+
+```mermaid
+flowchart TD
+  A["frame(): now = performance.now()"] --> B["currentView(now): pick the music source, get a view V and its clock t"]
+  B --> C["currentPlan(): the remembered song's show and timeline, if any"]
+  C --> D["forced build/drop pads: applyForced(V)"]
+  D --> E["brightness: slider x idle or ambient-plan brightness x night cap x Spotify dim"]
+  E --> F["director.frame(V, t, extra, wall): linear RGB for every LED"]
+  F --> G["toRGB8(col, col8, bri): soft roll-off to 8-bit"]
+  G --> H["fixtures.begin(): DMX state for this frame"]
+  H --> I["per device: copy each shape's LEDs into its buffer, power limiter, sender.send(buf)"]
+  I --> J["WLED audio sync packet, at most every 20 ms, when on"]
+  J --> K["preview frames to browsers, 30 fps or 15 in lite"]
+  K --> L["phones as lights, 30 a second or 15 in lite"]
+  L --> M["fps count, perf.frame(): may step down to lite and restart the loop"]
 ```
 
-## Engine (`packages/engine`, no I/O, runs in Node and the browser)
+Status messages are not part of the frame: `core.js` broadcasts `runtime.status()` to every WebSocket every 250 ms
+(every 500 ms in low-power mode), and the device health loop runs every 10 s.
 
-- **analysis.js**: whole-song analysis. A short-time Fourier transform (1024 samples, hop 256 at about 22 kHz) gives
-  band energies and spectral flux. Peaks in the flux become kick, snare and hi-hat onsets. Tempo comes from a
-  histogram of onset intervals; the best of the tempo, its double, half and 3:2 relatives is chosen by how well onsets
-  line up with the grid, and the grid is phase-locked to the kicks. Bars are labelled calm, build-up, drop or silent;
-  build-ups are the phrase (2, 4 or 8 bars) of rising tension before a drop. Style comes from how percussive the song
-  is, its loudness range, its tempo and whether it has drops.
-- **live.js**: the same ideas on a stream. Each hop (11.6 ms) gives band levels and onsets; a kick must be a low hit
-  that beats the hi-hat band and the snare body and makes the low band jump, so bass notes and piano attacks don't
-  count as drums; snares and hats need real high-frequency energy. Tempo is re-estimated twice a second, the song part
-  is decided by a vote over the last fraction of a second, and the style every 2 seconds over the last 30.
-- **tonal.js**: key and mood. A 4096-point FFT every 100 ms puts spectral peaks (65 Hz to 4.2 kHz) on the 12 pitch
-  classes (chroma); the average chroma against the Krumhansl-Schmuckler profiles gives the key, major or minor and a
-  confidence. Valence comes from the mode and brightness, energy from drums, tempo, onsets and brightness. The same
-  ChromaTap runs over whole songs and live, and its frames (5 a second, 6 bytes each) are song memory's second
-  fingerprint. Mood colours: four corner palettes (warm, teal, deep blue, red-magenta) blended by valence and energy.
-- **director.js**: picks the effect from the style's pools for the current part (or a fixed effect), crossfades,
-  eases the automatic palette towards the mood's colours (palette "auto" with moodColours, or "mood"),
-  keeps quiet music lit with the ambient effect, flashes on drops, applies live-pad overlays and the photosensitivity
-  limiter (at most 3 big brightness jumps per second).
-- **effects.js**: 93 effects. Each reads per-LED coordinates and a signals object and adds linear RGB light.
-- **layout.js / presets.js**: shapes on a 16 × 9 wall view become per-LED coordinates (room position, position along
-  the shape, angle and distance from its centre, position along the wiring); presets are fitted to your controllers.
-- **signals.js**: builds the signals object (beat phase, kick/snare/hat envelopes, loudness, build-up progress).
+### 1. Source selection: `currentView(now)`
 
-## Outputs (`packages/outputs`)
+The first source that has something wins. Each returns a *view* `V` (what the music is doing, in the shape of
+`songView()`), the music clock `t` it was taken at, and `extra` (live spectrum bands, waveform, bass level).
 
-- **ddp.js**: DDP packets exactly as WLED expects them (version 1, RGB24, 480 pixels per packet, push flag on the last).
-- **wled.js**: WLED JSON API: info, state, segments (`stop` is exclusive).
-- **discover.js**: mDNS query for `_wled._tcp.local` (with a unicast-reply fallback when port 5353 is taken) and a
-  scan of the local /24 for `/json/info`.
-- **audiosync.js**: WLED's 44-byte audio sync packet.
+```mermaid
+flowchart TD
+  S0{"Song playing in a browser, clock fresher than 4 s?"} -- yes --> S1["source song: songView(pre, pos + elapsed x rate + offset)"]
+  S0 -- no --> N0{"rt.nowPlaying.follow(): a music app here plays a remembered song?"}
+  N0 -- yes --> N1["source nowplaying: songView(entry, app position + offset)"]
+  N0 -- no --> P0{"Spotify just paused, pauseFade on?"}
+  P0 -- yes --> P1["source idle: V null, lights fade to the ambient look"]
+  P0 -- no --> L0{"Live audio pushed in the last 1.5 s?"}
+  L0 -- yes --> M0["songMemoryTick(): matching in 4 ms slices between frames"]
+  M0 --> M1{"song memory lock?"}
+  M1 -- yes --> M2["V = songView(stored song, lock position): the beat map ahead of time"]
+  M1 -- no --> L1["V = LiveAnalyser.view(t)"]
+  L1 --> G0{"DJ Link deck fresh? else MIDI clock? else Ableton Link?"}
+  G0 -- yes --> G1["replace the beat grid; a missed kick lands on the grid beat"]
+  G0 -- no --> Q0
+  G1 --> Q0{"silent longer than idleAfterSec?"}
+  Q0 -- yes --> Q1["source idle"]
+  Q0 -- no --> L2["source browser or capture"]
+  L0 -- no --> D0{"DJ Link only?"}
+  D0 -- yes --> D1["metronomeView on the deck's grid"]
+  D0 -- no --> B0{"MIDI clock or Link only?"}
+  B0 -- yes --> B1["metronomeView on that grid"]
+  B0 -- no --> T0{"metronome on?"}
+  T0 -- yes --> T1["metronomeView at settings.metronome.bpm"]
+  T0 -- no --> I0["source idle: V null"]
+```
 
-## Server (`packages/server`)
+`status.source` is one of `song`, `nowplaying`, `browser`, `capture`, `djlink`, `midiclock`, `link`, `metronome`,
+`idle`; `status.sourceLabel` says it in words (for example `Browser audio: One More Time (recognised) + DJ Link (CDJ-3000)`).
 
-- **core.js**: every API call, scenes, schedules, the PIN lock and live updates, with no Node.js modules. The Node
-  server (app.js) and the online demo (apps/web/demo.js) both run it; only the transport and `io` differ.
-- **node-io.js**: the real network and sound card (DDP, WLED API, discovery, capture). The demo passes pretend devices.
+Live audio comes from one place at a time: a browser streaming PCM over the WebSocket, or the sound card (`capture.js`
+runs `parec`, `arecord`, `ffmpeg` or a custom command that writes 16-bit mono at 22,050 Hz to stdout). A browser that
+is sending wins over the sound card. Spotify (`spotify.js`) works through the same paths: it gives `rt.nowPlaying`
+the Spotify track's beat map and position, dims or pauses, and taps the PCM (`rt.pcmTap`) to learn new songs.
 
-- **app.js**: HTTP routes, static files, WebSocket, PIN lock, OSC and scheduler wiring, first-run discovery.
-- **runtime.js**: chooses the source (song > a remembered song playing in a music app here > live audio > metronome > idle), runs the director at the frame rate,
-  maps each shape's LEDs into its controller's buffer and streams them; device health checks every 10 seconds, and a
-  controller that changes address is found again by name. **latency.js**: the latency meter (sound-to-light delay per
-  device from the audio path, half WLED's HTTP round trip, the frame time and the timing offset; Wi-Fi, dropped-frame,
-  realtime and power warnings).
-- **perf.js**: performance modes: full, or lite on small computers (30 fps, lighter preview and analyser), picked by itself on
-  a Pi Zero or Pi 3 or when the frame loop can't keep up. Song memory's matching runs in slices of a few ms between frames.
-- **store.js**: one JSON settings file, written atomically. **ws.js**: a minimal RFC 6455 WebSocket server.
-  **nowplaying.js**: the track music apps on this computer play (osascript, MPRIS, Windows media controls, optionally
-  the Spotify Web API); a remembered song is followed with its beat map at the app's position. **spotify.js**: Sync with
-  Spotify (see [spotify.md](spotify.md)): the track's position from the local player or the Web API (**spotify-sync.js**:
-  smoothing, seeks, gliding corrections, poll timing), beat maps by Spotify track ID, learning a track by listening
-  (**spotify-learn.js**: stretches heard, lined up with the Spotify position, analysed and merged), Spotify's legacy audio
-  analysis (**spotify-analysis.js**) and the optional shared beat-map service (**beatmap-cloud.js**; the Cloudflare
-  Worker is in `worker/beatmaps`). **capture.js**: sound capture commands. **scheduler.js**: day/time schedules. **osc.js**: OSC over UDP.
+Details: [live analyser](internals/live-analyser.md), [song memory](internals/song-memory.md).
+
+### 2. Signals: `buildSignals(V, t, opts)`
+
+Inside the director, the view becomes the **signals object `S`** every effect reads: beat grid and phase, envelopes of
+the last kick, snare and hi-hat (scaled by the style's punch), the palette, loudness, spectrum, build-up progress,
+seconds to the next drop. With no music (`V` null) the director uses `idleSignals()`, a slow made-up beat so ambient
+effects still move. The fields are listed in [director and effects](internals/director-and-effects.md#the-signals-object-s).
+
+### 3. The director: `director.frame(V, t, extra, wall)`
+
+```mermaid
+flowchart TD
+  F0{"freeze pad?"} -- yes --> F1["repeat the last frame, overlays only"]
+  F0 -- no --> MO["updateMood(): ease the mood palette over 2.5 s"]
+  MO --> V0{"V null?"}
+  V0 -- yes --> V1["manual effect on idle signals, or the ambient effect / ambient plan"]
+  V0 -- no --> TL["timeline cues: build and drop cues change V; colour blocks give the palette"]
+  TL --> CH["choose(): manual effect, else show block at t, else the style pool for this part, switching on bar 1 every N beats"]
+  CH --> SG["S = buildSignals(V, t)"]
+  SG --> R["render the effect; crossfade from the previous one over the style's xfade"]
+  R --> Q["quiet: fade to ambient; pre-drop pause dims; keepAlive floor"]
+  Q --> DF["drop flash in the first 0.7 s of a drop"]
+  V1 --> LZ
+  DF --> LZ["accent layer, then zones: own effect, ambient, own brightness, or off"]
+  LZ --> TC["timeline: flash cues fire once, strobe and blackout cues, brightness keyframes"]
+  TC --> PO["settings.post: sunrise, sleep fade, integrations layer"]
+  PO --> OV["overlays: hold colour, flash, strobe, boost, blackout, identify"]
+  OV --> SF{"safe mode?"}
+  SF -- yes --> LIM["limiter: at most 3 big brightness jumps a second"]
+  SF -- no --> OUT
+  LIM --> OUT["clamp NaN and negatives, keep for freeze, return linear RGB"]
+```
+
+The result is a `Float32Array` of `N * 3` linear RGB values, usually 0 to about 2 (effects add light, so bright
+moments overshoot). `toRGB8()` maps it to bytes with a soft roll-off, `255 * (1 - exp(-1.6 * v * brightness))`, so
+overshoot saturates gently instead of clipping.
+
+### 4. Devices: buffers, power limit, senders
+
+The room layout (`buildLayout(shapes)`) puts every LED of every shape in one array, in shape order
+(`layout.chainStart[i]` is shape *i*'s first LED). `segmentRanges(shapes)` says where each shape's LEDs sit on its
+controller: `from` if given, else right after the previous shape on that controller. Each frame, for each device:
+
+1. Copy each of its shapes' bytes from `col8` into the device's buffer at the shape's range.
+2. **Power limiter**: estimate the current as `size mA + sum(bytes) * mAperLed / 765` (default 60 mA per LED at full
+   white, ~1 mA idle). Above `maxAmps`, scale the whole buffer down to fit; `status.devices[].limited` says so, and
+   `amps` is the smoothed estimate.
+3. `sender.send(buf)`: DDP, E1.31/Art-Net, Hue, Nanoleaf, Govee, OpenRGB or a smart-light sender (see
+   [runtime and outputs](internals/runtime-and-outputs.md)). DMX devices take a different path (`dmxOut`): fixtures
+   turn their points' colours into channel values, a full universe ~40 times a second, always sent while enabled.
+
+When the power is off, black is sent for 600 ms and then nothing (so WLED falls back to its own effects after its
+realtime timeout); camera mapping replaces every buffer with one lit LED.
+
+### 5. Broadcasts
+
+- **Preview**: binary `[1, R, G, B, R, G, B, ...]` of `col8` (all LEDs in layout order) to browsers that asked with
+  `{type: "preview", on: true}`, at 30 fps (15 in lite); a client whose socket buffer holds more than 256 KB is skipped.
+- **Phones**: each phone that joined with `{type: "phone", on: true}` gets `[2, R, G, B, index]`, the average colour of its
+  own slice of the room (weighted towards bright LEDs).
+- **Status**: `{type: "status", ...}` every 250 ms from `core.js`; `{type: "log"}` for each activity message;
+  `{type: "changed", what}` after anything is saved. Formats: [API, WebSocket](api.md#websocket-ws).
+
+## Timing model
+
+Two kinds of clock drive the lights, and the director only ever sees "music time" `t` in seconds.
+
+| Source | Clock `t` | Where it comes from | Latency compensation |
+| --- | --- | --- | --- |
+| Song played in a browser | the song's position | the browser sends `{type: "clock", pos, playing, rate}` every 500 ms and on every play, pause and seek; the server extrapolates `pos + (now - at) * rate` between them | the browser subtracts `outputLatency + baseLatency` before sending, so `pos` is what the speakers play now. Then `syncOffsetMs` is added |
+| Now playing / Spotify | the app's position | `nowplaying.js` (osascript, MPRIS, Windows media controls, Spotify Web API), smoothed by `spotify-sync.js` | `syncOffsetMs` |
+| Song memory lock | position in the stored song | `pos0 + (liveT - t0) * rate`, re-anchored by `matchAt` and `refineByKicks` every second | the live clock plus up to 120 ms of extrapolation (below) |
+| Live audio | the analyser's audio time | `an.t` = samples received / sample rate, minus half an FFT window | `t = an.t + min(0.12, time since the last chunk)`, plus `syncOffsetMs` when `predict` is on |
+| DJ Link, MIDI clock, Link | a beat grid mapped onto the frame's `t` | `djGrid()`, `beats.grid()` | network jitter is smoothed (DJ Link follows beats at 25%; MIDI clock maps the browser's clock with the smallest arrival delay of the last 10 s) |
+| Metronome, idle | wall clock seconds | `performance.now() / 1000` | none |
+
+**Song clock vs live clock.** A song analysed ahead of time knows its future: drops, build-ups and bars come from the
+analysis, so effects can count down to a drop (`S.dropIn`) and the director can black out the planned pause before
+it. Live listening only knows the past; it reacts within about one analysis hop (11.6 ms) plus onset smoothing. With
+`predict` on (default), a live kick that fits the locked beat grid is placed on the grid beat, and the offset is
+applied, so lights land on the beat instead of just after it. Song memory turns a live stream back into a song clock
+once it recognises a remembered song.
+
+**Offsets.** `settings.syncOffsetMs` (-500 to 500, from Settings or the one-tap timing fix in `calibrate.js`) is added to
+the music clock: positive shows the light earlier. It is the only user-facing knob; everything else is measured. The
+[latency meter](internals/runtime-and-outputs.md#health-and-latency) adds up audio-in, analysis (23 ms), half the
+controller's HTTP round trip and the frame time, minus the offset, per device.
+
+**Wall clock.** Overlays (flash, strobe, identify), the photosensitivity limiter, mood easing and the sunrise use
+`wall` (`performance.now() / 1000`), not music time, so a seek never replays a flash or freezes a strobe. The director
+also notices when music time jumps back (a seek, a newly recognised song) and restarts its crossfade and beat counter.
+
+## Where to read next
+
+| Page | What |
+| --- | --- |
+| [internals/engine-analysis.md](internals/engine-analysis.md) | whole-song analysis: STFT, onsets, tempo, bars, build-ups and drops, key, mood, chroma |
+| [internals/live-analyser.md](internals/live-analyser.md) | streaming analysis: drum gating, tempo, song parts, vocals, chroma, fingerprint taps |
+| [internals/song-memory.md](internals/song-memory.md) | fingerprints, recognition, following a song, limits and storage |
+| [internals/director-and-effects.md](internals/director-and-effects.md) | the signals object, the effect contract, pools, styles, custom effects, shows, palettes, safe mode |
+| [internals/runtime-and-outputs.md](internals/runtime-and-outputs.md) | device kinds and senders, rebuilds, health and latency, power limit, mapping, DMX, performance |
+| [internals/data-model.md](internals/data-model.md) | `tempolight.json`: every key with its type and default; secrets kept elsewhere |
+| [internals/web-app.md](internals/web-app.md) | pages, routing, lazy modules, demo mode, service worker |
+| [internals/testing.md](internals/testing.md) | unit tests, fakes, browser tests, firmware tests, bench and smoke |
+| [internals/extending.md](internals/extending.md) | adding a device kind, an integration, an API route, a setting |
+| [internals/security.md](internals/security.md) | PIN lock, tokens, guest areas, Origin check, secrets, rate limits |
+| [api.md](api.md) | every API route and the WebSocket protocol |
+| [protocols.md](protocols.md) | the wire formats the outputs speak |
