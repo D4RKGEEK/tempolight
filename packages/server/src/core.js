@@ -31,7 +31,7 @@ export function createCore({ store, runtime, env }) {
   const effectIds = () => new Set(runtime.effects.list.map(e => e.id));
   const pub = () => {
     const d = data();
-    return { version: env.version, settings: { ...d.settings, mqtt: { ...d.settings.mqtt, password: "", hasPassword: !!d.settings.mqtt?.password } }, show: d.show, devices: d.devices.map(x => x.nanoleaf ? { ...x, nanoleaf: { panels: x.nanoleaf.panels } } : x), room: d.room, scenes: d.scenes,
+    return { version: env.version, settings: { ...d.settings, mqtt: { ...d.settings.mqtt, password: "", hasPassword: !!d.settings.mqtt?.password } }, show: d.show, devices: d.devices.map(x => safeDev(x)), room: d.room, scenes: d.scenes,
       schedules: d.schedules.map(s => ({ ...s, next: nextRun(s, new Date(), d.settings.location)?.toISOString() || null })), locked: locked(),
       effects: runtime.effects.list, styles: Object.fromEntries(Object.entries(runtime.effects.styles).map(([k, v]) => [k, v.name])),
       palettes: Object.keys(runtime.effects.palettes), presets: Object.values(ROOM_PRESETS), captureSources: env.listSources().map(({ id, label }) => ({ id, label })), firstRun: store.firstRun && !d.devices.length };
@@ -68,6 +68,18 @@ export function createCore({ store, runtime, env }) {
     }
     host = String(host || "").trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
     if (!host) throw new HttpError(400, "Enter the controller's IP address, for example 192.168.1.42");
+    if (kind === "hue") { // Philips Hue bridge: pair with the link button, then each colour light is one LED
+      if (!env.huePair) throw new HttpError(400, "Hue needs Tempolight running on your network");
+      if (data().devices.find(d => d.kind === "hue" && d.host === host)) throw new HttpError(400, "That Hue bridge is already added");
+      let user = token, lights;
+      try { user ||= await env.huePair(host); lights = await env.hueLights(host, user); } catch (e) { throw new HttpError(400, e.code === "pair" ? e.message : `Couldn't reach a Hue bridge at ${host} (${e.message})`); }
+      if (!lights.length) throw new HttpError(400, "That Hue bridge has no lights");
+      const dev = { id: env.newId("d"), name: String(name || "Hue lights").slice(0, 60), host, kind: "hue", hue: { user, lights: lights.map(l => l.id), names: lights.map(l => l.name) }, ddpPort: 80, leds: lights.length, enabled: true };
+      data().devices.push(dev);
+      const y = 1 + (data().room.shapes.length % 7) * 1.1, n = lights.length, pts = lights.map((_, i) => [Math.round((2 + (n > 1 ? i / (n - 1) : 0.5) * 12) * 100) / 100, y]);
+      data().room.shapes.push({ type: "points", name: dev.name, count: n, dev: dev.id, rot: 0, start: 0, rev: false, from: null, pts });
+      runtime.rebuild(); runtime.checkDevice(dev); runtime.note(`Added ${dev.name} (Hue, ${n} light${n > 1 ? "s" : ""}). Hue updates about 10 lights a second in total, so it suits calm effects best.`); changed("devices"); return dev;
+    }
     if (kind === "nanoleaf") { // pair (the power button must have been held), read the panel layout, place the panels where they really are
       if (!env.nanoleafPair) throw new HttpError(400, "Nanoleaf needs Tempolight running on your network");
       if (data().devices.find(d => d.kind === "nanoleaf" && d.host === host)) throw new HttpError(400, "That Nanoleaf is already added");
@@ -247,7 +259,7 @@ export function createCore({ store, runtime, env }) {
   route("PATCH", "/api/settings", "admin", async (ctx) => { applySettings(ctx.body); return pub().settings; });
 
   // devices
-  const safeDev = x => x.nanoleaf ? { ...x, nanoleaf: { panels: x.nanoleaf.panels } } : x; // the Nanoleaf token stays on the server
+  const safeDev = x => x.nanoleaf ? { ...x, nanoleaf: { panels: x.nanoleaf.panels } } : x.hue ? { ...x, hue: { lights: x.hue.lights, names: x.hue.names } } : x; // Nanoleaf tokens and Hue user names stay on the server
   route("GET", "/api/devices", null, () => data().devices.map(d => ({ ...safeDev(d), health: runtime.health.get(d.id) || null })));
   route("POST", "/api/devices", "admin", async (ctx) => safeDev(await addDevice(ctx.body)));
   route("PATCH", "/api/devices/:id", "admin", async (ctx, p) => {

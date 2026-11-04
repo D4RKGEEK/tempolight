@@ -57,7 +57,7 @@ designer: it knows where the beat is, which part of the song you're in, and what
 | 🎹 **MIDI, clips, backups** | Play the pads from a MIDI controller, record a 15-second clip to share, back up your whole setup to one file |
 | 🔒 **PIN lock** | Guests at a party can pick effects and use the pads, but can't touch your setup |
 | 👁️ **Photosensitive-safe mode** | No more than three big flashes per second (WCAG 2.3.1) |
-| 🔌 **Integrations** | DDP, E1.31 (sACN) and Art-Net output, Govee lights (beta), OpenRGB (PC lighting), Nanoleaf, HTTP + WebSocket API, OSC (TouchOSC, Companion, lighting desks), WLED audio sync, Home Assistant (MQTT discovery, appears by itself) |
+| 🔌 **Integrations** | DDP, E1.31 (sACN) and Art-Net output, Govee lights (beta), OpenRGB (PC lighting), Nanoleaf, Philips Hue (basic), HTTP + WebSocket API, OSC (TouchOSC, Companion, lighting desks), WLED audio sync, Home Assistant (MQTT discovery, appears by itself) |
 | 📱 **An app on your phone** | Add it to your iPhone or Android home screen; it opens full screen with its own icon. Works offline in the online demo |
 | 🌐 **Online demo** | The whole app in the browser with pretend lights, deployed to Cloudflare on every push |
 

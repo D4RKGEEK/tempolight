@@ -12,7 +12,7 @@ import { buildLayout, createEffects, createDirector, segmentRanges, songView, me
  *   discoverWled, startCapture, listSources, splitCommand, RATE
  */
 export function createRuntime(store, { io, logger = console } = {}) {
-  const { DDPSender, E131Sender, GoveeSender, OpenRGBSender, NanoleafSender, AudioSyncSender, getInfo, setState, setSegments, ipOf, discoverWled, startCapture, listSources, splitCommand, RATE } = io;
+  const { DDPSender, E131Sender, GoveeSender, OpenRGBSender, NanoleafSender, HueSender, AudioSyncSender, getInfo, setState, setSegments, ipOf, discoverWled, startCapture, listSources, splitCommand, RATE } = io;
   const data = () => store.data;
   const log = [], listeners = new Set();
   function note(msg, level = "info") { const e = { t: Date.now(), level, msg }; log.push(e); if (log.length > 200) log.shift(); for (const f of listeners) f(e); if (logger) logger.log(`[tempolight] ${msg}`); }
@@ -40,9 +40,9 @@ export function createRuntime(store, { io, logger = console } = {}) {
       const used = Math.max(0, ...ranges.filter(r => r.dev === d.id).map(r => r.end + 1));
       const size = Math.max(used, 1), ip = ipOf(d.host), port = d.ddpPort || 4048;
       let o = outs.get(d.id);
-      const proto = d.kind === "govee" && GoveeSender ? "govee" : d.kind === "openrgb" && OpenRGBSender ? "openrgb" : d.kind === "nanoleaf" && NanoleafSender ? "nanoleaf" : d.protocol && d.protocol !== "ddp" && E131Sender ? d.protocol : "ddp", key = `${ip}|${port}|${proto}|${d.universe ?? ""}|${d.goveeMode || ""}|${d.leds}|${d.orgbIndex ?? ""}`;
+      const proto = d.kind === "govee" && GoveeSender ? "govee" : d.kind === "openrgb" && OpenRGBSender ? "openrgb" : d.kind === "nanoleaf" && NanoleafSender ? "nanoleaf" : d.kind === "hue" && HueSender ? "hue" : d.protocol && d.protocol !== "ddp" && E131Sender ? d.protocol : "ddp", key = `${ip}|${port}|${proto}|${d.universe ?? ""}|${d.goveeMode || ""}|${d.leds}|${d.orgbIndex ?? ""}`;
       if (!o || o.key !== key) { if (o) o.sender.close();
-        o = { sender: proto === "ddp" ? new DDPSender(ip, port) : proto === "nanoleaf" ? new NanoleafSender(d.host, { token: d.nanoleaf?.token, panels: d.nanoleaf?.panels, port }) : proto === "openrgb" ? new OpenRGBSender(ip, { port, index: d.orgbIndex || 0 }) : proto === "govee" ? new GoveeSender(ip, { mode: d.goveeMode, segments: d.goveeSegments || d.leds, port }) : new E131Sender(ip, { protocol: proto, universe: d.universe }), ip, port, key }; outs.set(d.id, o); }
+        o = { sender: proto === "ddp" ? new DDPSender(ip, port) : proto === "hue" ? new HueSender(d.host, { user: d.hue?.user, lights: d.hue?.lights }) : proto === "nanoleaf" ? new NanoleafSender(d.host, { token: d.nanoleaf?.token, panels: d.nanoleaf?.panels, port }) : proto === "openrgb" ? new OpenRGBSender(ip, { port, index: d.orgbIndex || 0 }) : proto === "govee" ? new GoveeSender(ip, { mode: d.goveeMode, segments: d.goveeSegments || d.leds, port }) : new E131Sender(ip, { protocol: proto, universe: d.universe }), ip, port, key }; outs.set(d.id, o); }
       o.size = size; o.buf = new Uint8Array(size * 3); o.used = used;
     }
     col8 = new Uint8Array(L.N * 3);
@@ -252,6 +252,8 @@ export function createRuntime(store, { io, logger = console } = {}) {
   async function checkDevice(d) {
     const h = health.get(d.id) || {}; health.set(d.id, h);
     if (d.virtual) return Object.assign(h, { online: true, version: "virtual", ledsReported: d.leds, lastSeen: Date.now() });
+    if (d.kind === "hue") { try { const l = await io.hueLights(d.host, d.hue?.user); return Object.assign(h, { online: true, version: "Hue bridge", ledsReported: l.length, lastSeen: Date.now(), error: null }); }
+      catch (e) { if (h.online !== false) note(`${d.name} is not answering (${d.host})`, "warn"); return Object.assign(h, { online: false, error: e.message }); } }
     if (d.kind === "nanoleaf") { try { const info = await io.nanoleafInfo(d.host, d.nanoleaf?.token); return Object.assign(h, { online: true, version: `Nanoleaf ${info.model}`.trim(), ledsReported: info.panels.length, lastSeen: Date.now(), error: null }); }
       catch (e) { if (h.online !== false) note(`${d.name} is not answering (${d.host})`, "warn"); return Object.assign(h, { online: false, error: e.message }); } }
     if (d.kind === "openrgb") { try { const list = await io.listOpenRGB(ipOf(d.host), d.ddpPort || 6742), c = list.find(x => x.index === (d.orgbIndex || 0));
@@ -288,7 +290,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
   async function setPower(on) {
     data().show.power = !!on; store.save(); if (!on) rt.powerOffAt = performance.now();
     note(on ? "Lights on" : "Lights off");
-    await Promise.all(data().devices.filter(d => d.enabled && !d.virtual).map(d => d.kind === "openrgb" ? null : d.kind === "govee" || d.kind === "nanoleaf" ? outs.get(d.id)?.sender.power?.(!!on) : setState(d.host, { on: !!on }, 2000).catch(() => {})));
+    await Promise.all(data().devices.filter(d => d.enabled && !d.virtual).map(d => d.kind === "openrgb" ? null : d.kind === "govee" || d.kind === "nanoleaf" || d.kind === "hue" ? outs.get(d.id)?.sender.power?.(!!on) : setState(d.host, { on: !!on }, 2000).catch(() => {})));
   }
 
   // ---------------------------------------------------------------- live controls (pads, OSC, API)

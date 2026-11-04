@@ -385,3 +385,24 @@ test("camera mapping: one LED at a time, then back to the show", async () => {
     assert.deepEqual(s.app.runtime.layoutInfo().n ?? s.app.runtime.layout.N, 3);
   } finally { await s.done(); wled.close(); }
 });
+
+test("Philips Hue: pairs with the link button, each light gets its colour (rate-limited)", async () => {
+  const http = await import("node:http"), { rgbToXy } = await import("../../outputs/src/hue.js"); let pressed = false; const puts = [];
+  const xy = rgbToXy(255, 0, 0); assert.ok(xy.xy[0] > 0.6 && xy.bri === 254, "red is red"); assert.equal(rgbToXy(0, 0, 0).bri, 0);
+  const bridge = http.createServer((q, r) => { let b = ""; q.on("data", c => b += c); q.on("end", () => { const j = o => { r.writeHead(200, { "content-type": "application/json" }); r.end(JSON.stringify(o)); };
+    if (q.method === "POST" && q.url === "/api") return j(pressed ? [{ success: { username: "USER1" } }] : [{ error: { type: 101, description: "link button not pressed" } }]);
+    if (q.url === "/api/USER1/lights") return j({ 1: { name: "Sofa", state: { on: true, bri: 100, xy: [0.3, 0.3] } }, 2: { name: "Shelf", state: { on: true, bri: 100, xy: [0.3, 0.3] } }, 3: { name: "Plug", state: { on: true } } });
+    const m = /^\/api\/USER1\/lights\/(\d+)\/state$/.exec(q.url); if (m && q.method === "PUT") { puts.push({ id: m[1], t: Date.now(), ...JSON.parse(b) }); return j([{ success: {} }]); }
+    j([{ error: { type: 1, description: "unauthorized user" } }]); }); });
+  await new Promise(r => bridge.listen(0, "127.0.0.1", r));
+  const s = await setup(), host = `127.0.0.1:${bridge.address().port}`;
+  try {
+    const no = await s.call("POST", "/api/devices", { host, kind: "hue" }); assert.equal(no.status, 400); assert.match(no.body.error, /link button/);
+    pressed = true; const add = await s.call("POST", "/api/devices", { host, kind: "hue" }); assert.equal(add.status, 200); assert.equal(add.body.leds, 2, "plugs without colour are left out");
+    assert.equal(add.body.hue.user, undefined, "the bridge user name isn't sent to browsers");
+    await s.call("PATCH", "/api/show", { effect: "solar" });
+    assert.ok(await until(() => puts.some(p => p.id === "1") && puts.some(p => p.id === "2")), "both lights get colours");
+    await sleep(1000); const t0 = Date.now() - 1000, recent = puts.filter(p => p.t >= t0); assert.ok(recent.length <= 12, `at most about 10 commands a second (${recent.length})`);
+    assert.ok(puts.every(p => p.on === false || (p.xy && p.bri > 0)));
+  } finally { await s.done(); await new Promise(r => bridge.close(r)); }
+});

@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Philips Hue (basic): pair the bridge with its link button; each colour light becomes one light in the room. Hue's bridge takes about 10 commands a second, so Tempolight sends the light that changed most first; best for calm effects. Hue Entertainment streaming isn't supported (it needs DTLS, which Node.js doesn't include).
+
 - Camera LED mapping (Room → Map with the camera): Tempolight lights the LEDs one at a time, a phone or laptop camera finds each one, and the strip's real shape becomes a room shape. Mirrors and reflections are skipped; missed points are filled in.
 
 - Auto-generated shows: every remembered song gets a timeline of effects, one block per section (build-ups get build effects, drops the big ones), shown under the song on the Music page. Tap a block to change its effect, or ask for a new show. Played or recognised songs follow their show in automatic mode.
