@@ -250,3 +250,31 @@ body.demo .side { top: 0; padding-top: 0; }
 .mapview { position: relative; background: #000; border-radius: 8px; overflow: hidden; aspect-ratio: 4 / 3; max-height: 60vh; }
 .mapview video, .mapview canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: fill; }
 .mapview .empty { position: absolute; inset: 0; display: grid; place-items: center; color: #ccc; padding: 16px; text-align: center; }
+
+/* How Tempolight hears your music (hearing.js) and the status line on Home and Music (hearline.js) */
+.hearline { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 13px; color: var(--muted); min-height: 1.2em; }
+.hearline.ok > span:first-child { color: var(--ok); font-weight: 600; }
+.hearline.bad > span:first-child { color: var(--err); font-weight: 600; }
+.hearline small { flex-basis: 100%; font-size: 12.5px; color: var(--muted); }
+.hearline .hear-fix { font-weight: 600; }
+.hearline.big { font-size: 15px; padding: 10px 12px; border-radius: 8px; background: var(--panel-2); border: 1px solid var(--line); }
+.hearline.big.ok { background: var(--ok-bg); border-color: transparent; } .hearline.big.bad { background: var(--err-bg); border-color: transparent; }
+.hear-choices { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.hear-choice { position: relative; text-align: left; display: flex; flex-direction: column; gap: 4px; padding: 14px 14px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--text); font: inherit; cursor: pointer; min-width: 0; }
+.hear-choice b { font-size: 15px; } .hear-choice small { font-size: 12.5px; color: var(--muted); line-height: 1.4; }
+.hear-choice[aria-checked="true"] { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--accent-bg); }
+.hear-choice .badge { position: absolute; top: 10px; right: 10px; }
+.hear-choice.chosen b::after { content: " ✓"; color: var(--ok); }
+.hear-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.hear-steps li { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.hear-steps li > div { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.hear-steps li small { font-size: 12.5px; color: var(--muted); overflow-wrap: anywhere; }
+.hear-steps .mk { flex: none; width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; background: var(--panel-2); color: var(--faint); }
+.hear-steps li.ok .mk { background: var(--ok-bg); color: var(--ok); } .hear-steps li.no .mk { background: var(--err-bg); color: var(--err); } .hear-steps li.maybe .mk { background: var(--warn-bg); color: var(--warn); }
+.hear-steps .sr, .hear .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+.hear-midi summary { cursor: pointer; font-size: 13px; color: var(--accent); }
+.hear-midi ol { margin: 6px 0 4px 18px; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.hear code { font-size: 12px; background: var(--panel-2); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+#hear.flash { animation: hearflash 1.6s ease-out 1; }
+@keyframes hearflash { 0% { box-shadow: 0 0 0 3px var(--accent); } 100% { box-shadow: 0 0 0 0 transparent; } }
+@media (max-width: 860px) { .hear-choices { grid-template-columns: minmax(0, 1fr); } .hear-choice .badge { position: static; align-self: flex-start; } }

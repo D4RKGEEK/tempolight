@@ -25,6 +25,21 @@ export function listSources() {
   return out;
 }
 
+/**
+ * A source for one named input, as the guided "How should Tempolight hear your music?" panel picks it (hearing.js):
+ *   avf:<name>    macOS input by name through ffmpeg (BlackHole 2ch); a name, unlike an index, survives a new device
+ *   dshow:<name>  Windows input by name through ffmpeg (Stereo Mix, CABLE Output); a 20 ms buffer instead of 500 ms
+ *   pulse:<name>  a PulseAudio / PipeWire source (the monitor of a sink), with parec, else ffmpeg
+ * null for any other id (the fixed ones are in listSources).
+ */
+export function sourceFor(id) {
+  const m = /^(avf|dshow|pulse):(.+)$/.exec(String(id || "")); if (!m) return null;
+  const name = m[2], raw = ["-f", "s16le", "-ac", "1", "-ar", String(RATE), "-"], q = ["-hide_banner", "-loglevel", "error"];
+  if (m[1] === "avf") return { id, label: `${name} (macOS input)`, cmd: ["ffmpeg", ...q, "-fflags", "nobuffer", "-f", "avfoundation", "-i", `:${name}`, ...raw] };
+  if (m[1] === "dshow") return { id, label: `${name} (Windows input)`, cmd: ["ffmpeg", ...q, "-fflags", "nobuffer", "-f", "dshow", "-audio_buffer_size", "20", "-i", `audio=${name}`, ...raw] };
+  return { id, label: `${name} (PulseAudio / PipeWire)`, cmd: has("parec") ? ["parec", `--device=${name}`, "--format=s16le", `--rate=${RATE}`, "--channels=1", "--raw", "--latency-msec=20"] : ["ffmpeg", ...q, "-f", "pulse", "-i", name, ...raw] };
+}
+
 /** A command that plays a file in real time as a source (for testing a setup without a sound card). */
 export function fileSource(file) {
   return { id: "file", label: `File: ${file}`, cmd: ["ffmpeg", "-hide_banner", "-loglevel", "error", "-re", "-i", file, "-f", "s16le", "-ac", "1", "-ar", String(RATE), "-"] };

@@ -18,6 +18,7 @@ import { startHomeKit } from "./homekit/index.js";
 import { createUpdater } from "./update.js";
 import { startProLink } from "./prolink.js";
 import { startNowPlaying } from "./nowplaying.js";
+import { startHearing } from "./hearing.js";
 import { startSpotify } from "./spotify.js";
 import { startLink } from "./ableton-link.js";
 import { applyEnvSettings } from "./env-settings.js";
@@ -82,10 +83,14 @@ export async function createApp(opts) {
   const wifi = opts.wifi !== undefined ? opts.wifi : process.platform === "linux" && process.env.TEMPOLIGHT_WIFI_SETUP ? wifiClient(process.env.TEMPOLIGHT_WIFI_SETUP) : null;
   let closeApp = async () => {};
   const updater = opts.updater || createUpdater(ROOT, { exit: async (code, then) => { try { await closeApp(); } catch {} try { then?.(); } catch {} process.exit(code); } }); // then: after the port is free (start the new copy)
-  const runtime = createRuntime(store, { io, logger: opts.logger === undefined ? console : opts.logger, now: opts.now, host: opts.host, cpuUsage: () => process.cpuUsage() }); // opts.host: pretend computer (tests)
+  // pretend sound inputs (tests): opts.hearing.commandFor(id) is the command for a named input (a sine wave instead of
+  // BlackHole through ffmpeg; null: the real one, false: none), opts.hearing.listSources the fixed ones
+  const cmdFor = opts.hearing?.commandFor, rio = cmdFor || opts.hearing?.listSources ? { ...io, ...(opts.hearing.listSources ? { listSources: opts.hearing.listSources } : {}),
+    sourceFor: id => { const cmd = cmdFor?.(id); return cmd ? { id, label: `${String(id).replace(/^\w+:/, "")} (pretend)`, cmd } : cmd === false ? null : io.sourceFor(id); } } : io;
+  const runtime = createRuntime(store, { io: rio, logger: opts.logger === undefined ? console : opts.logger, now: opts.now, host: opts.host, cpuUsage: () => process.cpuUsage() }); // opts.host: pretend computer (tests)
   const core = createCore({ store, runtime, env: {
     version: pkg.version, newId, hashPin, checkPin, randomToken: () => crypto.randomBytes(16).toString("hex"),
-    getInfo: io.getInfo, discoverWled: io.discoverWled, discoverGovee: io.discoverGovee, listOpenRGB: io.listOpenRGB, nanoleafPair: io.nanoleafPair, nanoleafInfo: io.nanoleafInfo, panelPoints: io.panelPoints, huePair: io.huePair, hueLights: io.hueLights, huePairKey: io.huePairKey, hueAreas: io.hueEntertainmentAreas, lights: io.LIGHT_KINDS, discoverLights: io.discoverLights, ipOf: io.ipOf, listSources: io.listSources, startOsc,
+    getInfo: io.getInfo, discoverWled: io.discoverWled, discoverGovee: io.discoverGovee, listOpenRGB: io.listOpenRGB, nanoleafPair: io.nanoleafPair, nanoleafInfo: io.nanoleafInfo, panelPoints: io.panelPoints, huePair: io.huePair, hueLights: io.hueLights, huePairKey: io.huePairKey, hueAreas: io.hueEntertainmentAreas, lights: io.LIGHT_KINDS, discoverLights: io.discoverLights, ipOf: io.ipOf, listSources: rio.listSources, startOsc,
     uptime: () => process.uptime(), now: opts.now, discover: opts.discover,
     update: updater, startProLink, startLink, wifi,
     quit: embedded?.sea ? async () => { try { await closeApp(); } catch {} process.exit(0); } : null, // the one-file app has no terminal to stop it from
@@ -94,6 +99,7 @@ export async function createApp(opts) {
   const hk = startHomeKit({ core, store, runtime, version: pkg.version, dataDir: opts.dataDir, ...opts.homekit }); // Apple Home; opts.homekit: {mdns, host, port} (tests)
   const integ = startIntegrations({ core, store, runtime, root: ROOT, ...opts.integrations }); // OBS, games, Twitch, Discord, Stream Deck (opts.integrations: pretend services in tests)
   const np = startNowPlaying({ core, store, runtime, dataDir: opts.dataDir, port: () => server.address()?.port || 8080, ...opts.nowPlaying }); // opts.nowPlaying: test runner/platform
+  const hearing = startHearing({ core, store, runtime, ...(opts.hearing || {}) }); // how Tempolight hears music, and the sound output (opts.hearing: pretend computer)
   const spotify = startSpotify({ core, store, runtime, nowPlaying: np, dataDir: opts.dataDir, fetch: opts.nowPlaying?.fetch, ...opts.spotify }); // Sync with Spotify (opts.spotify: test clock)
 
   // ---------------------------------------------------------------- static files
@@ -145,9 +151,9 @@ export async function createApp(opts) {
 
   closeApp = () => api.close();
   const api = {
-    server, runtime, store, core, discovery: core.discovery, nowPlaying: np, homekit: hk, spotify, integrations: integ,
+    server, runtime, store, core, discovery: core.discovery, nowPlaying: np, hearing, homekit: hk, spotify, integrations: integ,
     listen(port, host) { return new Promise((res, rej) => { server.once("error", rej); server.listen(port, host, () => res(server.address().port)); }); },
-    async close() { ha.close(); spotify.close(); np.close(); await hk.close(); integ.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
+    async close() { ha.close(); spotify.close(); np.close(); hearing.close(); await hk.close(); integ.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
   };
   return api;
 }

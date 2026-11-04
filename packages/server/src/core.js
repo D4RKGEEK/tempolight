@@ -130,13 +130,25 @@ export function createCore({ store, runtime, env }) {
     else if (a.type === "brightness") { data().settings.brightness = Math.max(0, Math.min(1, Number(a.value))); changed("settings"); }
     runtime.note(`Schedule ran: ${s.name}`);
   }
+  function setOutputOffset(s, out, ms) {
+    const key = String(out.key).slice(0, 160); s.syncOffsets ||= {};
+    s.syncOffsets[key] = { ms, name: String(out.name || s.syncOffsets[key]?.name || key).slice(0, 120), bt: !!(out.bluetooth ?? out.bt) };
+    const keys = Object.keys(s.syncOffsets); if (keys.length > 30) delete s.syncOffsets[keys[0]]; // the oldest first
+  }
   function applySettings(b) {
     const s = data().settings, before = JSON.stringify({ fps: s.fps, perf: s.performance, cap: s.capture, osc: s.osc, djlink: s.djlink });
     const num = (v, lo, hi) => Math.max(lo, Math.min(hi, Number(v)));
     if (b.brightness !== undefined) s.brightness = num(b.brightness, 0, 1);
     if (b.fps !== undefined) s.fps = Math.round(num(b.fps, 10, 120));
     if (b.performance !== undefined) { if (!["auto", "full", "lite"].includes(b.performance)) throw new HttpError(400, "Performance is auto, full or lite"); s.performance = b.performance; }
-    if (b.syncOffsetMs !== undefined) s.syncOffsetMs = Math.round(num(b.syncOffsetMs, -500, 500));
+    // light timing: for the sound output playing now when it is known (or the one named in `output`), else the general one
+    if (b.syncOffsetMs !== undefined) { const ms = Math.round(num(b.syncOffsetMs, -500, 500)); if (!Number.isFinite(ms)) throw new HttpError(400, "Light timing is a number of milliseconds");
+      const out = b.output === undefined ? runtime.rt?.output : b.output ? { key: String(b.output), ...(runtime.rt?.output?.key === String(b.output) ? runtime.rt.output : {}) } : null;
+      if (out && out.key) setOutputOffset(s, out, ms); else s.syncOffsetMs = ms; }
+    if (b.syncOffsets && typeof b.syncOffsets === "object") for (const [k, v] of Object.entries(b.syncOffsets)) { // {key: ms}, or {key: null} to forget one
+      if (v === null) { if (s.syncOffsets) delete s.syncOffsets[k]; } else if (Number.isFinite(Number(v))) setOutputOffset(s, { key: k, ...(s.syncOffsets?.[k] || {}) }, Math.round(num(v, -500, 500))); }
+    if (b.hearing) { const m = b.hearing.method; if (m !== undefined && !["", "computer", "mic", "pi"].includes(m)) throw new HttpError(400, "How Tempolight hears music: computer, mic, pi or nothing");
+      s.hearing = { ...(s.hearing || {}), ...(m !== undefined ? { method: m } : {}) }; }
     if (b.idleBrightness !== undefined) s.idleBrightness = num(b.idleBrightness, 0, 1);
     if (b.idleAfterSec !== undefined) s.idleAfterSec = num(b.idleAfterSec, 1, 600);
     for (const k of ["safe", "predict", "dropFlash", "audioSync", "autoDiscover", "setupDone"]) if (b[k] !== undefined) s[k] = !!b[k];

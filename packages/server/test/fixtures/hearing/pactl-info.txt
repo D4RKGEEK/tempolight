@@ -1,0 +1,15 @@
+Server String: /run/user/1000/pulse/native
+Library Protocol Version: 35
+Server Protocol Version: 35
+Is Local: yes
+Client Index: 112
+Tile Size: 65472
+User Name: pi
+Host Name: raspberrypi
+Server Name: PulseAudio (on PipeWire 1.2.7)
+Server Version: 15.0.0
+Default Sample Specification: float32le 2ch 48000Hz
+Default Channel Map: front-left,front-right
+Default Sink: bluez_output.B8_F6_53_00_00_02.1
+Default Source: alsa_input.usb-C-Media_USB_Audio_Device-00.mono-fallback
+Cookie: 2a4b:9c1d

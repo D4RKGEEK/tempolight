@@ -19,7 +19,7 @@ function why(i, v) {
   if (i.mode === "learning") return `Learning this song… ${lr?.pct ?? 0}%. Tempolight listens while it plays and saves its beat map; next time it follows it exactly, without listening.`;
   if (lr?.state === "analysing") return "Learning this song… working out its beats and drops.";
   if (i.map && i.map.cover < 100) return `Part of this song is learned (${i.map.cover}%). Where it isn't, the lights react to what Tempolight hears, and it learns the rest.`;
-  return v?.settings.learn === false ? "Not learned yet, and learning is off: the lights react to what Tempolight hears, if it listens." : "Not learned yet. Listen live (Listen live, or Listen on the server) while it plays: Tempolight learns its beat map, and next time the lights follow it exactly.";
+  return v?.settings.learn === false ? "Not learned yet, and learning is off: the lights react to what Tempolight hears, if it listens." : "Not learned yet. Tempolight learns it while it plays if it can hear it: see How should Tempolight hear your music? at the top of this page. Next time the lights follow its beat map exactly.";
 }
 const srcName = { learned: "learned", shared: "shared map", "spotify-analysis": "Spotify analysis", file: "played here" };
 
@@ -50,7 +50,7 @@ export function mount(el, { demo = false } = {}) {
       <li>Spotify on <b>this computer</b> works with no set-up (the app must be open; macOS asks once to allow it).</li>
       <li>For Spotify on your phone or speakers: open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>, create an app (Web API), and add this redirect URI: <span class="mono" id="sp-redir" style="word-break:break-all"></span></li>
       <li>Paste the app's Client ID in <b>Now playing on this computer → Spotify on other devices</b> below, then press Connect Spotify. <button class="btn sm" id="sp-goconnect" type="button">Go to Connect Spotify</button></li>
-      <li>Spotify gives apps made after 27 November 2024 no audio analysis, so Tempolight learns each song the first time it plays while it listens (share this computer's sound or use a microphone in Listen live, or Listen on the server). <a href="${GUIDE}" target="_blank" rel="noopener">More in the guide</a>.</li></ol></details>
+      <li>Spotify gives apps made after 27 November 2024 no audio analysis, so Tempolight learns each song the first time it plays while it listens (set that up in <b>How should Tempolight hear your music?</b> at the top of this page: on a Mac, BlackHole). <a href="${GUIDE}" target="_blank" rel="noopener">More in the guide</a>.</li></ol></details>
   </div>`, "span-12");
   const admin = unlocked();
   const fill = () => { if (!view || !$("#sp-on")) return; const s = view.settings;

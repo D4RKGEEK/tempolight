@@ -3,7 +3,7 @@
 // Starts two pretend WLED controllers and a Tempolight server, then clicks through every page like a user:
 // add devices, lay out the room, play a song, listen to a microphone, live pads, effects, scenes, schedules, lock.
 import { createRequire } from "node:module";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -318,7 +318,7 @@ await step("integrations: a game on, its config file, a Try button; the OBS brow
   await until(() => o.evaluate(() => { const c = document.querySelector("#stage canvas"), d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data; let s = 0; for (let i = 0; i < d.length; i += 4 * 97) s += d[i] + d[i + 1] + d[i + 2]; return s > 0; }), 6000, "the browser source draws nothing");
   await o.close();
 });
-await step("setup wizard on a fresh start, phone-sized: lights, room, timing, test song, PIN, done", async () => {
+await step("setup wizard on a fresh start, phone-sized: lights, room, hearing, timing, test song, PIN, done", async () => {
   const dir2 = mkdtempSync(path.join(os.tmpdir(), "tempolight-e2e-wz-")), app2 = await createApp({ dataDir: dir2, discover: false, logger: null });
   const base2 = `http://127.0.0.1:${await app2.listen(0, "127.0.0.1")}`, c2 = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ["microphone"] }), p = await c2.newPage();
   p.on("pageerror", e => errors.push("wizard: " + e.message)); p.on("console", m => { if (m.type() === "error") errors.push("wizard: " + m.text()); });
@@ -331,18 +331,62 @@ await step("setup wizard on a fresh start, phone-sized: lights, room, timing, te
     await until(async () => await dot() === 1, 3000, "didn't move on to the room"); await p.waitForSelector("[data-wzp] canvas"); await wide("step 2");
     ok((await p.$$("[data-wzp] canvas")).length >= 8, "no preset pictures");
     await p.click('[data-wzp="tv"]'); await until(() => app2.store.data.room.shapes.some(sh => /TV/i.test(sh.name)), 4000, "room preset not used");
-    await p.click("#wz-next"); ok(await dot() === 2, "not on the timing step"); ok(await p.isVisible("#wz-cal"), "no timing button");
-    await p.click("#wz-back"); ok(await dot() === 1, "Back doesn't go back"); await p.click("#wz-next"); await p.click("#wz-skip");
-    ok(await dot() === 3, "Skip didn't skip the timing"); await p.waitForSelector("#wz-stage canvas"); await p.click("#wz-play");
+    await p.click("#wz-next"); ok(await dot() === 2, "not on the hearing step"); await p.waitForSelector('#wz-hear [data-hc="computer"]'); ok(await p.isVisible('#wz-hear [data-hc="mic"]') && await p.isVisible('#wz-hear [data-hc="pi"]'), "the three ways to hear music aren't shown");
+    await until(async () => (await p.textContent("#wz-hear #hr-detail")).trim().length > 20, 5000, "nothing about this computer"); await wide("hearing step");
+    await p.click("#wz-next"); ok(await dot() === 3, "not on the timing step"); ok(await p.isVisible("#wz-cal"), "no timing button");
+    await p.click("#wz-back"); ok(await dot() === 2, "Back doesn't go back"); await p.click("#wz-next"); await p.click("#wz-skip");
+    ok(await dot() === 4, "Skip didn't skip the timing"); await p.waitForSelector("#wz-stage canvas"); await p.click("#wz-play");
     await until(() => app2.runtime.status().source === "song", 60000, "the test song never played"); await wide("step 4");
     await until(async () => /BPM/.test(await p.textContent("#wz-songmeta")), 5000, "no tempo shown");
-    await p.click("#wz-next"); ok(await dot() === 4, "not on the last step"); await p.fill("#wz-pin", "4321"); await p.click("#wz-lock");
+    await p.click("#wz-next"); ok(await dot() === 5, "not on the last step"); await p.fill("#wz-pin", "4321"); await p.click("#wz-lock");
     await until(() => !!app2.store.data.lock, 3000, "PIN not set"); await p.click("#wz-next");
     await until(async () => !(await p.$("#wizard")), 3000, "wizard didn't close"); ok(app2.store.data.settings.setupDone === true, "setupDone not set");
     await p.reload(); await p.waitForSelector("#page .panel"); await sleep(500); ok(!(await p.$("#wizard")), "wizard came back after finishing");
     await p.goto(base2 + "/#/settings"); await p.waitForSelector("#s-wizard"); await p.click("#s-wizard"); await p.waitForSelector("#wizard");
     ok(/ready/.test(await p.textContent("#wz-have")), "the added lights aren't shown when running setup again"); await p.click("#wz-close");
   } finally { await c2.close(); await app2.close(); rmSync(dir2, { recursive: true, force: true }); }
+});
+await step("music: How should Tempolight hear your music? on a pretend Mac: BlackHole checklist, turn on, it hears, status line and Fix, Bluetooth timing, microphone", async () => {
+  // a Mac that has no BlackHole yet, then has it with a Multi-Output Device and a Bluetooth speaker (fake ffmpeg and system_profiler);
+  // the "BlackHole 2ch" input is a Node process writing a sine wave
+  const fx = f => readFileSync(path.join(root, "packages/server/test/fixtures/hearing", f), "utf8"), mac = { avf: "none", profile: "speakers" };
+  const runner = { async run(cmd) { if (cmd === "ffmpeg") return { code: 1, stdout: "", stderr: fx(`ffmpeg-avf-${mac.avf}.txt`) }; if (cmd === "system_profiler") return { code: 0, stdout: fx(`system-profiler-${mac.profile}.json`), stderr: "" }; return { code: 127, stdout: "", stderr: "", missing: true }; } };
+  const sine = [process.execPath, "-e", 'const n=1103,b=Buffer.alloc(n*2);let t=0;process.stdout.on("error",()=>process.exit(0));setInterval(()=>{for(let i=0;i<n;i++,t++)b.writeInt16LE(Math.round(9000*Math.sin(t*0.0627)),i*2);process.stdout.write(b)},50)'];
+  const dir3 = mkdtempSync(path.join(os.tmpdir(), "tempolight-e2e-hear-")), app3 = await createApp({ dataDir: dir3, discover: false, logger: null, homekit: { mdns: false, host: "127.0.0.1" },
+    hearing: { platform: "darwin", runner, interval: 300, listSources: () => [], commandFor: id => /BlackHole 2ch/.test(id) ? sine : false } });
+  app3.store.data.settings.setupDone = true; // (no wizard over the page)
+  const base3 = `http://127.0.0.1:${await app3.listen(0, "127.0.0.1")}`, p = await ctx.newPage(), st3 = () => app3.runtime.status();
+  p.on("pageerror", e => errors.push("hearing: " + e.message)); p.on("console", m => { if (m.type() === "error") errors.push("hearing: " + m.text()); });
+  const li = id => p.getAttribute(`#hr-steps li[data-step="${id}"]`, "class");
+  try {
+    await p.goto(base3 + "/#/music/hear"); await p.waitForSelector('#hear [data-hc="computer"]');
+    ok(await p.textContent("#hear h2") === "How should Tempolight hear your music?", "no panel title"); ok(await p.isVisible('[data-rec="computer"]'), "This computer's sound isn't recommended on a Mac");
+    ok(await p.$eval("#hear", el => el.getBoundingClientRect().top < 200), "the panel isn't at the top of the Music page");
+    await until(async () => await li("blackhole") === "no", 5000, "BlackHole not shown as missing"); ok(/brew install blackhole-2ch/.test(await p.textContent("#hr-steps")), "no install command");
+    ok(/existential\.audio\/blackhole/.test(await p.innerHTML("#hr-steps")), "no download link"); ok(await p.isDisabled("#hr-use"), "can turn it on without BlackHole");
+    ok(/Multi-Output Device/.test(await p.textContent(".hear-midi")) && /Drift Correction/.test(await p.textContent(".hear-midi")), "no Audio MIDI Setup steps");
+    mac.avf = "blackhole"; mac.profile = "multi-bt"; await p.click("#hr-check");
+    await until(async () => await li("blackhole") === "ok", 5000, "BlackHole not ticked"); ok(await li("output") === "maybe", "the Multi-Output Device isn't 'confirm by listening'");
+    await p.click("#hr-use"); await until(() => app3.store.data.settings.capture.enabled && app3.store.data.settings.capture.source === "avf:BlackHole 2ch", 4000, "server capture not turned on from BlackHole");
+    await until(async () => await li("hears") === "ok" && await li("output") === "ok", 8000, "Tempolight hears it isn't ticked");
+    await until(async () => /Hearing .*✓/.test(await p.textContent("#hr-line")), 4000, "no 'Hearing ✓' line"); ok(await p.isVisible("text=Listening to BlackHole 2ch on the server"), "not shown as on");
+    await until(() => st3().hearing.output?.bluetooth === true, 4000, "the Bluetooth speaker isn't seen");
+    await until(() => p.isVisible("#hr-bt"), 3000, "no Bluetooth timing prompt"); ok(/Bluetooth speakers play late/.test(await p.textContent("#hr-bt")), "prompt text"); ok(await p.isVisible("#m-btcal"), "no prompt in Timing");
+    await p.evaluate(() => fetch("/api/settings", { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ syncOffsetMs: -180 }) }));
+    await until(async () => !(await p.isVisible("#hr-bt")), 4000, "the prompt stays after the speaker got its timing"); await until(async () => /JBL Flip 5/.test(await p.textContent("#m-offrows")), 4000, "the speaker's timing isn't listed");
+    ok(app3.store.data.settings.syncOffsets["mac:Multi-Output Device + JBL Flip 5"].ms === -180 && app3.store.data.settings.syncOffsetMs === 0, "timing not kept per speaker");
+    app3.runtime.rt.nowPlaying = { info: () => ({ app: "Spotify", title: "One More Time", artist: "Daft Punk", playing: true, pos: 10, dur: 320 }), follow: () => null, memId: null }; // Spotify plays a song Tempolight doesn't know
+    await until(async () => /Hearing Spotify ✓ · One More Time/.test(await p.textContent("#hr-line")), 4000, "no 'Hearing Spotify ✓ · song' line");
+    await p.click("#hr-off"); await until(() => !app3.store.data.settings.capture.enabled, 3000, "capture not stopped");
+    await p.goto(base3 + "/#/home"); await p.waitForSelector("#h-hear");
+    await until(async () => /Can't hear anything/.test(await p.textContent("#h-hear")), 6000, "Home doesn't say it can't hear anything"); await p.click("#h-hear .hear-fix");
+    await until(() => p.isVisible('#hear [data-hc="computer"]'), 4000, "Fix doesn't open the panel"); ok(/#\/music\/hear$/.test(p.url()), "Fix goes elsewhere: " + p.url());
+    await p.click('[data-hc="mic"]'); await p.waitForSelector("#hr-mic"); ok(/keep this tab open/i.test(await p.textContent("#hr-detail")), "doesn't say the tab must stay open"); await p.click("#hr-mic");
+    await until(() => app3.store.data.settings.hearing.method === "mic", 3000, "the microphone isn't remembered on the server"); ok(await p.evaluate(() => localStorage.getItem("tl.hear")) === "mic", "not remembered in this browser");
+    await until(() => st3().hearing.via === "browser", 5000, "the microphone isn't heard");
+    await p.evaluate(async () => { const { app } = await import("/app.js"); app.audio.stopLive(); }); await until(() => st3().hearing.via === null, 4000, "still hearing after stopping");
+    await p.reload(); await p.waitForSelector("#hear"); await until(() => st3().hearing.via === "browser", 8000, "the microphone doesn't start by itself while Spotify plays an unlearned song");
+  } finally { await p.close(); await app3.close(); rmSync(dir3, { recursive: true, force: true }); }
 });
 await step("no errors in the browser console", async () => ok(!errors.length, errors.slice(0, 5).join(" | ")));
 
