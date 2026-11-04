@@ -105,6 +105,11 @@ export function integrationsPage(el) {
       </div>
       <div class="row"><button class="btn primary" id="dc-save" type="button">Save</button><button class="btn" id="dc-test" type="button" ${dc.hasWebhook ? "" : "disabled"}>Send a test message</button>${dc.hasWebhook ? `<button class="btn sm" id="dc-clr" type="button">Remove webhook</button>` : ""}</div>
       <p class="faint" style="margin:0;font-size:12.5px">Commands from Discord (a bot) aren't there yet: see <a href="${DOCS}integrations.md#discord" target="_blank" rel="noopener">the plan</a>.</p>
+    </div>`)}
+
+    ${panel("Docs site", "The API reference's Try it panel", "", `<div class="pb stack">
+      <label class="check"><input type="checkbox" id="docs-try" ${I.docs?.tryIt ? "checked" : ""}> Let the docs site try API calls</label>
+      <p class="faint" style="margin:0;font-size:12.5px">Browsers may not call Tempolight from other websites. Turn this on to send requests from the <a href="https://tempolight.pages.dev/docs/api-reference/" target="_blank" rel="noopener">API reference</a> (${(I.docs?.origins || []).map(esc).join(", ")}) to this Tempolight; the PIN lock still applies. Turn it off again when you're done.</p>
     </div>`)}`;
     bind(); update();
   }
@@ -182,6 +187,7 @@ export function integrationsPage(el) {
     // Discord
     $("#dc-save").onclick = () => act(() => api("PATCH", "/api/integrations/discord", { ...($("#dc-url").value.trim() ? { webhook: $("#dc-url").value.trim() } : {}), username: $("#dc-name").value, nowPlaying: $("#dc-np").checked, scenes: $("#dc-sc").checked, twitch: $("#dc-tw").checked }), "Discord settings saved").then(load).catch(() => {});
     $("#dc-test").onclick = () => act(() => api("POST", "/api/integrations/discord/test"), "Sent: look in your Discord channel").catch(() => {});
+    $("#docs-try").onchange = e => act(() => api("PATCH", "/api/integrations/docs", { tryIt: e.target.checked }), e.target.checked ? "The docs site may try API calls" : "The docs site can no longer try API calls").then(load).catch(() => {});
     if ($("#dc-clr")) $("#dc-clr").onclick = () => act(() => api("PATCH", "/api/integrations/discord", { webhook: "" }), "Webhook removed").then(load).catch(() => {});
   }
 

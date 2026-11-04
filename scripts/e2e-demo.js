@@ -93,6 +93,15 @@ await step("works offline once installed", async () => {
   await page.evaluate(() => { location.hash = "#/sleep"; }); await page.waitForSelector("#w-on", { timeout: 8000 });
   await page.evaluate(() => { location.hash = "#/home"; }); await page.waitForSelector("#page .panel", { timeout: 8000 }); await ctx.setOffline(false);
 });
+await step("the docs at /docs/ open as the docs, not the app (the service worker leaves them alone)", async () => {
+  ok(await page.isVisible('#demo-bar a[href="/docs/"]'), "no docs link in the demo banner");
+  ok(await page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration())?.active), "service worker not active");
+  for (const p of ["/docs/", "/docs/guides/first-run/"]) {
+    await page.goto(base + p); await page.waitForSelector(".article", { timeout: 8000 });
+    ok(!(await page.$("#page")), `${p} opened the app`); ok(/docs|documentation/i.test(await page.title()), `${p}: title ${await page.title()}`);
+  }
+  await page.goto(base + "/"); await page.waitForSelector("#page .panel");
+});
 await step("iPhone size: no sideways scrolling", async () => {
   const phone = await browser.newContext({ ...require("playwright").devices["iPhone 13"] }); const p = await phone.newPage();
   await p.goto(base + "/"); await p.waitForSelector("#page .panel");

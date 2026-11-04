@@ -131,7 +131,14 @@ export async function createApp(opts) {
       if (await np.handleHttp(req, res, url)) return; // Spotify's sign-in redirect (an HTML page)
       if (await integ.handleHttp(req, res, url)) return; // the Stream Deck plugin's download
       if (url.pathname.startsWith("/api/")) {
-        if (req.method !== "GET" && foreignOrigin(req)) return send(403, { error: "Requests from other websites aren't allowed" }); // stops cross-site requests changing things
+        // the docs site's "Try it" panel, when an admin allowed it (Integrations → Docs site): CORS for that origin only
+        const docs = integ.docsOrigin(req.headers.origin);
+        if (docs) { res.setHeader("access-control-allow-origin", req.headers.origin); res.setHeader("vary", "Origin"); }
+        if (req.method === "OPTIONS" && docs) { // the browser's preflight
+          res.writeHead(204, { "access-control-allow-methods": "GET, POST, PUT, PATCH, DELETE", "access-control-allow-headers": "content-type, x-tempolight-token, x-tempolight-key",
+            "access-control-max-age": "600", ...(req.headers["access-control-request-private-network"] ? { "access-control-allow-private-network": "true" } : {}) });
+          return res.end(); }
+        if (req.method !== "GET" && foreignOrigin(req) && !docs) return send(403, { error: "Requests from other websites aren't allowed" }); // stops cross-site requests changing things
         const body = req.method === "GET" ? {} : await readBody(req);
         return send(200, await core.handle(req.method, url.pathname, { headers: req.headers, query: Object.fromEntries(url.searchParams), body }));
       }

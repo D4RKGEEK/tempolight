@@ -3,7 +3,7 @@
   "info": {
     "title": "Tempolight API",
     "version": "0.2.0",
-    "description": "Everything the web app does goes through this API, so anything else can do it too: scripts, Home Assistant, a Stream Deck, a lighting desk. It is plain HTTP with JSON bodies on the same port as the web app (8080 by default).\n\n**Auth.** Without a PIN lock every call works for everyone who can reach the port. With one, admin calls need an unlock token from `POST /api/unlock`, sent as the `x-tempolight-token` header (or `?token=`); guest-area calls work without one when that area is allowed in Settings.\n\n**Origin rule.** Calls that change something are refused with 403 when a browser sends them from another website. Scripts and apps send no `Origin` and aren't affected.\n\n**Errors** answer `{\"error\": \"<a sentence for people>\"}` with a 4xx or 5xx status.\n\n**Live data** (status 4 times a second, LED previews, browser audio, the song clock) goes over one WebSocket at `/ws`, which OpenAPI can't describe: see the [WebSocket](/websocket) page.",
+    "description": "Everything the web app does goes through this API, so anything else can do it too: scripts, Home Assistant, a Stream Deck, a lighting desk. It is plain HTTP with JSON bodies on the same port as the web app (8080 by default).\n\n**Auth.** Without a PIN lock every call works for everyone who can reach the port. With one, admin calls need an unlock token from `POST /api/unlock`, sent as the `x-tempolight-token` header (or `?token=`); guest-area calls work without one when that area is allowed in Settings.\n\n**Origin rule.** Calls that change something are refused with 403 when a browser sends them from another website. Scripts and apps send no `Origin` and aren't affected. To send requests from the Try it panel of the docs site, an admin turns on **Integrations → Docs site → Let the docs site try API calls** (`PATCH /api/integrations/docs`).\n\n**Errors** answer `{\"error\": \"<a sentence for people>\"}` with a 4xx or 5xx status.\n\n**Live data** (status 4 times a second, LED previews, browser audio, the song clock) goes over one WebSocket at `/ws`, which OpenAPI can't describe: see the [WebSocket](/websocket) page.",
     "license": {
       "name": "MIT",
       "identifier": "MIT"
@@ -2607,6 +2607,100 @@
                 },
                 "example": {
                   "error": "Discord doesn't know this webhook"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ],
+        "x-tempolight-area": "admin",
+        "x-tempolight-source": "packages/server/src/integrations/index.js"
+      }
+    },
+    "/api/integrations/docs": {
+      "patch": {
+        "tags": [
+          "Integrations"
+        ],
+        "summary": "Let the docs site try API calls",
+        "description": "Off by default: browsers may not call the API from other websites. On, the docs site (https://tempolight.pages.dev/docs) may send requests here from its API reference, with CORS for that address only; the PIN lock still applies.\n\n**Access:** admin. Needs an unlock token (`x-tempolight-token`) while a PIN lock is set; without a lock, anyone can call it.",
+        "operationId": "patchIntegrationsDocs",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "tryIt": {
+                    "type": "boolean",
+                    "description": "Allow the docs site's Try it panel."
+                  }
+                }
+              },
+              "example": {
+                "tryIt": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "tryIt": {
+                      "type": "boolean"
+                    },
+                    "origins": {
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      },
+                      "description": "The docs site's addresses that may call the API."
+                    }
+                  }
+                },
+                "example": {
+                  "tryIt": true,
+                  "origins": [
+                    "https://tempolight.pages.dev",
+                    "http://localhost:3000",
+                    "http://127.0.0.1:3000"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body isn't valid JSON, or a value is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "tryIt is true or false"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Locked, or not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Settings are locked. Unlock with the PIN in Settings."
                 }
               }
             }
@@ -12167,6 +12261,21 @@
             "type": "object",
             "additionalProperties": true,
             "description": "Discord settings (`hasWebhook`, the webhook masked) and `status`."
+          },
+          "docs": {
+            "type": "object",
+            "properties": {
+              "tryIt": {
+                "type": "boolean",
+                "description": "The docs site may try API calls."
+              },
+              "origins": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
           },
           "streamdeck": {
             "type": "object",

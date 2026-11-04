@@ -43,7 +43,33 @@ node scripts/build-mintlify.js --check --mermaid   # also compiles every Mermaid
 points at a page (and a heading on it), every image exists, nothing MDX can't read is left outside code, and
 `docs.json` has the shape of [Mintlify's schema](https://mintlify.com/docs.json).
 
-## Preview it
+## The docs website at tempolight.pages.dev/docs
+
+The same `mintlify/` project is also built into a static website without Mintlify, by
+`node scripts/build-docs-site.js` (no dependencies; the renderer is in `scripts/docs-site/`). Cloudflare Pages runs
+it as part of `node scripts/build-site.js`, so every push to `main` publishes it at
+[tempolight.pages.dev/docs](https://tempolight.pages.dev/docs/) next to the online demo.
+
+- **Pages**: the tabs, groups, icons, colours and logos come from `docs.json`; the MDX pages are rendered by a small
+  Markdown + MDX renderer that knows the Mintlify components the pages use (cards and columns, callouts, steps, tabs,
+  code groups, accordions, frames, fields). Mermaid diagrams are drawn in the browser by the official Mermaid build
+  from jsDelivr (a pinned version), in the site's dark or light colours.
+- **API reference**: `openapi.json` becomes an overview, a page per tag and a page per operation (parameters, request
+  body and responses with their fields, code samples in curl, JavaScript and Python, the example responses) under
+  `/docs/api-reference/`. Each operation has a **Try it** panel that sends the request from the browser. Tempolight
+  refuses requests from other websites, so it works only after turning on **Integrations → Docs site → Let the docs
+  site try API calls** (admin only, off by default; see [Security](internals/security.md#the-origin-check-cross-site-requests));
+  the panel says so and shows the same request as a curl command.
+- **Search**: a JSON index of every page, heading and API operation, searched in the browser (Ctrl+K, ⌘K or `/`).
+- **Icons**: Lucide's (ISC licence), only the ones used, copied into `scripts/docs-site/icons.js` by
+  `node scripts/docs-site/gen-icons.js <a clone of github.com/lucide-icons/lucide>`; run it after using a new icon.
+
+```sh
+node scripts/build-docs-site.js --serve   # build and serve it at http://localhost:3000/docs/
+node scripts/e2e-docs.js                  # the browser test CI runs (needs Playwright)
+```
+
+## Preview it on Mintlify
 
 With Node.js 20 or later:
 

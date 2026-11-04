@@ -591,6 +591,36 @@ test("other websites can't change things: cross-site API calls and WebSocket con
   } finally { await s.done(); }
 });
 
+test("the docs site's Try it panel: refused until an admin allows it, then CORS for the docs origin only", async () => {
+  const s = await setup(), http = await import("node:http"), DOCS = "https://tempolight.pages.dev";
+  try {
+    const raw = (method, p, headers, body) => new Promise((res, rej) => { const r = http.request({ host: "127.0.0.1", port: s.port, method, path: p, headers: { "content-type": "application/json", ...headers } }, x => { let d = ""; x.on("data", c => d += c); x.on("end", () => res({ status: x.statusCode, headers: x.headers, body: d })); }); r.on("error", rej); if (body) r.write(body); r.end(); });
+    const pre = (origin = DOCS) => raw("OPTIONS", "/api/power", { origin, "access-control-request-method": "POST", "access-control-request-headers": "content-type,x-tempolight-token", "access-control-request-private-network": "true" });
+    // off by default: no CORS, writes refused, no preflight answer
+    assert.equal((await s.call("GET", "/api/integrations")).body.docs.tryIt, false);
+    let r = await raw("POST", "/api/power", { origin: DOCS }, '{"on":false}'); assert.equal(r.status, 403); assert.equal(r.headers["access-control-allow-origin"], undefined);
+    r = await raw("GET", "/api/status", { origin: DOCS }); assert.equal(r.status, 200); assert.equal(r.headers["access-control-allow-origin"], undefined, "reading from the docs is not allowed either");
+    assert.notEqual((await pre()).status, 204);
+    // an admin turns it on
+    assert.equal((await s.call("PATCH", "/api/integrations/docs", { tryIt: "yes" })).status, 400);
+    assert.equal((await s.call("PATCH", "/api/integrations/docs", { tryIt: true })).body.tryIt, true);
+    r = await pre(); assert.equal(r.status, 204); assert.equal(r.headers["access-control-allow-origin"], DOCS); assert.match(r.headers["access-control-allow-methods"], /PATCH/);
+    assert.match(r.headers["access-control-allow-headers"], /x-tempolight-token/); assert.equal(r.headers["access-control-allow-private-network"], "true");
+    r = await raw("POST", "/api/power", { origin: DOCS }, '{"on":false}'); assert.equal(r.status, 200); assert.equal(r.headers["access-control-allow-origin"], DOCS); assert.equal(s.app.store.data.show.power, false);
+    assert.equal((await raw("GET", "/api/status", { origin: "http://localhost:3000" })).headers["access-control-allow-origin"], "http://localhost:3000", "the docs dev server");
+    // other websites are still refused
+    r = await raw("POST", "/api/power", { origin: "https://evil.example" }, '{"on":true}'); assert.equal(r.status, 403); assert.equal(r.headers["access-control-allow-origin"], undefined);
+    assert.notEqual((await pre("https://evil.example")).status, 204);
+    assert.equal(s.app.store.data.show.power, false);
+    // the PIN lock still applies to the docs site
+    await s.call("POST", "/api/lock", { pin: "1234" });
+    assert.equal((await raw("PATCH", "/api/settings", { origin: DOCS }, '{"fps":30}')).status, 403);
+    const tok = (await s.call("POST", "/api/unlock", { pin: "1234" })).body.token;
+    assert.equal((await s.call("PATCH", "/api/integrations/docs", { tryIt: false }, { "x-tempolight-token": tok })).body.tryIt, false);
+    assert.equal((await raw("POST", "/api/power", { origin: DOCS, "x-tempolight-token": tok }, '{"on":true}')).status, 403, "off again");
+  } finally { await s.done(); }
+});
+
 // song memory, harder cases: play remembered songs "live" through the capture source, half a second of audio at a time
 async function playLive(s, x, gain = 0.9, each = () => {}) {
   const chunk = 11025; for (let i = 0; i < x.length; i += chunk) { const pcm = new Int16Array(chunk); for (let k = 0; k < chunk; k++) pcm[k] = Math.round(Math.max(-1, Math.min(1, (x[i + k] || 0) * gain)) * 32767);

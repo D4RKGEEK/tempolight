@@ -7,6 +7,7 @@ import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync, readdirSync } f
 import { execSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { buildDocs } from "./build-docs-site.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), ".."), out = path.join(root, "dist/site");
 const pkg = JSON.parse(readFileSync(path.join(root, "package.json"), "utf8"));
@@ -35,6 +36,9 @@ follow("packages/server/src/core.js"); follow("packages/server/src/runtime.js");
 copy("apps/playground/demo.mp3", "demo.mp3");
 mkdirSync(path.join(out, "playground"), { recursive: true }); copy("apps/playground/index.html", "playground/index.html");
 mkdirSync(path.join(out, "about"), { recursive: true }); copy("docs/index.html", "about/index.html"); copy("docs/images", "about/images");
+
+// the documentation website at /docs/ (made from mintlify/, see scripts/build-docs-site.js)
+buildDocs({ out: path.join(out, "docs") });
 
 // demo mode on, and the version for the About box
 const idx = path.join(out, "index.html");

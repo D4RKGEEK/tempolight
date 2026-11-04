@@ -265,7 +265,7 @@ export const schemas = {
     paired: bool(), setupCode: str(), setupUri: str("`X-HM://…`, for the QR code."), pairings: arr(obj({ id: str(), admin: bool() })), accessories: int() },
     { example: { enabled: true, state: "ready", error: null, mdnsError: null, port: 51826, name: "Tempolight 3F2A", deviceId: "3F:2A:10:C4:9B:E1", paired: false, setupCode: "123-45-678", setupUri: "X-HM://0023ISYWY3F2A", pairings: [], accessories: 7 } }),
   Integrations: obj({ obs: loose("OBS settings and `status`."), games: { type: "object", additionalProperties: ref("Game"), description: "By game id (`cs2`, `dota2`)." }, twitch: loose("Twitch settings, sign-in and `status`."),
-    discord: loose("Discord settings (`hasWebhook`, the webhook masked) and `status`."), streamdeck: obj({ available: bool(), download: str(), releases: str(), uuid: str() }), runtime: loose("Node.js version and WebSocket client.") }),
+    discord: loose("Discord settings (`hasWebhook`, the webhook masked) and `status`."), docs: obj({ tryIt: bool("The docs site may try API calls."), origins: arr(str()) }), streamdeck: obj({ available: bool(), download: str(), releases: str(), uuid: str() }), runtime: loose("Node.js version and WebSocket client.") }),
   Game: obj({ enabled: bool(), token: str(), intensity: unit(), mode: en(["blend", "takeover"]), name: str(), file: str(), folder: str(), status: loose("Live game status.") },
     { description: "One game's settings; also has its target and event switches." }),
   Update: obj({ method: en(["git", "docker", "npm", "binary", "manual", "demo"]), current: str(), behind: int(), ahead: int(), changes: arr({ description: "A commit." }), dirty: bool(), canUpdate: bool(), message: str() },

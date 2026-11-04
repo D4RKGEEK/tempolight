@@ -54,6 +54,8 @@
     "test:browser": "node scripts/e2e-browser.js",
     "site": "node scripts/build-site.js",
     "test:demo": "node scripts/e2e-demo.js",
+    "docs:site": "node scripts/build-docs-site.js --serve",
+    "test:docs": "node scripts/e2e-docs.js",
     "bundle": "node scripts/bundle.js",
     "build:sea": "node scripts/build-sea.js --smoke",
     "smoke": "node scripts/smoke.js node packages/server/src/index.js",

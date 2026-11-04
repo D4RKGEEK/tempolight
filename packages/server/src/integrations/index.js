@@ -24,6 +24,9 @@ import { packFolder } from "./zip.js";
 export const PLUGIN_UUID = "io.github.d4rkgeek.tempolight";
 export const PLUGIN_DIR = `integrations/streamdeck/${PLUGIN_UUID}.sdPlugin`;
 const RELEASES = "https://github.com/D4RKGEEK/tempolight/releases";
+// the docs site's "Try it" panel (mintlify/openapi.json rendered by scripts/build-docs-site.js) may call /api/* from these
+// pages once an admin turns it on (Integrations → Docs site); off by default, so other websites stay refused
+export const DOCS_ORIGINS = ["https://tempolight.pages.dev", "http://localhost:3000", "http://127.0.0.1:3000"];
 const REACTIONS = ["none", "flash", "color", "strobe", "scene", "effect", "drop"];
 
 export const INTEGRATION_DEFAULTS = () => ({
@@ -34,6 +37,7 @@ export const INTEGRATION_DEFAULTS = () => ({
     events: { follow: { type: "flash", color: "#9146ff" }, subscribe: { type: "color", color: "#ffd000", seconds: 6 }, resub: { type: "color", color: "#ffd000", seconds: 6 },
       gift: { type: "color", color: "#ff3fa4", seconds: 8 }, raid: { type: "strobe", seconds: 3 }, cheer: { type: "flash", color: "#00e5ff", minBits: 1 } } },
   discord: DISCORD_DEFAULTS(),
+  docs: { tryIt: false }, // let the docs site's API reference send requests here (CORS for DOCS_ORIGINS)
 });
 
 const TARGET = /^(all|off|zone:.{1,40}|dev:.{1,40})$/s;
@@ -206,6 +210,7 @@ export function startIntegrations({ core, store, runtime, root, open = openWebSo
         auth: t.auth ? { login: t.auth.login, scopes: t.auth.scopes } : null, login: login ? { userCode: login.userCode, uri: login.uri, expiresAt: login.expiresAt, error: login.error } : null,
         eventsub: sub ? sub.status() : null, lastEvent, scopes: SCOPES, commands: COMMANDS },
       discord: { hasWebhook: !!d.webhook, webhook: maskWebhook(d.webhook), nowPlaying: d.nowPlaying, scenes: d.scenes, twitch: d.twitch, username: d.username, status: discord.status() },
+      docs: { tryIt: !!c.docs.tryIt, origins: DOCS_ORIGINS },
       streamdeck: { available: existsSync(path.join(root, PLUGIN_DIR)), download: "/api/integrations/streamdeck/plugin", releases: RELEASES, uuid: PLUGIN_UUID },
       runtime: { node: process.version, websocket: typeof globalThis.WebSocket === "function" ? "built-in" : "tiny" },
     };
@@ -300,6 +305,9 @@ export function startIntegrations({ core, store, runtime, root, open = openWebSo
   R("DELETE", "/api/integrations/twitch/login", "admin", wrap(() => { if (login) clearTimeout(login.timer); login = null; tw().auth = null; save(); startSub(); note("Twitch: signed out"); return view().twitch; }));
   R("POST", "/api/integrations/twitch/test", "admin", wrap(ctx => { const k = String(ctx.body?.kind || ""); const r = tw().events[k]; if (!r) throw bad("kind is follow, subscribe, resub, gift, raid or cheer"); react({ ...r, target: tw().target }, "Twitch test"); return { ok: true }; }));
   R("PATCH", "/api/integrations/discord", "admin", wrap(ctx => { patchDiscord(ctx.body || {}); return view().discord; }));
+  R("PATCH", "/api/integrations/docs", "admin", wrap(ctx => { const b = ctx.body || {};
+    if (b.tryIt !== undefined) { if (typeof b.tryIt !== "boolean") throw bad("tryIt is true or false"); C().docs.tryIt = b.tryIt; save(); note(b.tryIt ? "The docs site may now try API calls here" : "The docs site can no longer try API calls"); }
+    return view().docs; }));
   R("POST", "/api/integrations/discord/test", "admin", wrap(async () => discord.test(`✅ Tempolight is connected${nowPlayingText() ? `. Now playing: **${nowPlayingText()}**` : ""}`)));
 
   /** The plugin's download: a file, not JSON. True when it handled the request. */
@@ -314,7 +322,9 @@ export function startIntegrations({ core, store, runtime, root, open = openWebSo
   function restart() { obsKey = ""; chatKey = ""; subKey = ""; C(); startObs(); startChat(); startSub(); }
   const unChange = core.onChange?.(w => { if (w === "all") restart(); }); void unChange;
   startObs(); startChat(); startSub();
-  return { handleHttp, view, games, react, layers, discord, get obs() { return obs; }, get chat() { return chat; }, get eventsub() { return sub; },
+  /** Is this Origin the docs site, and may it call the API (the "Try it" panel)? */
+  const docsOrigin = origin => !!origin && C().docs.tryIt === true && DOCS_ORIGINS.includes(String(origin).toLowerCase());
+  return { handleHttp, docsOrigin, view, games, react, layers, discord, get obs() { return obs; }, get chat() { return chat; }, get eventsub() { return sub; },
     close() { obs?.close(); chat?.close(); sub?.close(); discord.close(); clearInterval(npTimer); clearTimeout(strobeTimer); clearTimeout(tellTimer); if (login) clearTimeout(login.timer); if (typeof unScene === "function") unScene();
       if (D().settings.post === post) D().settings.post = prevPost; } };
 }

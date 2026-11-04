@@ -38,6 +38,8 @@ jobs:
       - run: NODE_PATH=$(npm root -g) node scripts/e2e-browser.js
       - name: Online demo (as Cloudflare serves it)
         run: node scripts/build-site.js && NODE_PATH=$(npm root -g) node scripts/e2e-demo.js
+      - name: Docs website (tempolight.pages.dev/docs)
+        run: NODE_PATH=$(npm root -g) node scripts/e2e-docs.js
 
   docs:
     # links, anchors and images in README.md and docs/ (fast; the Docs workflow also compiles the Mermaid diagrams),

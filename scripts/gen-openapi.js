@@ -85,7 +85,7 @@ export function build(routes = collectRoutes()) {
       description: [
         "Everything the web app does goes through this API, so anything else can do it too: scripts, Home Assistant, a Stream Deck, a lighting desk. It is plain HTTP with JSON bodies on the same port as the web app (8080 by default).",
         "**Auth.** Without a PIN lock every call works for everyone who can reach the port. With one, admin calls need an unlock token from `POST /api/unlock`, sent as the `x-tempolight-token` header (or `?token=`); guest-area calls work without one when that area is allowed in Settings.",
-        "**Origin rule.** Calls that change something are refused with 403 when a browser sends them from another website. Scripts and apps send no `Origin` and aren't affected.",
+        "**Origin rule.** Calls that change something are refused with 403 when a browser sends them from another website. Scripts and apps send no `Origin` and aren't affected. To send requests from the Try it panel of the docs site, an admin turns on **Integrations → Docs site → Let the docs site try API calls** (`PATCH /api/integrations/docs`).",
         "**Errors** answer `{\"error\": \"<a sentence for people>\"}` with a 4xx or 5xx status.",
         `**Live data** (status 4 times a second, LED previews, browser audio, the song clock) goes over one WebSocket at \`/ws\`, which OpenAPI can't describe: see the [WebSocket](${WS_PAGE}) page.`,
       ].join("\n\n"),
