@@ -16,6 +16,7 @@ export const DEFAULTS = () => ({
     requests: true, // guests can request songs from their phones (/request)
     shows: true, // remembered songs play their show timeline (auto-generated, editable) in automatic mode
     songMemory: true, // remember analysed songs and recognise them when they play again while listening live
+    moodColours: true, // with the "auto" palette, colours follow the music's mood (key, brightness, energy)
   },
   show: { power: true, mode: "auto", effect: "shock", style: "auto", palette: "auto", everyBeats: 8, speed: 1, params: {}, layer: null },
   devices: [],

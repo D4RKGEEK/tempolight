@@ -3,6 +3,7 @@
 // samples from a sound card, ffmpeg or a browser, and tests feed it synthetic songs.
 import { gridAt } from "./signals.js";
 import { FingerprintTap } from "./memory.js";
+import { ChromaTap, keyOf, moodOf } from "./tonal.js";
 
 const NF = 1024, HOP = 256;
 const EDGES = (() => { const e = []; for (let i = 0; i <= 24; i++) e.push(40 * Math.pow(10000 / 40, i / 24)); return e; })();
@@ -19,12 +20,13 @@ export class LiveAnalyser {
     this.cosT = new Float32Array(NF / 2); this.sinT = new Float32Array(NF / 2);
     for (let i = 0; i < NF / 2; i++) { this.cosT[i] = Math.cos(-2 * Math.PI * i / NF); this.sinT[i] = Math.sin(-2 * Math.PI * i / NF); }
     this.ring = new Float32Array(NF); this.ringPos = 0; this.filled = 0; this.sinceHop = 0; this.decAcc = 0; this.decN = 0;
-    this.wave = new Float32Array(256); this.tap = new FingerprintTap();
+    this.wave = new Float32Array(256); this.tap = new FingerprintTap(); this.ctap = new ChromaTap(this.sr);
     this.reset();
   }
 
   reset() {
-    this.samples = 0; this.t = 0; this.hasPrev = false; if (this.tap) this.tap.reset();
+    this.samples = 0; this.t = 0; this.hasPrev = false; if (this.tap) this.tap.reset(); if (this.ctap) this.ctap.reset();
+    this.keyAcc = new Float64Array(12); this.keyN = 0; this.keyCount = 0; this.keyEst = null; this.keyCand = null; this.brightS = null; this.mood = null; this.lastMoodT = -9;
     this.hist = { k: [], s: [], h: [] }; this.lowHist = []; this.votes = []; this.last = { k: -9, s: -9, h: -9 };
     this.kicks = []; this.snares = []; this.hats = []; this.onsets = []; this.pulseN = 0;
     this.bpm = 0; this.cand = 0; this.candN = 0; this.phase = 0; this.phaseSet = false; this.lastEst = -9;
@@ -42,6 +44,7 @@ export class LiveAnalyser {
     for (let i = 0; i < chunk.length; i++) {
       let v = chunk[i] * k;
       if (this.dec > 1) { this.decAcc += v; if (++this.decN < this.dec) continue; v = this.decAcc / this.dec; this.decAcc = 0; this.decN = 0; }
+      this.ctap.push(v); // chroma, for the key, the mood and song memory
       this.ring[this.ringPos] = v; this.ringPos = (this.ringPos + 1) & (NF - 1); this.samples++;
       if (this.filled < NF) this.filled++;
       if (++this.sinceHop >= HOP && this.filled >= NF) { this.sinceHop = 0; this.hop(); }
@@ -107,6 +110,7 @@ export class LiveAnalyser {
     if (t - this.lastEst > 0.5) { this.lastEst = t; this.estimateTempo(t); }
     this.sections(t, dt);
     if (t - this.lastStyleT > 2) { this.lastStyleT = t; this.estimateStyle(t); }
+    if (t - this.lastMoodT > 2) { this.lastMoodT = t; this.estimateMood(t); }
   }
 
   // Is someone singing? A voice is a clear tone in the 150-1000 Hz range whose pitch wanders (vibrato, melody),
@@ -203,6 +207,28 @@ export class LiveAnalyser {
     this.features = { hatRate, snareRate, kickFrac, dyn, bpm };
   }
 
+  // Key and mood, re-estimated every 2 s and slow to change: the key from chroma gathered over the last ~40 s (a new
+  // key must win twice in a row), the mood eased over ~15 s. Both null until there is enough to go on.
+  estimateMood(t) {
+    const c = this.ctap, fresh = Math.min(c.frames.length, c.count - this.keyCount); this.keyCount = c.count;
+    const decay = Math.exp(-2 / 40); for (let k = 0; k < 12; k++) this.keyAcc[k] *= decay; this.keyN *= decay;
+    for (let i = c.frames.length - fresh; i < c.frames.length; i++) { const f = c.frames[i]; let s = 0; for (let k = 0; k < 12; k++) { this.keyAcc[k] += f[k]; s += f[k]; } if (s > 0) this.keyN++; }
+    if (c.lastBright != null && this.state !== "silent") this.brightS = this.brightS == null ? c.lastBright : this.brightS + (c.lastBright - this.brightS) * 0.15;
+    const k = this.keyN > 60 ? keyOf(this.keyAcc) : null; // at least ~6 s of notes
+    if (k) { const same = this.keyEst && this.keyEst.key === k.key && this.keyEst.mode === k.mode;
+      if (same || !this.keyEst || (this.keyCand && this.keyCand.key === k.key && this.keyCand.mode === k.mode)) { this.keyEst = k; this.keyCand = null; } else this.keyCand = k;
+      if (same) this.keyEst = k; }
+    const f = this.features; if (!f || !this.keyEst || this.state === "silent") return;
+    const span = Math.min(30, t), target = moodOf({ majorness: this.keyEst.majorness, confidence: this.keyEst.confidence, bright: this.brightS ?? 0.5,
+      onsetRate: (this.kicks.length + this.snares.length) / Math.max(1, span), bpm: f.bpm, hatRate: f.hatRate, kickFrac: f.kickFrac });
+    const a = this.mood ? 1 - Math.exp(-2 / 15) : 1, m = this.mood || target;
+    this.mood = { valence: Math.round((m.valence + (target.valence - m.valence) * a) * 100) / 100, energy: Math.round((m.energy + (target.energy - m.energy) * a) * 100) / 100 };
+  }
+  /** No steady drums lately (a ballad, a piano piece): the live tempo is a guess. */
+  drumless() { return this.kicks.filter(x => this.t - x < 15).length < 6; }
+  /** What song memory's recognise()/matchAt() want besides the loudness fingerprint: the live tempo, chroma, drumless. */
+  memoryQuery() { return { bpm: this.bpm || undefined, chroma: this.ctap.window(), drumless: this.drumless() }; }
+
   /** Beat grid at audio time t. */
   grid(t) {
     if (!this.bpm) return { has: false, P: 0.5, phase: 0, idx: 0, beatInBar: 0, env: 0, barPhase: 0, beatT: -9 };
@@ -222,7 +248,8 @@ export class LiveAnalyser {
     const V = { g, bpm: this.bpm, style: this.style || "party", loud, level: loud < 0.4 ? "low" : loud < 0.75 ? "mid" : "peak",
       state: this.state, buildP: this.state === "build" ? Math.min(1, (t - this.buildStart) / 7) : 0, dropT: this.dropT, nextDrop: null,
       kick, snare: this.snares.length ? this.snares[this.snares.length - 1] : -9, hat: this.hats.length ? this.hats[this.hats.length - 1] : -9,
-      pulses, snares, pulseN: this.pulseN, vocal: this.vocal, quietFor: this.state === "silent" ? t - this.stateT : 0, live: true };
+      pulses, snares, pulseN: this.pulseN, vocal: this.vocal, quietFor: this.state === "silent" ? t - this.stateT : 0, live: true,
+      key: this.keyEst ? this.keyEst.key : null, mode: this.keyEst ? this.keyEst.mode : null, keyConf: this.keyEst ? this.keyEst.confidence : 0, mood: this.mood };
     if (o.predict && g.has && t - kick < 2) { V.kick = g.beatT; V.pulses = [g.beatT, g.beatT - g.P]; V.pulseN = g.idx; }
     return V;
   }

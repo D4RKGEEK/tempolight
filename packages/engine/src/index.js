@@ -5,7 +5,8 @@ export { buildLayout, exampleRoom, segmentRanges, outline, samplePath, STAGE_W, 
 export { createEffects, createLetterbox } from "./effects.js";
 export { songView, metronomeView, buildSignals, gridAt } from "./signals.js";
 export { LiveAnalyser } from "./live.js";
-export { memoryEntry, memoryAnalysis, recognise, matchAt, refineByKicks, fingerprint, FingerprintTap } from "./memory.js";
+export { memoryEntry, memoryAnalysis, recognise, matchAt, refineByKicks, fingerprint, FingerprintTap, drumlessEntry, chromaMatch } from "./memory.js";
+export { ChromaTap, keyOf, moodOf, moodName, moodPalette, hearsLabel, packChroma, unpackChroma } from "./tonal.js";
 export { createDirector, idleSignals } from "./director.js";
 export { planShow, showAt } from "./show.js";
 export { ROOM_PRESETS, buildPreset } from "./presets.js";

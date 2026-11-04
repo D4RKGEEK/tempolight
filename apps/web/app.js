@@ -209,8 +209,8 @@ function musicPage(el) {
       <button class="btn danger" id="m-stop" type="button" hidden>Stop listening</button>
       <p class="faint" style="font-size:12.5px">Your browser will ask what to share. For computer sound in Chrome or Edge, choose the screen or tab and turn on “Share audio”. Audio stays on your network.</p>
       <div class="callout err" id="m-err" hidden></div></div>`, "span-4")}
-    ${panel("What Tempolight hears", `<span id="m-src"></span>`, "", `<div class="pb stack"><div class="spectrum" id="m-spec">${"<i></i>".repeat(24)}</div>
-      <div class="kv"><div><span>Tempo</span><b id="m-bpm">–</b></div><div><span>Part</span><b id="m-part">–</b></div><div><span>Style</span><b id="m-style">–</b></div><div><span>Singing</span><b id="m-voc" title="An estimate from the sound: a clear tone whose pitch moves like a voice">–</b></div></div>
+    ${panel("What Tempolight hears", `<span id="m-src"></span>`, `<label class="check" title="With Automatic colours, the lights take colours from the music's mood"><input type="checkbox" id="m-moodc" ${s.moodColours !== false ? "checked" : ""}> Mood colours</label>`, `<div class="pb stack"><div class="spectrum" id="m-spec">${"<i></i>".repeat(24)}</div>
+      <div class="kv"><div><span>Tempo</span><b id="m-bpm">–</b></div><div><span>Part</span><b id="m-part">–</b></div><div><span>Style</span><b id="m-style">–</b></div><div><span>Singing</span><b id="m-voc" title="An estimate from the sound: a clear tone whose pitch moves like a voice">–</b></div><div style="grid-column: span 2"><span>Key · mood</span><b id="m-key" title="The key from which notes sound most; the mood from major or minor, brightness, drums and tempo">–</b></div></div>
       <div class="row"><button class="btn" id="m-tap" type="button">Tap the beat</button><span class="faint" style="font-size:12.5px">Tap 4 times on the beat to fix the tempo and line up the beat.</span></div></div>`, "span-6")}
     ${panel("Timing", "", "", `<div class="pb stack">
       <div class="field"><label for="m-off">Light timing <output id="m-off-o">${s.syncOffsetMs} ms</output></label><input type="range" id="m-off" min="-300" max="300" step="5" value="${s.syncOffsetMs}">
@@ -283,12 +283,13 @@ function musicPage(el) {
   const setS = b => act(() => api("PATCH", "/api/settings", b)).then(refreshState).catch(() => {});
   $("#m-off").oninput = e => $("#m-off-o").textContent = e.target.value + " ms"; $("#m-off").onchange = e => setS({ syncOffsetMs: Number(e.target.value) });
   $("#m-pred").onchange = e => setS({ predict: e.target.checked });
+  $("#m-moodc").onchange = e => setS({ moodColours: e.target.checked });
   $("#m-met").onchange = e => setS({ metronome: { enabled: e.target.checked } }); $("#m-bpmset").onchange = e => setS({ metronome: { bpm: Number(e.target.value) } });
   if (!DEMO) {
     $("#m-capsrc").onchange = e => setS({ capture: { source: e.target.value } }); $("#m-capcmd").onchange = e => setS({ capture: { command: e.target.value.trim() } });
     $("#m-cap").onclick = () => setS({ capture: { enabled: !app.state.settings.capture.enabled } });
   }
-  for (const id of ["m-off", "m-pred", "m-met", "m-bpmset", "m-capsrc", "m-capcmd", "m-cap", "m-cal"]) if (lockedOut && $("#" + id)) $("#" + id).disabled = true;
+  for (const id of ["m-off", "m-pred", "m-moodc", "m-met", "m-bpmset", "m-capsrc", "m-capcmd", "m-cap", "m-cal"]) if (lockedOut && $("#" + id)) $("#" + id).disabled = true;
   if (lockedOut && $("#m-capst")) $("#m-capst").textContent = "Timing and server settings are locked. Unlock in Settings to change them.";
 
   function renderQueue() {
@@ -331,6 +332,7 @@ function musicPage(el) {
     onAudio: renderQueue, onLog(e) { if (/^Remembered|^Song memory/.test(e.msg)) songs(); }, onChanged(w) { if (w.has("requests")) requests(); },
     onStatus(m) {
       $("#m-src").textContent = m.sourceLabel; $("#m-bpm").textContent = m.bpm ? m.bpm.toFixed(0) : "–"; $("#m-part").textContent = partName[m.part] || m.part; $("#m-style").textContent = m.source === "idle" ? "–" : m.styleName; $("#m-voc").textContent = m.vocal == null ? "–" : m.vocal > 0.35 ? "Yes" : m.vocal > 0.15 ? "A little" : "No";
+      $("#m-key").textContent = m.source === "idle" || !m.hears ? "–" : m.hears;
       const bars = $$("#m-spec i"); bars.forEach((b, i) => b.style.height = (m.bands ? Math.max(2, m.bands[i] * 100) : 2) + "%");
       const lv = A.level(); $("#m-lvl").style.width = Math.round(lv * 100) + "%"; $("#m-lvl-o").textContent = A.state.stream ? (lv < 0.02 ? "very quiet: turn it up or move closer" : Math.round(lv * 100) + "%") : "not listening";
       if (m.song?.memId && m.song.memId !== showFor) showLine();

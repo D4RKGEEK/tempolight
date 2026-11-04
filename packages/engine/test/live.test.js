@@ -96,3 +96,18 @@ test("song memory: recognise a remembered song from 12 s of live sound, and line
   for (let i = 0; i < bx.length; i += 512) { c.push(bx.subarray(i, i + 512)); if ((i / 512) % 86 === 0 && c.t > 12) { const m = recognise(c.tap.q, [e]); if (m && prev && Math.abs(m.pos - (prev.pos + c.t - prev.t)) < 0.6) agree++; prev = m ? { ...m, t: c.t } : null; } }
   assert.equal(agree, 0, "no false recognition");
 });
+
+test("song memory live: a drumless ballad heard from the middle is recognised and followed; the view carries key and mood", async () => {
+  const { preAnalyseCore, memoryEntry, recognise, matchAt } = await import("../src/index.js");
+  const { minorBallad } = await import("./synth.js");
+  const s = minorBallad(), e = memoryEntry("Ballad", await preAnalyseCore(s.x, s.sr), "b"), other = memoryEntry("EDM", await preAnalyseCore(edm().x, 22050), "e");
+  const start = 33, x = s.x.subarray(start * 22050), a = new LiveAnalyser(22050); let r = null;
+  for (let i = 0; i < x.length && a.t < 15; i += 512) a.push(x.subarray(i, i + 512));
+  assert.ok(a.drumless(), "no drums heard");
+  r = recognise(a.tap.q, [other, e], a.memoryQuery()); assert.ok(r && r.id === "b", "found the ballad");
+  assert.ok(Math.abs(r.pos - (start + a.t)) < 0.35, `position ${r.pos} vs ${start + a.t}`);
+  assert.equal(recognise(a.tap.q, [other, e], { bpm: a.bpm }), null, "loudness alone (as before) can't tell");
+  for (let i = Math.round(a.t * 22050); i < x.length && a.t < 30; i += 512) a.push(x.subarray(i, i + 512)); // follow it
+  const here = matchAt(a.tap.q, e, start + a.t, 0.2, a.memoryQuery()); assert.ok(here && here.score > 0.6 && Math.abs(here.pos - start - a.t) < 0.3, `still there (${here?.score})`);
+  const V = a.view(); assert.equal(`${V.key} ${V.mode}`, "F# minor"); assert.ok(V.mood && V.mood.valence < 0.6 && V.mood.energy < 0.4, `calm, not happy (mood ${JSON.stringify(V.mood)})`);
+});
