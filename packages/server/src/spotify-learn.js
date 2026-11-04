@@ -100,7 +100,7 @@ export function regrid(pre) {
 export function relayBars(old, g, dur, from = 0) {
   const sorted = old.slice().sort((a, b) => a.t0 - b.t0), at = t => { let lo = 0, hi = sorted.length - 1; while (lo <= hi) { const m = (lo + hi) >> 1; if (sorted[m].t1 <= t) lo = m + 1; else if (sorted[m].t0 > t) hi = m - 1; else return sorted[m]; } return null; };
   const out = []; let k = g.barOff + 4 * Math.ceil((from - g.off) / (4 * g.P) - g.barOff / 4 - 1);
-  for (; g.off + (k + 4) * g.P <= dur + 1e-6; k += 4) { const t0 = g.off + k * g.P, t1 = t0 + 4 * g.P; if (t0 < -1e-6) continue; const o = at((t0 + t1) / 2); if (o) out.push({ t0, t1, state: o.state, level: o.level }); }
+  for (; g.off + (k + 4) * g.P <= dur + 1e-6; k += 4) { const t0 = g.off + k * g.P, t1 = t0 + 4 * g.P; if (t0 < -1e-6) continue; const o = at((t0 + t1) / 2); if (o) out.push({ ...o, t0, t1 }); } // each bar keeps its part, level, energy, chord and vocals
   return out;
 }
 

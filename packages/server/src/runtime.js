@@ -214,11 +214,15 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   const lockPos = (L, t) => L.pos0 + (t - L.t0) * L.rate; // where in the song we are at live time t
   function release(why) { const m = rt.mem; if (m.lock) note(`Song memory: ${why} “${m.lock.name}”, back to live listening`); m.lock = null; m.cand = null; }
   function lockOn(e, pos, kicks, t, rate) { const pre = memoryAnalysis(e), ref = refineByKicks(kicks, t, pos, pre.kicks, 0.2, rate);
-    rt.mem.lock = { id: e.id, name: e.name, e, pre, pos0: ref.pos, t0: t, rate, miss: 0 }; rt.mem.cand = null;
+    rt.mem.lock = { id: e.id, name: e.name, e, pre, pos0: ref.pos, t0: t, rate, found: Math.abs(rate - 1) >= 0.005, miss: 0 }; rt.mem.cand = null;
     note(`Song memory: recognised “${e.name}” at ${Math.floor(ref.pos / 60)}:${String(Math.floor(ref.pos % 60)).padStart(2, "0")}; following its beat map`); }
   // the live tempo against the song's: a DJ playing it 3% fast plays it 3% faster (small differences are just the tempo estimate wobbling)
   function rateOf(an, e) { if (!an.bpm || !e.bpm || an.drumless() || drumlessEntry(e)) return 1; // (no drums: the tempo is a guess)
     for (const k of [1, 2, 0.5]) { const r = an.bpm / e.bpm / k; if (Math.abs(r - 1) < 0.06) return Math.abs(r - 1) >= 0.015 ? r : 1; } return 1; }
+  // the speed the recogniser found (it searches 0.94-1.06, also for songs without drums), else the tempo's guess
+  const rateFor = (r, an, e) => r && r.rate && Math.abs(r.rate - 1) >= 0.005 ? r.rate : rateOf(an, e);
+  // a clear match (well ahead of every other song and place) is taken at once instead of waiting for a second one
+  const sure = r => r && r.margin >= 0.25 && r.score >= 0.8;
   // Once a second while listening live: is this a song we know? The frame only takes a snapshot of what was heard; the
   // matching runs after it, in slices of a few ms between frames (one remembered song at a time, the best kept), so a
   // long list of songs on a slow computer never makes the lights stutter. The answer is the same as matching them all at once.
@@ -236,7 +240,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     if (!rt.live || rt.live.an !== J.an || rt.mem.lock !== J.lock || !data().settings.songMemory) { if (memJob === J) memJob = null; return; } // another source, or let go meanwhile
     const t0 = performance.now();
     // still this song, here? Only positions near where it should be count, so a chorus that comes back can't fool it
-    if (J.lock && J.here === undefined) J.here = matchAt(J.q, J.lock.e, J.exp, 0.2, J.query);
+    if (J.lock && J.here === undefined) J.here = matchAt(J.q, J.lock.e, J.exp, 0.2, { ...J.query, rate: J.lock.rate });
     while (J.i < J.entries.length && performance.now() - t0 < MEM_SLICE) { const r = recognise(J.q, [J.entries[J.i++]], J.query); if (r && (!J.best || r.score > J.best.score)) J.best = r; }
     perf.add("memory", performance.now() - t0);
     if (J.i < J.entries.length) { setTimeout(memStep, 0); return; }
@@ -244,11 +248,11 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   }
   function memDecide(J) {
     const an = J.an, list = data().songs, m = rt.mem, t = J.t, r = J.best && list.some(e => e.id === J.best.id) ? J.best : null; // (not one forgotten meanwhile)
-    const known = (r, at) => m.cand && m.cand.id === r.id && Math.abs(r.pos - (m.cand.pos + (t - m.cand.t) * rateOf(an, at))) < 0.3; // seen twice, in step
+    const known = (r, at) => sure(r) || (m.cand && m.cand.id === r.id && Math.abs(r.pos - (m.cand.pos + (t - m.cand.t) * rateFor(r, an, at))) < 0.3); // seen twice, in step (or once, clearly)
     if (J.lock) {
       const L = J.lock, exp = J.exp, here = J.here, ok = here && here.score > 0.45;
       if (ok) { L.miss = 0;
-        const rate = rateOf(an, L.e); if (Math.abs(rate - L.rate) > 0.004) { L.pos0 = exp; L.t0 = t; L.rate += (rate - L.rate) * 0.5; }
+        const rate = here.rate && Math.abs(here.rate - 1) >= 0.005 ? here.rate : L.found ? L.rate : rateOf(an, L.e); if (Math.abs(rate - L.rate) > 0.004) { L.pos0 = exp; L.t0 = t; L.rate += (rate - L.rate) * 0.5; }
         const ref = refineByKicks(J.kicks, t, exp, L.pre.kicks, 0.08, L.rate); if (ref.hits) L.pos0 += (ref.pos - exp) * 0.5; }
       // too flat to tell: fine in a quiet part of the song, but silence where the song is loud means it stopped
       else if (!here) { if (an.state === "silent" && songView(L.pre, exp).state !== "silent") L.miss += 2; }
@@ -256,14 +260,14 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       // something we know, somewhere else, twice in step (another song, or this one after a skip): follow that instead,
       // unless where we are still fits about as well (a chorus that comes back)
       if (r && !(r.id === L.id && Math.abs(r.pos - exp) < 0.3) && (!ok || r.score > here.score + 0.1)) { const e = list.find(x => x.id === r.id);
-        if (known(r, e)) { if (e.id !== L.id) note(`Song memory: “${L.name}” is no longer playing`); return lockOn(e, r.pos, J.kicks, t, rateOf(an, e)); }
+        if (known(r, e)) { if (e.id !== L.id) note(`Song memory: “${L.name}” is no longer playing`); return lockOn(e, r.pos, J.kicks, t, rateFor(r, an, e)); }
         m.cand = { ...r, t }; } else m.cand = null;
       if (L.miss >= 4) release("lost track of");
       return;
     }
     if (!r) { m.cand = null; return; }
     const e = list.find(x => x.id === r.id);
-    if (known(r, e)) lockOn(e, r.pos, J.kicks, t, rateOf(an, e)); else m.cand = { ...r, t };
+    if (known(r, e)) lockOn(e, r.pos, J.kicks, t, rateFor(r, an, e)); else m.cand = { ...r, t };
   }
   function forget(id) { const list = data().songs, i = list.findIndex(e => e.id === id); if (i < 0) return false; list.splice(i, 1); if (rt.mem.lock && rt.mem.lock.id === id) rt.mem.lock = null; store.save(); return true; }
 
