@@ -6,3 +6,5 @@ tempolight.config.json
 *.wav
 data/
 dist/
+website/.vitepress/dist/
+website/.vitepress/cache/

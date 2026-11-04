@@ -1,0 +1,126 @@
+name: Docs
+# The documentation site (VitePress, website/ + the Markdown in docs/) and the Tempolight Lite web installer at /flash/,
+# published together to GitHub Pages. This is the only workflow that deploys to Pages
+# (Settings > Pages > Source: GitHub Actions). The firmware workflow only attaches images to releases; after a
+# firmware release this runs again so /flash/ serves the new image.
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "website/**"
+      - "README.md"
+      - "scripts/check-docs.js"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "website/**"
+      - "README.md"
+      - "scripts/check-docs.js"
+      - ".github/workflows/docs.yml"
+  # a release from the firmware workflow (tags v*, firmware-v*): refresh /flash/ with its image. workflow_run runs
+  # on the default branch, which GitHub Pages' environment allows to deploy (a tag ref isn't allowed by default)
+  workflow_run:
+    workflows: ["Firmware (Tempolight Lite)"]
+    types: [completed]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+env:
+  MERMAID_CLI: "@mermaid-js/mermaid-cli@11.16.0"
+  FIRMWARE_ASSET: tempolight-lite-esp32.bin
+  FIRMWARE_UPDATE_ASSET: tempolight-lite-esp32-update.bin
+
+jobs:
+  build:
+    if: >-
+      github.event_name != 'workflow_run' || (github.event.workflow_run.conclusion == 'success'
+      && github.event.workflow_run.event == 'push'
+      && (startsWith(github.event.workflow_run.head_branch, 'v') || startsWith(github.event.workflow_run.head_branch, 'firmware-v')))
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0   # "Updated" dates on the pages come from git
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: Check the docs (Mermaid diagrams compile; links, anchors and images resolve)
+        run: npm run docs:check
+        env:
+          MMDC: npx -y ${{ env.MERMAID_CLI }}
+
+      - name: Install the site's tools
+        working-directory: website
+        run: npm install --no-audit --no-fund
+
+      - id: pages
+        if: github.event_name != 'pull_request'
+        uses: actions/configure-pages@v5
+
+      - name: Build the site
+        working-directory: website
+        env:
+          # the Pages base path and URL (/tempolight/ on github.io; "/" with a custom domain)
+          DOCS_BASE: ${{ steps.pages.outputs.base_path }}/
+          DOCS_URL: ${{ steps.pages.outputs.base_url }}
+        run: npm run build
+
+      # The installer (ESP Web Tools) downloads the image with fetch(), and GitHub release downloads send no CORS
+      # headers, so the manifest can't point at the release asset itself: the image of the newest release that has
+      # one is copied next to the installer, and the manifest gets that release's version. The page links to the
+      # release for the OTA image.
+      - name: Tempolight Lite installer at /flash/ with the latest firmware image
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          out=website/.vitepress/dist/flash
+          test -f "$out/index.html" && test -f "$out/manifest.json"
+          tag="$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=50" \
+            --jq "[.[] | select(.draft | not) | select(any(.assets[]; .name == \"$FIRMWARE_ASSET\"))][0].tag_name // empty")"
+          if [ -z "$tag" ]; then
+            echo "::warning::No release has $FIRMWARE_ASSET yet: /flash/ is published without a firmware image (push a v* or firmware-v* tag)"
+            exit 0
+          fi
+          gh release download "$tag" -R "$GITHUB_REPOSITORY" -p "$FIRMWARE_ASSET" -D "$out" --clobber
+          ver="${tag#firmware-}"; ver="${ver#v}"
+          url="https://github.com/$GITHUB_REPOSITORY/releases/download/$tag"
+          node -e '
+            const fs = require("fs"), [file, ver, asset] = process.argv.slice(1);
+            const m = JSON.parse(fs.readFileSync(file, "utf8"));
+            m.version = ver;
+            for (const b of m.builds) for (const p of b.parts) p.path = asset;
+            fs.writeFileSync(file, JSON.stringify(m, null, 2) + "\n");
+          ' "$out/manifest.json" "$ver" "$FIRMWARE_ASSET"
+          sed -i "s#/releases\" data-tl-release>the release#/releases/download/$tag/$FIRMWARE_UPDATE_ASSET\" data-tl-release>the $tag release#" "$out/index.html"
+          grep -q "releases/download/$tag" "$out/index.html"
+          echo "Installer: $tag ($url/$FIRMWARE_ASSET), version $ver"
+          ls -l "$out"
+
+      - if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: website/.vitepress/dist
+
+  deploy:
+    if: github.event_name != 'pull_request'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@v4

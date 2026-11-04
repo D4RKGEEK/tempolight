@@ -1,0 +1,35 @@
+/* Tempolight's amber on the default VitePress theme (the same accent as the app and the logo). */
+:root {
+  --vp-c-brand-1: #b86e00;
+  --vp-c-brand-2: #d68a0c;
+  --vp-c-brand-3: #f5a524;
+  --vp-c-brand-soft: rgba(245, 165, 36, 0.16);
+  --vp-button-brand-text: #1c1406;
+  --vp-button-brand-hover-text: #1c1406;
+  --vp-button-brand-active-text: #1c1406;
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: linear-gradient(120deg, #f5a524 20%, #ff6a3d 60%, #c548ff);
+  --vp-home-hero-image-background-image: radial-gradient(circle, rgba(245, 165, 36, 0.45) 0%, rgba(255, 106, 61, 0.2) 45%, transparent 70%);
+  --vp-home-hero-image-filter: blur(56px);
+}
+.dark {
+  --vp-c-brand-1: #ffc35a;
+  --vp-c-brand-2: #f5a524;
+  --vp-c-brand-3: #d68a0c;
+  --vp-c-brand-soft: rgba(245, 165, 36, 0.18);
+  --vp-c-bg: #111317;
+  --vp-c-bg-alt: #0c0d10;
+  --vp-c-bg-soft: #191b20;
+}
+.VPHero .image-src { max-width: 220px; border-radius: 36px; }
+
+/* screenshots in the pages */
+.vp-doc img { border-radius: 10px; }
+.vp-doc .tl-shots { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.vp-doc .tl-shots img { margin: 0; border: 1px solid var(--vp-c-divider); }
+
+/* "start here" cards on the docs home */
+.vp-doc .tl-paths { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 14px; margin: 20px 0; }
+.vp-doc .tl-path { border: 1px solid var(--vp-c-divider); border-radius: 12px; padding: 4px 18px 10px; background: var(--vp-c-bg-soft); }
+.vp-doc .tl-path h3 { margin-top: 14px; }
+.vp-doc .tl-path ol { padding-left: 1.2em; }

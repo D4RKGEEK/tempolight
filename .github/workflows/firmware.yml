@@ -1,7 +1,8 @@
 name: Firmware (Tempolight Lite)
 # Host tests of the Lite core, then WLED + AudioReactive + the Tempolight usermod built with PlatformIO for a classic
-# ESP32 (esp32dev). On a tag (v*, firmware-v*) the images are attached to the GitHub release and the web installer
-# (docs/flash) is published to GitHub Pages together with the image (Settings > Pages > Source: GitHub Actions).
+# ESP32 (esp32dev). On a tag (v*, firmware-v*) the images are attached to the GitHub release. This workflow doesn't
+# deploy to GitHub Pages: when it finishes on a tag, the Docs workflow (docs.yml) rebuilds the site and publishes the
+# web installer (docs/flash) at /flash/ with this release's image, so the two never fight over Pages.
 on:
   push:
     branches: [main]
@@ -91,33 +92,3 @@ jobs:
         with:
           files: out/*.bin
 
-  installer:
-    if: startsWith(github.ref, 'refs/tags/')
-    needs: build
-    runs-on: ubuntu-latest
-    continue-on-error: true  # needs GitHub Pages set to "GitHub Actions"; the release above doesn't depend on it
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deploy.outputs.page_url }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/download-artifact@v4
-        with:
-          name: tempolight-lite-esp32
-          path: out
-      - name: Installer page + image, served together (the installer fetches the image from its own site)
-        run: |
-          mkdir -p site/flash site/images
-          cp docs/flash/index.html docs/flash/manifest.json site/flash/
-          cp docs/images/logo.svg site/images/
-          cp out/tempolight-lite-esp32.bin site/flash/
-          ver="${GITHUB_REF_NAME#firmware-}"; ver="${ver#v}"
-          sed -i "s/\"version\": \"[^\"]*\"/\"version\": \"$ver\"/" site/flash/manifest.json
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-      - id: deploy
-        uses: actions/deploy-pages@v4

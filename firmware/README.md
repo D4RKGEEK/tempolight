@@ -63,8 +63,9 @@ WLED 0.15 isn't supported.
 
 CI (`.github/workflows/firmware.yml`) runs the host tests, builds this environment against WLED v16.0.1, checks that
 the usermod is in the image, and on tags attaches `tempolight-lite-esp32.bin` (factory image at offset 0, for the web
-installer and esptool) and `tempolight-lite-esp32-update.bin` (app only, for WLED's OTA page) to the release and
-publishes the installer ([docs/flash](../docs/flash/index.html), ESP Web Tools) to GitHub Pages.
+installer and esptool) and `tempolight-lite-esp32-update.bin` (app only, for WLED's OTA page) to the release. The
+docs workflow (`.github/workflows/docs.yml`) then publishes the installer ([docs/flash](../docs/flash/index.html), ESP
+Web Tools) on GitHub Pages at `/flash/` of the documentation site, with that release's image next to it.
 
 ## Test
 
