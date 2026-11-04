@@ -3,7 +3,7 @@
 import { startScheduler, nextRun } from "./scheduler.js";
 import { resolveTime } from "./sun.js";
 import { DEFAULTS, merge } from "./defaults.js";
-import { ROOM_PRESETS, buildPreset } from "../../engine/src/index.js";
+import { ROOM_PRESETS, buildPreset, cleanTimeline } from "../../engine/src/index.js";
 
 const SHAPE_TYPES = new Set(["line", "pole", "free", "circle", "rect", "hex", "tri", "matrix", "points"]);
 export class HttpError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
@@ -202,17 +202,22 @@ export function createCore({ store, runtime, env }) {
   route("POST", "/api/update", "admin", async () => { if (!env.update) throw new HttpError(400, "Nothing to update in the online demo"); try { const r = await env.update.apply(); runtime.note("Updating Tempolight and restarting…"); return r; } catch (e) { throw new HttpError(e.code === 409 ? 409 : 400, e.message); } });
   route("GET", "/api/songs", null, () => data().songs.map(e => ({ id: e.id, name: e.name, bpm: e.bpm, dur: e.dur, style: e.style, drops: e.drops.length, at: e.at })));
   const songById = id => { const e = data().songs.find(x => x.id === id); if (!e) throw new HttpError(404, "That song isn't remembered"); return e; };
-  route("GET", "/api/songs/:id/show", null, (ctx, p) => { const e = songById(p.id); if (!e.show) { e.show = runtime.planFor(e, e.name); store.save(); } return { id: e.id, name: e.name, dur: e.dur, edited: !!e.showEdited, show: e.show || [] }; });
-  route("PUT", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id), ids = effectIds(), segs = ctx.body.show;
-    if (!Array.isArray(segs) || !segs.length || segs.length > 500) throw new HttpError(400, "show is a list of {t0, t1, effect}");
-    const clean = segs.map(x => ({ t0: Number(x.t0), t1: Number(x.t1), part: String(x.part || "calm").slice(0, 10), effect: String(x.effect) })).sort((a, b) => a.t0 - b.t0);
-    const end = (e.dur || 0) + 1; let prev = null; // blocks must fit the song and not overlap (the director looks them up by time)
-    for (const x of clean) { if (!ids.has(x.effect)) throw new HttpError(400, `Unknown effect "${x.effect}"`);
-      if (!(Number.isFinite(x.t0) && Number.isFinite(x.t1) && x.t1 > x.t0 && x.t0 >= 0)) throw new HttpError(400, "Each block needs 0 <= t0 < t1");
-      if (x.t0 >= end) throw new HttpError(400, "A block starts after the song ends"); x.t1 = Math.min(x.t1, end);
-      if (prev && x.t0 < prev.t1 - 1e-3) throw new HttpError(400, "Blocks overlap"); prev = x; }
-    e.show = clean; e.showEdited = true; changed("songs"); return { ok: true, show: e.show }; });
-  route("DELETE", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id); e.show = runtime.planFor(e); e.showEdited = false; changed("songs"); return { ok: true, show: e.show }; });
+  // a song's show: effect blocks (`show`, as before) plus the timeline editor's colour blocks, cues and brightness keyframes
+  const hex2 = c => "#" + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0")).join("");
+  const showOf = e => ({ id: e.id, name: e.name, dur: e.dur, edited: !!e.showEdited, show: e.show || [], colors: e.colors || [], cues: e.cues || [], bright: e.bright || [] });
+  route("GET", "/api/songs/:id/show", null, (ctx, p) => { const e = songById(p.id); if (!e.show) { e.show = runtime.planFor(e, e.name); store.save(); }
+    // what the editor draws: the beat grid, bars, drops, loudness (10 a second, base64 bytes) and the palettes' colours
+    return { ...showOf(e), bpm: e.bpm, P: e.P, off: e.off, barOff: e.barOff, style: e.style, drops: e.drops, bars: e.bars, env: e.env,
+      palettes: Object.fromEntries(Object.entries(runtime.effects.palettes).filter(([k]) => k !== "auto").map(([k, v]) => [k, v.map(hex2)])) }; });
+  const cleanShow = (e, b) => { try { return cleanTimeline(b || {}, { dur: e.dur, effects: effectIds(), palettes: runtime.effects.palettes }); } catch (err) { if (err.code === 400) throw new HttpError(400, err.message); throw err; } };
+  route("PUT", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id), c = cleanShow(e, ctx.body);
+    if (!c.show) throw new HttpError(400, "show is a list of {t0, t1, effect}");
+    Object.assign(e, c); e.showEdited = true; runtime.setDraft(null); changed("songs"); return { ok: true, ...showOf(e) }; });
+  route("DELETE", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id); e.show = runtime.planFor(e); e.showEdited = false; delete e.colors; delete e.cues; delete e.bright; runtime.setDraft(null); changed("songs"); return { ok: true, ...showOf(e) }; });
+  // the editor's unsaved version plays on the lights for two minutes (it sends it again while it's open), without being saved
+  route("PUT", "/api/songs/:id/show/draft", "effects", (ctx, p) => { const e = songById(p.id), c = cleanShow(e, ctx.body);
+    runtime.setDraft({ id: e.id, show: c.show || e.show || [], colors: c.colors ?? e.colors ?? [], cues: c.cues ?? e.cues ?? [], bright: c.bright ?? e.bright ?? [] }); return { ok: true }; });
+  route("DELETE", "/api/songs/:id/show/draft", "effects", () => { runtime.setDraft(null); return { ok: true }; });
   route("DELETE", "/api/songs/:id", "admin", (ctx, p) => { if (!runtime.forget(p.id)) throw new HttpError(404, "That song isn't remembered"); changed("songs"); return { ok: true }; });
   // guest song requests
   const reqList = () => data().requests.filter(r => !r.done).sort((a, b) => b.votes - a.votes || a.at - b.at).map(({ id, title, by, votes, at }) => ({ id, title, by, votes, at }));

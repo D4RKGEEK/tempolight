@@ -3,6 +3,7 @@
 // playing, and applies live overlays (flash, strobe, blackout, colour hold) and the photosensitivity limiter.
 import { showAt } from "./show.js";
 import { buildSignals } from "./signals.js";
+import { rangeAt, brightAt, cuesAt, createCueFirer, blockPalette } from "./timeline.js";
 
 const G = (x, w) => Math.exp(-(x / w) * (x / w));
 
@@ -33,7 +34,9 @@ export function createDirector(layout, fx) {
     params: {},   // effect id -> {speed, intensity, hue, saturation, mirror}
     zones: [],    // [{id, mode: "follow"|"effect"|"ambient"|"off", effect, brightness}]; shapes join a zone with shape.zone
     layer: null,  // {effect, amount}: an accent effect added on top of whatever is showing
+    // plan: the song's effect blocks (show.js); timeline: its {colors, cues, bright} (timeline.js), both on the song's clock
   };
+  const cueFirer = createCueFirer();
   const ZBUF = new Float32Array(N * 3);
   const fixedPal = () => settings.palette !== "auto";
 
@@ -169,9 +172,13 @@ export function createDirector(layout, fx) {
       else { renderAmbient(t, COL); st.showing = settings.ambient; }
       st.lastState = "idle"; applyLayer(null, t); applyZones(null, t);
     } else {
+      // a hand-made timeline: build-up and drop cues change what the music "is doing", colour blocks the palette
+      const TL = settings.timeline, P = (V.g && V.g.P) || 0.5, cs = TL ? cuesAt(TL.cues, t, P) : null, cpal = TL ? blockPalette(rangeAt(TL.colors, t), fx.palettes) : null;
+      if (cs && cs.build) V = { ...V, state: "build", buildP: Math.min(1, (t - cs.build.t0) / (cs.build.t1 - cs.build.t0)), nextDrop: cs.build.t1 };
+      if (cs && cs.drop != null) V = { ...V, state: "drop", dropT: cs.drop, level: "peak" };
       const ST = style(V); st.styleName = settings.style !== "auto" ? settings.style : V.style || "party";
       choose(t, V);
-      const S = buildSignals(st.styleName === V.style ? V : { ...V, style: st.styleName }, t, { pal: palette(), fixed: settings.palette !== "auto", ...extra });
+      const S = buildSignals(st.styleName === V.style ? V : { ...V, style: st.styleName }, t, { pal: cpal || palette(), fixed: !!cpal || settings.palette !== "auto", ...extra });
       S.text = extra.text || ""; S.screen = extra.screen || null;
       renderFx(st.cur, S, COL);
       if (st.prev && t - st.xfadeT < ST.xfade) {
@@ -187,6 +194,12 @@ export function createDirector(layout, fx) {
       const df = t - V.dropT; if (settings.dropFlash && ST.mode === "sections" && df >= 0 && df < 0.7) { const e = Math.exp(-df / 0.17) * 2.3; for (let i = 0; i < COL.length; i++) COL[i] += e; }
       st.lastState = V.state; st.showing = st.cur;
       applyLayer(S, t); applyZones(S, t);
+      if (TL) { // flashes fire once as the clock passes them; strobe (sixteenth notes), blackout and brightness follow the clock
+        cueFirer.step(TL.cues, t, (c, late) => { st.overlay.flashT = wall - late; st.overlay.flashColor = c.color ? [1, 3, 5].map(k => parseInt(c.color.slice(k, k + 2), 16) / 255) : [1, 0.97, 0.94]; st.lastCue = { type: c.type, t: c.t, at: wall }; st.cuesFired = (st.cuesFired || 0) + 1; });
+        if (cs.strobe) { const on = Math.floor((t - cs.strobe.t) / (P / 4)) % 2 === 0; for (let i = 0; i < COL.length; i++) COL[i] = on ? COL[i] * 0.3 + 1.6 : 0; }
+        if (cs.blackout) COL.fill(0);
+        const b = brightAt(TL.bright, t); if (b != null && b !== 1) for (let i = 0; i < COL.length; i++) COL[i] *= b;
+      }
     }
     overlays(wall);
     if (settings.safe) limiter(wall);

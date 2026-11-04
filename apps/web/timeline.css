@@ -1,0 +1,50 @@
+/* Show editor (#/timeline/<song>): a mini lighting desk for one remembered song. Uses the app's colour tokens. */
+.tl-bar { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; padding: 10px 14px; border-bottom: 1px solid var(--line-2); }
+.tl-bar .grp { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.tl-bar .sep { width: 1px; align-self: stretch; background: var(--line-2); margin: 0 4px; }
+.tl-bar select { width: auto; padding: 3px 6px; font-size: 12.5px; }
+.tl-time { font: 600 13px var(--mono); min-width: 92px; padding: 3px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel-2); text-align: center; }
+.tl-wrap { display: grid; grid-template-columns: 78px minmax(0, 1fr); position: relative; }
+.tl-labels { border-right: 1px solid var(--line); background: var(--panel); }
+.tl-labels div { display: flex; align-items: center; padding: 0 8px; font-size: 11.5px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line-2); box-sizing: border-box; }
+.tl-scroll { overflow-x: auto; overflow-y: hidden; position: relative; overscroll-behavior-x: contain; -webkit-overflow-scrolling: touch; }
+.tl-inner { position: relative; }
+.tl-inner canvas { position: sticky; left: 0; display: block; }
+.tl-lanes { position: absolute; top: 0; left: 0; }
+.tl-lane { position: absolute; left: 0; touch-action: pan-x; }
+.tl-lane[data-lane="ruler"], .tl-lane[data-lane="song"] { cursor: text; }
+.tl-it { position: absolute; box-sizing: border-box; touch-action: pan-x; user-select: none; -webkit-user-select: none; }
+.tl-it.sel { touch-action: none; z-index: 2; }
+.tl-blk { top: 3px; bottom: 3px; border-radius: 4px; color: #fff; font: 600 11px/1.2 var(--sans); padding: 4px 7px; overflow: hidden; white-space: nowrap; cursor: grab; background: #6c63c8; border: 1px solid rgba(0, 0, 0, .25); }
+.tl-blk.calm, .tl-blk.silent { background: #4a6fa5; } .tl-blk.build { background: #c58a1d; } .tl-blk.drop { background: #c8366e; }
+.tl-blk small { display: block; font-weight: 500; opacity: .8; font-size: 10px; }
+.tl-it.sel.tl-blk, .tl-it.sel.tl-col { outline: 2px solid var(--text); outline-offset: -1px; }
+.tl-it .h { position: absolute; top: 0; bottom: 0; width: 9px; cursor: ew-resize; touch-action: none; }
+.tl-it .h.l { left: -2px; } .tl-it .h.r { right: -2px; }
+.tl-it.sel .h::after { content: ""; position: absolute; top: 25%; bottom: 25%; left: 3px; width: 3px; border-radius: 2px; background: #fff; opacity: .9; }
+.tl-col { top: 4px; bottom: 4px; border-radius: 4px; cursor: grab; border: 1px solid rgba(0, 0, 0, .3); font: 600 10px/20px var(--sans); color: #fff; padding: 0 6px; overflow: hidden; white-space: nowrap; text-shadow: 0 1px 2px rgba(0, 0, 0, .6); }
+.tl-cue { top: 4px; height: 28px; cursor: grab; }
+.tl-cue i { position: absolute; left: -9px; top: 3px; width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font: 700 10px var(--sans); font-style: normal; color: #fff; background: #555; border: 2px solid var(--panel); z-index: 1; }
+.tl-cue b { position: absolute; left: 0; top: 10px; height: 6px; border-radius: 0 3px 3px 0; opacity: .55; background: currentColor; }
+.tl-cue.flash { color: #f0f0f0; } .tl-cue.flash i { background: #e8e8e8; color: #222; }
+.tl-cue.strobe { color: #a78bfa; } .tl-cue.strobe i { background: #7c5ce0; }
+.tl-cue.blackout { color: #444; } .tl-cue.blackout i { background: #111; }
+.tl-cue.build { color: #e0a030; } .tl-cue.build i { background: #c58a1d; }
+.tl-cue.drop { color: #e04a80; } .tl-cue.drop i { background: #c8366e; }
+.tl-cue.sel i { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tl-key { width: 14px; height: 14px; margin: -7px 0 0 -7px; border-radius: 50%; background: var(--accent); border: 2px solid var(--panel); cursor: grab; }
+.tl-key.sel { outline: 2px solid var(--text); }
+.tl-it:active { cursor: grabbing; }
+.tl-insp { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 10px; align-items: end; }
+.tl-insp .wide { grid-column: 1 / -1; }
+.tl-insp input[type=color] { width: 100%; height: 32px; border: 1px solid var(--line); border-radius: 6px; background: var(--panel); padding: 2px; }
+.tl-fxlist { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px; max-height: 220px; overflow-y: auto; border: 1px solid var(--line-2); border-radius: 6px; padding: 4px; }
+.tl-fxlist button { text-align: left; border: 1px solid transparent; background: none; border-radius: 4px; padding: 4px 8px; font-size: 12.5px; }
+.tl-fxlist button:hover { background: var(--panel-2); }
+.tl-fxlist button[aria-pressed="true"] { background: var(--accent-bg); border-color: var(--accent); font-weight: 600; }
+.tl-fxlist button small { color: var(--faint); margin-left: 4px; }
+.tl-sw { display: inline-block; width: 26px; height: 12px; border-radius: 3px; vertical-align: middle; margin-right: 6px; border: 1px solid var(--line); }
+.tl-dirty { color: var(--warn); font-weight: 600; }
+.tl-help { font-size: 12px; color: var(--faint); padding: 8px 14px; border-top: 1px solid var(--line-2); }
+.tl-help kbd { font: 11px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 4px; background: var(--panel-2); }
+@media (max-width: 820px) { .tl-wrap { grid-template-columns: 58px minmax(0, 1fr); } .tl-labels div { font-size: 10.5px; padding: 0 5px; } .tl-bar { padding: 8px 10px; } }

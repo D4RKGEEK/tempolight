@@ -73,9 +73,10 @@ A shape: `{type: "line"|"pole"|"free"|"circle"|"rect"|"hex"|"tri"|"matrix"|"poin
 | `DELETE /api/song` | |
 | `GET /api/songs` | song memory: `[{id, name, bpm, dur, style, drops, at}]` |
 | `DELETE /api/songs/:id` | admin: forget a song |
-| `GET /api/songs/:id/show` | the song's show: `{show: [{t0, t1, part, effect}], edited}` (made automatically the first time) |
-| `PUT /api/songs/:id/show` | effects area: `{show: [...]}` your own timeline |
-| `DELETE /api/songs/:id/show` | effects area: throw away edits and make a new show |
+| `GET /api/songs/:id/show` | the song's show: `{show: [{t0, t1, part, effect}], colors, cues, bright, edited}` (made automatically the first time), plus what the show editor draws: `P, off, barOff, bpm, bars, drops, env` (loudness, 10 values a second as base64 bytes) and `palettes` (`{id: ["#rrggbb", "#rrggbb"]}`) |
+| `PUT /api/songs/:id/show` | effects area: `{show: [...], colors?, cues?, bright?}` your own timeline; fields left out are kept. `colors: [{t0, t1, palette} \| {t0, t1, colors: ["#rrggbb", "#rrggbb"]}]` (no overlaps), `cues: [{t, type: "flash"\|"strobe"\|"blackout"\|"build"\|"drop", color? (flash), beats? (the others: 0.25–128)}]`, `bright: [{t, v: 0..1}]` (a straight line between keyframes). Times are seconds on the song's clock, kept to the millisecond; at most 500 of each |
+| `DELETE /api/songs/:id/show` | effects area: throw away edits (colours, cues and brightness too) and make a new show |
+| `PUT /api/songs/:id/show/draft`, `DELETE …/draft` | effects area: play an unsaved version (same body as `PUT …/show`) on the lights for two minutes without saving it; the show editor's live preview |
 | `GET /api/audio/sources` | sound inputs the server can capture from |
 | `PATCH /api/settings` | admin: `{capture: {enabled: true, source: "auto"\|<id>, command?}}` |
 

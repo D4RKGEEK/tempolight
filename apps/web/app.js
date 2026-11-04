@@ -4,6 +4,7 @@ import { createAudio } from "/audio.js";
 import { roomPage } from "/room.js";
 import { mapPage } from "/mapper.js";
 import { createRenderer } from "/preview.js";
+import { timelinePage } from "/timeline.js";
 
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -237,7 +238,7 @@ function musicPage(el) {
   const fmtT = v => `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, "0")}`;
   async function songs() { const list = await api("GET", "/api/songs").catch(() => []), tb = $("#m-songs"); if (!tb) return;
     $("#m-memn").textContent = list.length ? `${list.length} song${list.length > 1 ? "s" : ""} remembered` : "";
-    tb.innerHTML = list.length ? list.slice().reverse().map(e => `<tr><td>${esc(e.name)}</td><td class="num faint">${Math.round(e.bpm)} BPM</td><td class="num faint">${fmtT(e.dur)}</td><td class="num faint">${e.drops} drop${e.drops === 1 ? "" : "s"}</td><td>${lockedOut ? "" : `<button class="btn sm" data-forget="${e.id}" type="button">Forget</button>`}</td></tr>`).join("")
+    tb.innerHTML = list.length ? list.slice().reverse().map(e => `<tr><td>${esc(e.name)}</td><td class="num faint">${Math.round(e.bpm)} BPM</td><td class="num faint">${fmtT(e.dur)}</td><td class="num faint">${e.drops} drop${e.drops === 1 ? "" : "s"}</td><td><a class="btn sm" href="#/timeline/${esc(e.id)}">Edit show</a> ${lockedOut ? "" : `<button class="btn sm" data-forget="${e.id}" type="button">Forget</button>`}</td></tr>`).join("")
       : '<tr><td class="faint">Nothing yet. Play a song on this page and it will be remembered.</td></tr>';
     $$("[data-forget]").forEach(b => b.onclick = () => act(() => api("DELETE", `/api/songs/${b.dataset.forget}`), "Forgotten").then(songs).catch(() => {})); }
   async function requests() { const r = await api("GET", "/api/requests").catch(() => ({ requests: [] })), tb = $("#m-reqs"); if (!tb) return;
@@ -303,7 +304,7 @@ function musicPage(el) {
       now.innerHTML = `<div class="stack"><div class="row" style="justify-content:space-between"><b>${esc(q.name)}</b><span class="faint mono">${Math.round(q.analysis.bpm)} BPM</span></div>
         <div class="progress" id="m-prog"><div class="fill" id="m-fill"></div>${q.analysis.drops.map(t => `<div class="drop" style="left:${t / d * 100}%" title="Drop at ${fmtTime(t)}"></div>`).join("")}</div>
         <div class="times"><span id="m-pos">0:00</span><span>${fmtTime(d)}</span></div>
-        <div class="showline" id="m-show" aria-label="The show: effects on a timeline"></div><div id="m-showed" class="row" hidden></div>
+        <div class="showline" id="m-show" aria-label="The show: effects on a timeline"></div><div id="m-showed" class="row" hidden></div><a class="btn sm" id="m-editshow" hidden style="align-self:flex-start">Edit show</a>
         <div class="row"><button class="btn" id="m-prev" type="button">Previous</button><button class="btn primary" id="m-play" type="button">${a.song.playing ? "Pause" : "Play"}</button><button class="btn" id="m-next" type="button">Next</button><button class="btn" id="m-stopsong" type="button">Stop</button></div></div>`;
       $("#m-prog").onclick = e => { const r = e.currentTarget.getBoundingClientRect(); A.seek((e.clientX - r.left) / r.width * d); };
       showLine();
@@ -318,7 +319,8 @@ function musicPage(el) {
   async function showLine(force) {
     const box = $("#m-show"); if (!box) return; const memId = app.status?.song?.memId; if (!memId) { box.innerHTML = '<span class="faint" style="font-size:12.5px">The show appears here once the song is remembered.</span>'; showFor = null; return; }
     if (force || showFor !== memId || !showData) { showFor = memId; showData = await api("GET", `/api/songs/${memId}/show`).catch(() => null); }
-    if (!showData) return; const d = showData.dur || 1, names = Object.fromEntries(st.effects.map(e => [e.id, e.name]));
+    if (!showData) return; const eb = $("#m-editshow"); if (eb) { eb.href = `#/timeline/${memId}`; eb.hidden = false; }
+    const d = showData.dur || 1, names = Object.fromEntries(st.effects.map(e => [e.id, e.name]));
     box.innerHTML = showData.show.map((b, i) => `<button class="blk ${esc(b.part)}" type="button" data-blk="${i}" style="left:${b.t0 / d * 100}%;width:${(b.t1 - b.t0) / d * 100}%" title="${fmtTime(b.t0)}–${fmtTime(b.t1)}: ${esc(names[b.effect] || b.effect)}"><span>${esc(names[b.effect] || b.effect)}</span></button>`).join("");
     $$("#m-show [data-blk]").forEach(b => b.onclick = () => { const i = Number(b.dataset.blk), blk = showData.show[i], ed = $("#m-showed"); ed.hidden = false;
       ed.innerHTML = `<span class="faint">${fmtTime(blk.t0)}–${fmtTime(blk.t1)}</span><select id="m-blkfx" aria-label="Effect for this part" style="width:auto;max-width:240px">${st.effects.map(e => opt(e.id, e.name, e.id === blk.effect)).join("")}</select><button class="btn sm" id="m-shownew" type="button">New show</button>${showData.edited ? '<span class="faint" style="font-size:12px">edited by hand</span>' : ""}`;
@@ -738,12 +740,13 @@ function settingsPage(el) {
 
 // ---------------------------------------------------------------- router and boot
 const PAGES = { home: ["Home", homePage], music: ["Music", musicPage], effects: ["Effects", effectsPage], live: ["Live pads", livePage], scenes: ["Scenes & schedules", scenesPage],
-  room: ["Room", el => unlocked() ? roomPage(el) : lockScreen(el, "Room setup")], map: ["Camera mapping", el => unlocked() ? mapPage(el) : lockScreen(el, "Room setup")], devices: ["Devices", devicesPage], settings: ["Settings", settingsPage] };
+  room: ["Room", el => unlocked() ? roomPage(el) : lockScreen(el, "Room setup")], map: ["Camera mapping", el => unlocked() ? mapPage(el) : lockScreen(el, "Room setup")], devices: ["Devices", devicesPage], settings: ["Settings", settingsPage], timeline: ["Show editor", timelinePage] };
 export function route() {
   const name = (location.hash.match(/^#\/(\w+)/) || [])[1] || "home", [title, fn] = PAGES[name] || PAGES.home;
+  if (app.page?.canLeave && app.page.hash !== location.hash && !app.page.canLeave()) { history.replaceState(null, "", app.page.hash); return; } // unsaved changes: stay
   if (app.page?.destroy) app.page.destroy();
   if (app.page?.preview) ws.send({ type: "preview", on: false });
-  $$("#nav a").forEach(a => a.toggleAttribute("aria-current", a.dataset.page === (name === "map" ? "room" : name))); $("#title").textContent = title; document.title = `${title} · Tempolight`;
+  $$("#nav a").forEach(a => a.toggleAttribute("aria-current", a.dataset.page === ({ map: "room", timeline: "music" }[name] || name))); $("#title").textContent = title; document.title = `${title} · Tempolight`;
   const el = $("#page"); el.innerHTML = ""; app.page = fn(el) || {};
   if (app.status) app.page.onStatus?.(app.status);
   $("#side").classList.remove("open");

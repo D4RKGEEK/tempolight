@@ -137,6 +137,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
     const list = data().songs, old = list.findIndex(e => e.name === name && Math.abs(e.dur - pre.dur) < 1.5);
     const e = memoryEntry(name, pre, old >= 0 ? list[old].id : "m" + Math.random().toString(36).slice(2, 10));
     e.show = old >= 0 && list[old].showEdited ? list[old].show : planShow(pre, fx, { seed: name, prefs: data().settings.effectPrefs }); e.showEdited = old >= 0 && !!list[old].showEdited; // a show of its own; hand edits are kept
+    if (old >= 0) for (const k of ["colors", "cues", "bright"]) if (list[old][k]) e[k] = list[old][k]; // and the timeline editor's colours, cues and brightness
     const size = JSON.stringify(e).length; if (size > MEM_ONE) { note(`“${name}” is too long to remember (a mix?): it won't be recognised later`); return old >= 0 ? list[old] : null; }
     if (old >= 0) list.splice(old, 1); else note(`Remembered “${name}”: Tempolight will recognise it when it plays again`);
     list.push(e); // the oldest go first: at most 60 songs, and at most ~2 MB in all (the browser demo keeps everything in localStorage, ~5 MB)
@@ -149,8 +150,11 @@ export function createRuntime(store, { io, logger = console } = {}) {
   function currentPlan() {
     if (data().settings.shows === false) return null;
     const id = rt.source === "song" ? rt.song?.memId : rt.mem.lock && liveFresh() ? rt.mem.lock.id : null; if (!id) return null;
-    const e = data().songs.find(x => x.id === id); if (!e) return null; if (!e.show) { e.show = planFor(e, e.name); store.save(); } return e.show;
+    const dr = rt.draft; if (dr && dr.id === id && performance.now() < dr.until) return dr; // the timeline editor's unsaved version, while it previews
+    const e = data().songs.find(x => x.id === id); if (!e) return null; if (!e.show) { e.show = planFor(e, e.name); store.save(); } return e;
   }
+  /** The timeline editor previews its unsaved changes on the lights: {id, show, colors, cues, bright} for a while, or null. */
+  function setDraft(d) { rt.draft = d ? { ...d, until: performance.now() + 120000 } : null; }
   let memT = 0;
   const lockPos = (L, t) => L.pos0 + (t - L.t0) * L.rate; // where in the song we are at live time t
   function release(why) { const m = rt.mem; if (m.lock) note(`Song memory: ${why} “${m.lock.name}”, back to live listening`); m.lock = null; m.cand = null; }
@@ -241,7 +245,8 @@ export function createRuntime(store, { io, logger = console } = {}) {
   function frame() {
     const now = performance.now(), wall = now / 1000, sh = data().show, s = data().settings;
     let { V, t, extra } = currentView(now);
-    D.settings.plan = V ? currentPlan() : null;
+    const pe = V ? currentPlan() : null; D.settings.plan = pe ? pe.show : null;
+    D.settings.timeline = pe && (pe.colors?.length || pe.cues?.length || pe.bright?.length) ? { colors: pe.colors || [], cues: pe.cues || [], bright: pe.bright || [] } : null;
     if (rt.forced && !V) V = metronomeView(wall, s.metronome.bpm || 124), t = wall; // "build & drop" pad works even with no music
     V = applyForced(V, t, now);
     rt.view = V; rt.t = t;
@@ -424,7 +429,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
   return {
     get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, rt, log, listeners, previewClients, phones, health,
     rebuild, rebuildEffects, syncDirector, startLoop, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
-    identify, syncSegments, setPower, action, status, setScreen, clearScreen, remember, forget, djBeat, djOnAir, planFor, mapLight, endMap, layoutInfo, checkDevice, note,
+    identify, syncSegments, setPower, action, status, setScreen, clearScreen, remember, forget, djBeat, djOnAir, planFor, setDraft, mapLight, endMap, layoutInfo, checkDevice, note,
     close() { clearInterval(timer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
   };
 }

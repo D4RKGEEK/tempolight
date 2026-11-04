@@ -8,6 +8,7 @@ export { LiveAnalyser } from "./live.js";
 export { memoryEntry, memoryAnalysis, recognise, matchAt, refineByKicks, fingerprint, FingerprintTap } from "./memory.js";
 export { createDirector, idleSignals } from "./director.js";
 export { planShow, showAt } from "./show.js";
+export { cleanTimeline, rangeAt, brightAt, cuesAt, cueLen, createCueFirer, blockPalette, CUE_TYPES, CUE_BEATS } from "./timeline.js";
 export { ROOM_PRESETS, buildPreset } from "./presets.js";
 
 /** Convert linear effect output (0..~2) to 8-bit RGB with a soft roll-off and a brightness factor. */

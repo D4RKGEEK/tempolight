@@ -95,6 +95,26 @@ await step("music: the song has a show timeline; a block can be changed", async 
   await page.click("#m-show .blk"); await page.waitForSelector("#m-blkfx"); await page.selectOption("#m-blkfx", "fireworks");
   await until(() => app.store.data.songs[0].showEdited && app.store.data.songs[0].show[0].effect === "fireworks", 4000, "block not saved"); await shot("04b-show");
 });
+await step("show editor: open it from the Music page, move a block, add a flash cue, save; the cue plays", async () => {
+  await go("music"); await until(() => page.isVisible("#m-editshow"), 6000, "no Edit show button"); await page.click("#m-editshow");
+  await page.waitForSelector('#tl-lanes [data-lane="fx"] .tl-blk'); await until(() => page.textContent("#tl-play").then(t => t === "Pause"), 4000, "the editor doesn't see the song playing");
+  await page.click("#tl-play"); await until(() => !status().song.playing, 3000, "pause didn't reach the server");
+  const song = () => app.store.data.songs[0], before = song().show[1].t0, blk = page.locator('#tl-lanes [data-lane="fx"] .tl-blk').nth(1), bb = await blk.boundingBox();
+  await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2); await page.mouse.down(); await page.mouse.move(bb.x + bb.width / 2 + 60, bb.y + bb.height / 2, { steps: 6 }); await page.mouse.up();
+  ok(await page.isEnabled("#tl-save"), "moving a block left nothing to save"); ok(/Unsaved/.test(await page.textContent("#tl-state")), "no unsaved-changes note");
+  await page.click("#tl-undo"); ok(await page.isDisabled("#tl-save"), "undo didn't go back"); await page.click("#tl-redo"); ok(await page.isEnabled("#tl-save"), "redo didn't come back");
+  const ruler = await page.locator('#tl-lanes [data-lane="ruler"]').boundingBox(), sc = await page.locator("#tl-sc").boundingBox();
+  await page.mouse.click(Math.max(ruler.x, sc.x) + Math.min(sc.width * 0.6, 500), ruler.y + 8);
+  await page.click('[data-add="flash"]'); await page.waitForSelector("#ti-col"); await page.fill("#ti-col", "#ff0000"); await page.dispatchEvent("#ti-col", "change");
+  await page.click("#tl-save"); await until(() => song().cues?.length === 1 && song().show[1].t0 !== before, 4000, "show not saved");
+  ok(song().cues[0].type === "flash" && song().cues[0].color === "#ff0000", "wrong cue saved " + JSON.stringify(song().cues)); await until(() => page.isDisabled("#tl-save"), 3000, "still unsaved after saving");
+  const cueT = song().cues[0].t, P = song().P, D = app.runtime.director, n0 = D.state.cuesFired || 0;
+  ok(Math.abs(((cueT - song().off) / P) - Math.round((cueT - song().off) / P)) < 0.01, "the cue isn't on a beat");
+  await page.locator("#tl-sc").focus(); for (let k = 0; k < 4; k++) await page.keyboard.press("ArrowLeft"); // back four beats, then play
+  await page.keyboard.press("Space"); await until(() => status().song.playing, 3000, "space didn't play");
+  await until(() => (D.state.cuesFired || 0) > n0, 8000, "the flash cue never fired"); ok(D.state.lastCue.t === cueT && D.state.overlay.flashColor.join() === "1,0,0", "a different cue fired");
+  await shot("04c-timeline");
+});
 await step("guest requests: a guest asks for a song, the host sees it", async () => {
   const g = await ctx.newPage(); g.on("pageerror", e => errors.push("request: " + e.message)); await g.goto(`${base}/request`);
   await g.fill("#title", "Daft Punk – One More Time"); await g.fill("#by", "Sam"); await g.click("#send"); await until(() => g.textContent("#msg").then(t => /Sent/.test(t)), 4000, "request not sent");
@@ -204,7 +224,7 @@ await step("power off sends black, power on resumes", async () => {
 });
 await step("phone-sized screen has no sideways scrolling", async () => {
   await page.setViewportSize({ width: 390, height: 844 });
-  for (const h of ["home", "music", "live", "room", "devices"]) { await go(h); const w = await page.evaluate(() => document.documentElement.scrollWidth); ok(w <= 392, `${h} is ${w}px wide`); }
+  for (const h of ["home", "music", "live", "room", "devices", `timeline/${app.store.data.songs[0]?.id}`]) { await go(h); const w = await page.evaluate(() => document.documentElement.scrollWidth); ok(w <= 392, `${h} is ${w}px wide`); }
   await shot("09-phone");
 });
 await step("no errors in the browser console", async () => ok(!errors.length, errors.slice(0, 5).join(" | ")));
