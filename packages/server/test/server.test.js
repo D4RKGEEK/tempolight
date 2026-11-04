@@ -242,6 +242,8 @@ test("Govee lights: added without WLED, get the room's colour over the LAN API",
     const st = (await s.call("GET", "/api/status")).body.devices.find(d => d.id === add.body.id); assert.equal(st.online, true);
     await s.call("PATCH", `/api/devices/${add.body.id}`, { goveeMode: "segments", goveeSegments: 4 });
     assert.ok(await until(() => got.some(m => m.cmd === "razer" && Buffer.from(m.data.pt, "base64")[5] === 4)), "segment frames arrive");
+    await s.call("PATCH", `/api/devices/${add.body.id}`, { goveeSegments: 6 });
+    assert.ok(await until(() => got.some(m => m.cmd === "razer" && Buffer.from(m.data.pt, "base64")[5] === 6)), "a new segment count takes effect without changing the mode");
     await s.call("POST", "/api/power", { on: false }); assert.ok(await until(() => got.some(m => m.cmd === "turn" && m.data.value === 0)), "power off reaches Govee");
   } finally { await s.done(); sock.close(); }
 });
@@ -306,8 +308,8 @@ test("guest song requests: guests ask and vote, the host marks them played; work
 });
 
 test("OpenRGB devices: added with their LED count and streamed in direct mode", async () => {
-  const net = await import("node:net"), got = [];
-  const srv = net.createServer(sk => { let buf = Buffer.alloc(0); sk.on("error", () => {}); sk.on("data", d => { buf = Buffer.concat([buf, d]);
+  const net = await import("node:net"), got = []; let open = 0;
+  const srv = net.createServer(sk => { let buf = Buffer.alloc(0); open++; sk.on("close", () => open--); sk.on("error", () => {}); sk.on("data", d => { buf = Buffer.concat([buf, d]);
     while (buf.length >= 16) { const dev = buf.readUInt32LE(4), id = buf.readUInt32LE(8), size = buf.readUInt32LE(12); if (buf.length < 16 + size) break; buf = buf.subarray(16 + size); got.push(id);
       const reply = b => { const h = Buffer.alloc(16); h.write("ORGB"); h.writeUInt32LE(dev, 4); h.writeUInt32LE(id, 8); h.writeUInt32LE(b.length, 12); sk.write(Buffer.concat([h, b])); };
       if (id === 0) reply(Buffer.from([1, 0, 0, 0]));
@@ -320,6 +322,8 @@ test("OpenRGB devices: added with their LED count and streamed in direct mode", 
     assert.equal(add.status, 200); assert.equal(add.body.leds, 12); assert.equal(add.body.name, "Fan ring");
     assert.ok(await until(() => got.includes(1100) && got.filter(x => x === 1050).length > 3), "direct mode, then LED updates");
     assert.ok(await until(async () => (await s.call("GET", "/api/status")).body.devices.find(d => d.id === add.body.id)?.online === true), "shows online");
+    assert.ok(open > 0); assert.equal((await s.call("DELETE", `/api/devices/${add.body.id}`)).status, 200);
+    assert.ok(await until(() => open === 0), "deleting the device closes its connection to OpenRGB");
   } finally { await s.done(); (await import("../../outputs/src/openrgb.js")).closeOpenRGB(); await new Promise(r => srv.close(r)); }
 });
 
@@ -344,6 +348,7 @@ test("Nanoleaf: pairs, places the panels where they are, streams extControl fram
     assert.ok(await until(() => streaming && frames.length > 3), "streaming starts and frames arrive");
     const f = frames.at(-1); assert.equal(f.readUInt16BE(0), 3); assert.deepEqual([f.readUInt16BE(2), f.readUInt16BE(10), f.readUInt16BE(18)], [11, 22, 33]);
     const st = (await s.call("GET", "/api/state")).body.devices.find(d => d.id === add.body.id); assert.equal(st.nanoleaf.token, undefined);
+    const patched = await s.call("PATCH", `/api/devices/${add.body.id}`, { name: "Wall panels" }); assert.equal(patched.body.name, "Wall panels"); assert.equal(patched.body.nanoleaf.token, undefined, "nor after a change");
   } finally { await s.done(); udp.close(); await new Promise(r => api.close(r)); }
 });
 
@@ -400,6 +405,7 @@ test("Philips Hue: pairs with the link button, each light gets its colour (rate-
     const no = await s.call("POST", "/api/devices", { host, kind: "hue" }); assert.equal(no.status, 400); assert.match(no.body.error, /link button/);
     pressed = true; const add = await s.call("POST", "/api/devices", { host, kind: "hue" }); assert.equal(add.status, 200); assert.equal(add.body.leds, 2, "plugs without colour are left out");
     assert.equal(add.body.hue.user, undefined, "the bridge user name isn't sent to browsers");
+    assert.equal((await s.call("PATCH", `/api/devices/${add.body.id}`, { name: "Lounge" })).body.hue.user, undefined, "nor after a change");
     await s.call("PATCH", "/api/show", { effect: "solar" });
     assert.ok(await until(() => puts.some(p => p.id === "1") && puts.some(p => p.id === "2")), "both lights get colours");
     await sleep(1000); const t0 = Date.now() - 1000, recent = puts.filter(p => p.t >= t0); assert.ok(recent.length <= 12, `at most about 10 commands a second (${recent.length})`);

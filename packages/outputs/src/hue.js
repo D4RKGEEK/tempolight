@@ -35,19 +35,38 @@ export function rgbToXy(r, g, b) {
   return { xy: S > 0 ? [Math.round(X / S * 1e4) / 1e4, Math.round(Y / S * 1e4) / 1e4] : [0.3227, 0.329], bri: Math.round(Math.max(r, g, b) / 255 * 254) };
 }
 
+// One budget per bridge, shared by every HueSender that talks to it: the bridge's ~10 commands a second are for all its lights.
+const bridges = new Map();
+const bridgeOf = (host, rate) => { const k = String(host).includes(":") ? String(host) : `${host}:80`; let b = bridges.get(k);
+  if (!b) bridges.set(k, b = { last: 0, busy: 0, gap: 1000 / (rate || 10), lastBy: null, waiting: new Map(), queue: [], timer: null }); return b; };
+function pump(b) { // queued commands (power off) go out one per gap, ahead of the colour stream
+  if (b.timer || !b.queue.length) return;
+  const go = () => { b.timer = null; const f = b.queue.shift(); if (f) { b.last = Date.now(); f(); } if (b.queue.length) { b.timer = setTimeout(go, b.gap); b.timer.unref?.(); } };
+  const wait = Math.max(0, b.gap - (Date.now() - b.last)); b.timer = setTimeout(go, wait); b.timer.unref?.();
+}
+
 export class HueSender {
-  /** @param {string} host bridge ip @param {{user:string, lights:string[], rate?:number}} o */
-  constructor(host, o) { this.host = host; this.user = o.user; this.lights = o.lights || []; this.gap = 1000 / (o.rate || 10); this.last = 0; this.turn = 0; this.prev = new Map(); this.busy = 0; this.sent = 0; }
+  /** @param {string} host bridge ip @param {{user:string, lights:string[], color?:boolean[], rate?:number}} o color[i] false: a white-only light (no xy) */
+  constructor(host, o) { this.host = host; this.user = o.user; this.lights = o.lights || []; this.color = o.color || []; this.b = bridgeOf(host, o.rate); this.turn = 0; this.prev = new Map(); this.sent = 0; }
   send(rgb) {
-    const now = Date.now(); if (now - this.last < this.gap || this.busy > 2 || !this.lights.length) return;
+    const b = this.b, now = Date.now(); if (!this.lights.length || this.closed) return;
     // the light whose colour is furthest from what it shows now goes next
-    let best = -1, bestD = 6; for (let k = 0; k < this.lights.length; k++) { const i = (this.turn + k) % this.lights.length, p = this.prev.get(i), r = rgb[i * 3], g = rgb[i * 3 + 1], b = rgb[i * 3 + 2];
-      const d = p ? Math.abs(p[0] - r) + Math.abs(p[1] - g) + Math.abs(p[2] - b) : 999; if (d > bestD) { bestD = d; best = i; } }
-    if (best < 0) return; this.last = now; this.turn = best + 1;
-    const r = rgb[best * 3], g = rgb[best * 3 + 1], b = rgb[best * 3 + 2], c = rgbToXy(r, g, b); this.prev.set(best, [r, g, b]);
-    const body = c.bri < 2 ? { on: false, transitiontime: 1 } : { on: true, bri: c.bri, xy: c.xy, transitiontime: 1 };
-    this.busy++; req(this.host, "PUT", `/api/${this.user}/lights/${this.lights[best]}/state`, body, 2000).then(() => this.sent++).catch(() => {}).finally(() => this.busy--);
+    let best = -1, bestD = 6; for (let k = 0; k < this.lights.length; k++) { const i = (this.turn + k) % this.lights.length; if (i * 3 + 2 >= rgb.length) continue; // a light with no LEDs in the room
+      const p = this.prev.get(i), r = rgb[i * 3], g = rgb[i * 3 + 1], bl = rgb[i * 3 + 2];
+      const d = p ? Math.abs(p[0] - r) + Math.abs(p[1] - g) + Math.abs(p[2] - bl) : 999; if (d > bestD) { bestD = d; best = i; } }
+    if (best < 0) { b.waiting.delete(this); return; }
+    if (now - b.last < b.gap || b.busy > 2 || b.queue.length) { b.waiting.set(this, now); return; }
+    if (b.lastBy === this && [...b.waiting].some(([x, t]) => x !== this && now - t < 500)) return; // another device on this bridge is waiting: its turn
+    b.last = now; b.lastBy = this; b.waiting.delete(this); this.turn = best + 1;
+    const r = rgb[best * 3], g = rgb[best * 3 + 1], bl = rgb[best * 3 + 2], c = rgbToXy(r, g, bl); this.prev.set(best, [r, g, bl]);
+    const body = c.bri < 2 ? { on: false, transitiontime: 1 } : this.color[best] === false ? { on: true, bri: c.bri, transitiontime: 1 } : { on: true, bri: c.bri, xy: c.xy, transitiontime: 1 };
+    // when the bridge can't be reached, forget what the light shows so it gets its colour again once the bridge is back
+    b.busy++; req(this.host, "PUT", `/api/${this.user}/lights/${this.lights[best]}/state`, body, 2000).then(() => this.sent++, () => this.prev.delete(best)).finally(() => b.busy--);
   }
-  power(on) { if (!on) for (const id of this.lights) req(this.host, "PUT", `/api/${this.user}/lights/${id}/state`, { on: false }).catch(() => {}); this.prev.clear(); }
-  close() {}
+  power(on) {
+    this.prev.clear(); if (on) return;
+    for (const id of this.lights) this.b.queue.push(() => { this.b.busy++; req(this.host, "PUT", `/api/${this.user}/lights/${id}/state`, { on: false }, 2000).catch(() => {}).finally(() => this.b.busy--); });
+    pump(this.b);
+  }
+  close() { this.closed = true; this.b.waiting.delete(this); if (this.b.lastBy === this) this.b.lastBy = null; }
 }

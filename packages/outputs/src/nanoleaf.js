@@ -5,7 +5,9 @@ import http from "node:http";
 import dgram from "node:dgram";
 
 export const NANOLEAF_PORT = 16021, NANOLEAF_STREAM_PORT = 60222;
-const CONTROLLERS = new Set([12, 15, 19, 20]); // shapes controller, power supply and connector pieces have no light
+// shape types with no light: Rhythm module (1), Shapes controller (12), Lines connector (16), controller cap (19), power connector (20).
+// 15 is "Elements Hexagon - Corner", which does light up.
+const CONTROLLERS = new Set([1, 12, 16, 19, 20]);
 
 function req(host, port, method, path, body, timeout = 4000) {
   return new Promise((res, rej) => {
@@ -67,6 +69,7 @@ export class NanoleafSender {
     if (now - this.startedAt > 120000) { this.startedAt = now; nanoleafStream(this.host, this.token).catch(() => { this.startedAt = now - 110000; }); } // (re)start streaming every 2 minutes, in case the panels restarted
     try { this.sock.send(nanoleafFrame(this.ids, rgb), this.port, this.ip); this.sent++; } catch {}
   }
-  power(on) { return nanoleafPower(this.host, this.token, on).catch(() => {}); }
+  power(on) { if (on) this.startedAt = 0; // panels that were off may have dropped streaming: ask again with the next frame
+    return nanoleafPower(this.host, this.token, on).catch(() => {}); }
   close() { setTimeout(() => { try { this.sock.close(); } catch {} }, 20); }
 }

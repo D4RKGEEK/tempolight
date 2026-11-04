@@ -34,3 +34,23 @@ test("Govee discovery reads scan answers", async () => {
   try { const found = await discoverGovee({ timeoutMs: 800, port: listenPort, scanPort: fake.address().port, group: "127.0.0.1" });
     assert.deepEqual(found, [{ host: "127.0.0.1", sku: "H6199", device: "AA:BB", name: "Govee H6199" }]); } finally { fake.close(); }
 });
+
+test("Govee razer: never more segments than the one-byte length allows", () => {
+  const b = Buffer.from(goveeRazerPacket(new Array(300 * 3).fill(7)), "base64");
+  assert.equal(b[5], 60, "capped to 60 segments"); assert.equal(b[2], 60 * 3 + 2); assert.equal(b.length, 6 + 60 * 3 + 1);
+  let x = 0; for (const v of b.subarray(0, -1)) x ^= v; assert.equal(b.at(-1), x);
+  assert.equal(new GoveeSender("127.0.0.1", { mode: "segments", segments: 300 }).segments, 60);
+});
+
+test("Govee razer mode is switched on again: periodically and after power on", async () => {
+  const L = await listen();
+  try {
+    const seg = new GoveeSender("127.0.0.1", { port: L.port, mode: "segments", segments: 2, fps: 1000 }), a = new Uint8Array(6).fill(100), b = new Uint8Array(6).fill(200);
+    const ons = () => L.got.filter(m => m.cmd === "razer" && Buffer.from(m.data.pt, "base64")[3] === 0xb1).length;
+    seg.send(a); await sleep(30); assert.equal(ons(), 1);
+    seg.send(b); await sleep(30); assert.equal(ons(), 1, "not with every frame");
+    seg.razer -= 11000; seg.send(a); await sleep(30); assert.equal(ons(), 2, "again after a while, in case the light dropped out of razer mode");
+    seg.power(false); seg.power(true); seg.send(a); await sleep(30); assert.equal(ons(), 3, "again after power on, even with the same colours");
+    seg.close(); await sleep(80);
+  } finally { L.s.close(); }
+});

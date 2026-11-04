@@ -24,49 +24,62 @@ export function parseController(b) {
 /** One TCP connection to an OpenRGB server, shared by every device on it. Answers come back in order. */
 class Connection {
   constructor(host, port) {
-    this.host = host; this.port = port; this.waiting = []; this.buf = Buffer.alloc(0); this.users = 0; this.ready = this.open();
+    this.host = host; this.port = port; this.waiting = []; this.buf = Buffer.alloc(0); this.ready = this.open();
   }
   open() {
     return new Promise((res, rej) => {
-      const s = this.sock = net.connect(this.port, this.host); s.setNoDelay(true);
-      const fail = e => { this.dead = true; this.deadAt = Date.now(); for (const w of this.waiting.splice(0)) w.rej(e); rej(e); };
-      s.once("connect", () => { s.write(orgbPacket(0, ID.NAME, Buffer.from("Tempolight\0"))); res(); });
-      s.on("error", fail); s.on("close", () => { this.dead = true; this.deadAt ||= Date.now(); for (const w of this.waiting.splice(0)) w.rej(new Error("OpenRGB closed the connection")); });
+      const s = this.sock = net.connect(this.port, this.host); s.setNoDelay(true); s.unref(); // never keeps Tempolight (or a test) running by itself
+      const fail = e => { this.dead = true; this.deadAt ||= Date.now(); for (const w of this.waiting.splice(0)) { clearTimeout(w.timer); w.rej(e); } rej(e); };
+      s.once("connect", () => { this.connected = true; s.write(orgbPacket(0, ID.NAME, Buffer.from("Tempolight\0"))); res(); });
+      s.on("error", fail); s.on("close", () => fail(new Error("OpenRGB closed the connection")));
       s.on("data", d => { this.buf = Buffer.concat([this.buf, d]);
         while (this.buf.length >= 16) { const size = this.buf.readUInt32LE(12); if (this.buf.length < 16 + size) break;
-          const id = this.buf.readUInt32LE(8), body = this.buf.subarray(16, 16 + size); this.buf = this.buf.subarray(16 + size);
-          const i = this.waiting.findIndex(w => w.id === id); if (i >= 0) this.waiting.splice(i, 1)[0].res(body); } });
-      s.setTimeout(5000, () => { if (this.waiting.length) s.destroy(new Error("OpenRGB didn't answer")); });
+          const dev = this.buf.readUInt32LE(4), id = this.buf.readUInt32LE(8), body = this.buf.subarray(16, 16 + size); this.buf = this.buf.subarray(16 + size);
+          const i = this.waiting.findIndex(w => w.id === id && (id === ID.COUNT || w.dev === dev)); if (i >= 0) { const w = this.waiting.splice(i, 1)[0]; clearTimeout(w.timer); w.res(body); } } });
+      // a computer that's off doesn't refuse the connection, it just never answers: give up after 4 s instead of the OS's minute or two
+      s.setTimeout(4000, () => { if (!this.connected) s.destroy(new Error("OpenRGB didn't answer")); });
     });
   }
-  async ask(dev, id) { await this.ready; return new Promise((res, rej) => { this.waiting.push({ id, res, rej }); this.sock.write(orgbPacket(dev, id)); }); }
+  async ask(dev, id) { await this.ready; if (this.dead) throw new Error("OpenRGB closed the connection");
+    return new Promise((res, rej) => { // the idle timeout can't catch a server that stops answering while LED updates keep the socket busy
+      const w = { id, dev, res, rej, timer: setTimeout(() => this.sock.destroy(new Error("OpenRGB didn't answer")), 5000) }; w.timer.unref?.();
+      this.waiting.push(w); this.sock.write(orgbPacket(dev, id)); }); }
   async send(dev, id, data) { await this.ready; if (!this.dead) this.sock.write(orgbPacket(dev, id, data)); }
-  close() { try { this.sock.end(); } catch {} }
+  close() { try { this.sock.destroy(); } catch {} }
 }
 const pool = new Map();
 // reconnect when the connection dropped, but while streaming not more than every 3 s
 function conn(host, port = OPENRGB_PORT, retry = true) { const k = `${host}:${port}`; let c = pool.get(k);
   if (!c || (c.dead && (retry || Date.now() - c.deadAt > 3000))) { c = new Connection(host, port); pool.set(k, c); c.ready.catch(() => {}); } return c; }
 
-/** The devices an OpenRGB server knows: [{index, name, description, leds, zones}] */
-export async function listOpenRGB(host = "127.0.0.1", port = OPENRGB_PORT) {
-  const c = conn(host, port), n = (await c.ask(0, ID.COUNT)).readUInt32LE(0), out = [];
-  for (let i = 0; i < n; i++) out.push({ index: i, ...parseController(await c.ask(i, ID.DATA)) });
-  return out;
+/** The devices an OpenRGB server knows: [{index, name, description, leds, zones}]. Health checks for several devices on one
+ * server share one listing (asked at most every 3 s), so they don't fetch every controller's data again and again. */
+const lists = new Map();
+export function listOpenRGB(host = "127.0.0.1", port = OPENRGB_PORT) {
+  const k = `${host}:${port}`, hit = lists.get(k); if (hit && Date.now() - hit.at < 3000) return hit.p;
+  const p = (async () => { const c = conn(host, port), n = (await c.ask(0, ID.COUNT)).readUInt32LE(0), out = [];
+    for (let i = 0; i < n; i++) out.push({ index: i, ...parseController(await c.ask(i, ID.DATA)) });
+    return out; })();
+  lists.set(k, { at: Date.now(), p }); p.catch(() => lists.delete(k)); return p;
 }
 
 export class OpenRGBSender {
-  /** @param {string} host @param {{port?:number, index?:number, fps?:number}} o */
-  constructor(host, o = {}) { this.host = host; this.port = o.port || OPENRGB_PORT; this.index = o.index || 0; this.minGap = 1000 / (o.fps || 40); this.last = 0; this.custom = false; this.sent = 0; }
+  /** @param {string} host @param {{port?:number, index?:number, leds?:number, fps?:number}} o
+   * leds: the device's LED count in OpenRGB, which ignores an update with more colours than the device has, so we send exactly that many. */
+  constructor(host, o = {}) { this.host = host; this.port = o.port || OPENRGB_PORT; this.index = o.index || 0; this.leds = o.leds || 0; this.minGap = 1000 / (o.fps || 40); this.last = 0; this.custom = false; this.sent = 0;
+    const k = `${host}:${this.port}`; users.set(k, (users.get(k) || 0) + 1); this.key = k; }
   /** @param {Uint8Array} rgb */
   send(rgb) {
     const now = Date.now(); if (now - this.last < this.minGap) return; this.last = now;
     const c = conn(this.host, this.port, false); if (c !== this.c) { this.c = c; this.custom = false; } if (c.dead) return;
     if (!this.custom) { this.custom = true; c.send(this.index, ID.CUSTOM, Buffer.alloc(0)).catch(() => { this.custom = false; }); }
-    const n = Math.min(65535, rgb.length / 3), d = Buffer.alloc(6 + n * 4); d.writeUInt32LE(d.length, 0); d.writeUInt16LE(n, 4);
-    for (let i = 0; i < n; i++) { d[6 + i * 4] = rgb[i * 3]; d[7 + i * 4] = rgb[i * 3 + 1]; d[8 + i * 4] = rgb[i * 3 + 2]; }
+    const n = Math.min(65535, this.leds || rgb.length / 3), d = Buffer.alloc(6 + n * 4); d.writeUInt32LE(d.length, 0); d.writeUInt16LE(n, 4);
+    for (let i = 0; i < n && i * 3 < rgb.length; i++) { d[6 + i * 4] = rgb[i * 3]; d[7 + i * 4] = rgb[i * 3 + 1]; d[8 + i * 4] = rgb[i * 3 + 2]; } // missing LEDs stay black
     c.send(this.index, ID.UPDATE, d).then(() => this.sent++).catch(() => {});
   }
-  close() {}
+  /** The last device on a server closes the shared connection (deleting a device, or the app stopping). */
+  close() { if (this.closed) return; this.closed = true; const n = (users.get(this.key) || 1) - 1;
+    if (n > 0) users.set(this.key, n); else { users.delete(this.key); pool.get(this.key)?.close(); pool.delete(this.key); } }
 }
-export function closeOpenRGB() { for (const c of pool.values()) c.close(); pool.clear(); }
+const users = new Map(); // host:port -> senders using its connection
+export function closeOpenRGB() { for (const c of pool.values()) c.close(); pool.clear(); lists.clear(); }

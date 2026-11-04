@@ -9,9 +9,11 @@ import dgram from "node:dgram";
 export const GOVEE_SCAN_PORT = 4001, GOVEE_LISTEN_PORT = 4002, GOVEE_CMD_PORT = 4003, GOVEE_GROUP = "239.255.255.250";
 const msg = (cmd, data) => Buffer.from(JSON.stringify({ msg: { cmd, data } }));
 
-/** A "razer" packet: 0xBB, 0x00, length, 0xB0, 0x01, count, then R G B for each segment, then an XOR checksum. */
+export const GOVEE_MAX_SEGMENTS = 60; // the length is one byte (count * 3 + 2), so at most 84 colours fit; 60 is plenty
+
+/** A "razer" packet: 0xBB, 0x00, length, 0xB0, 0x01 (blend between colours), count, then R G B per segment, then an XOR checksum. */
 export function goveeRazerPacket(colours) {
-  const n = colours.length / 3, b = [0xbb, 0x00, n * 3 + 2, 0xb0, 0x01, n, ...colours];
+  const n = Math.min(GOVEE_MAX_SEGMENTS, Math.floor(colours.length / 3)), b = [0xbb, 0x00, n * 3 + 2, 0xb0, 0x01, n, ...Array.from(colours).slice(0, n * 3)];
   let x = 0; for (const v of b) x ^= v; b.push(x); return Buffer.from(b).toString("base64");
 }
 export const goveeRazerOn = on => { const b = [0xbb, 0x00, 0x01, 0xb1, on ? 1 : 0]; let x = 0; for (const v of b) x ^= v; b.push(x); return Buffer.from(b).toString("base64"); };
@@ -19,8 +21,8 @@ export const goveeRazerOn = on => { const b = [0xbb, 0x00, 0x01, 0xb1, on ? 1 : 
 export class GoveeSender {
   /** @param {string} ip @param {{mode?:"color"|"segments", segments?:number, port?:number, fps?:number}} o */
   constructor(ip, o = {}) {
-    this.ip = ip; this.mode = o.mode || "color"; this.segments = Math.max(1, o.segments || 1); this.port = o.port || GOVEE_CMD_PORT;
-    this.minGap = 1000 / (o.fps || (this.mode === "segments" ? 25 : 10)); this.last = 0; this.prev = null; this.sent = 0; this.razer = false;
+    this.ip = ip; this.mode = o.mode || "color"; this.segments = Math.max(1, Math.min(GOVEE_MAX_SEGMENTS, Math.round(o.segments) || 1)); this.port = o.port || GOVEE_CMD_PORT;
+    this.minGap = 1000 / (o.fps || (this.mode === "segments" ? 25 : 10)); this.last = 0; this.prev = null; this.sent = 0; this.razer = 0; // when razer mode was last switched on
     this.sock = dgram.createSocket("udp4"); this.sock.on("error", () => {}); this.sock.unref?.();
   }
   _send(buf) { try { this.sock.send(buf, this.port, this.ip); this.sent++; } catch {} }
@@ -32,11 +34,13 @@ export class GoveeSender {
       for (let i = a; i < b; i++) { r += rgb[i * 3]; g += rgb[i * 3 + 1]; bl += rgb[i * 3 + 2]; } out[s * 3] = Math.round(r / (b - a)); out[s * 3 + 1] = Math.round(g / (b - a)); out[s * 3 + 2] = Math.round(bl / (b - a)); }
     if (this.prev && out.every((v, i) => Math.abs(v - this.prev[i]) < 3) && now - this.last < 1000) return; // nothing changed: don't flood the light
     this.prev = out; this.last = now;
-    if (this.mode === "segments") { if (!this.razer) { this._send(msg("razer", { pt: goveeRazerOn(true) })); this.razer = true; } this._send(msg("razer", { pt: goveeRazerPacket(out) })); }
+    // the light leaves razer mode after about a minute without frames (lights off, nothing playing), when it restarts or
+    // when the Govee app takes over, so switch it on again every few seconds rather than only once
+    if (this.mode === "segments") { if (now - this.razer > 10000) { this._send(msg("razer", { pt: goveeRazerOn(true) })); this.razer = now; } this._send(msg("razer", { pt: goveeRazerPacket(out) })); }
     else this._send(msg("colorwc", { color: { r: out[0], g: out[1], b: out[2] }, colorTemInKelvin: 0 }));
   }
-  power(on) { this._send(msg("turn", { value: on ? 1 : 0 })); }
-  close() { if (this.razer) this._send(msg("razer", { pt: goveeRazerOn(false) })); setTimeout(() => { try { this.sock.close(); } catch {} }, 50); }
+  power(on) { this._send(msg("turn", { value: on ? 1 : 0 })); this.razer = 0; this.prev = null; } // after power on, razer mode and the colour go again at once
+  close() { if (this.razer && this.mode === "segments") this._send(msg("razer", { pt: goveeRazerOn(false) })); setTimeout(() => { try { this.sock.close(); } catch {} }, 50); }
 }
 
 /** Find Govee lights with LAN control turned on. Returns [{host, sku, device, name}]. */
@@ -48,6 +52,7 @@ export function discoverGovee({ timeoutMs = 2000, port = GOVEE_LISTEN_PORT, scan
     sock.on("message", (b, r) => { try { const m = JSON.parse(b.toString()).msg; if (m?.cmd !== "scan") return; const d = m.data || {};
       found.set(d.ip || r.address, { host: d.ip || r.address, sku: d.sku || "", device: d.device || "", name: `Govee ${d.sku || "light"}`.trim() }); } catch {} });
     sock.bind(port, () => { try { sock.setBroadcast(true); sock.setMulticastTTL(2); } catch {}
+      try { sock.addMembership(group); } catch {} // some lights answer to the group rather than to us; fails harmlessly for a unicast "group"
       const q = msg("scan", { account_topic: "reserve" }); sock.send(q, scanPort, group); setTimeout(() => { try { sock.send(q, scanPort, group); } catch {} }, 600); });
     setTimeout(done, timeoutMs);
   });

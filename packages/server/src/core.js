@@ -74,7 +74,7 @@ export function createCore({ store, runtime, env }) {
       let user = token, lights;
       try { user ||= await env.huePair(host); lights = await env.hueLights(host, user); } catch (e) { throw new HttpError(400, e.code === "pair" ? e.message : `Couldn't reach a Hue bridge at ${host} (${e.message})`); }
       if (!lights.length) throw new HttpError(400, "That Hue bridge has no lights");
-      const dev = { id: env.newId("d"), name: String(name || "Hue lights").slice(0, 60), host, kind: "hue", hue: { user, lights: lights.map(l => l.id), names: lights.map(l => l.name) }, ddpPort: 80, leds: lights.length, enabled: true };
+      const dev = { id: env.newId("d"), name: String(name || "Hue lights").slice(0, 60), host, kind: "hue", hue: { user, lights: lights.map(l => l.id), names: lights.map(l => l.name), color: lights.map(l => l.color !== false) }, ddpPort: 80, leds: lights.length, enabled: true };
       data().devices.push(dev);
       const y = 1 + (data().room.shapes.length % 7) * 1.1, n = lights.length, pts = lights.map((_, i) => [Math.round((2 + (n > 1 ? i / (n - 1) : 0.5) * 12) * 100) / 100, y]);
       data().room.shapes.push({ type: "points", name: dev.name, count: n, dev: dev.id, rot: 0, start: 0, rev: false, from: null, pts });
@@ -281,14 +281,14 @@ export function createCore({ store, runtime, env }) {
   route("POST", "/api/devices", "admin", async (ctx) => safeDev(await addDevice(ctx.body)));
   route("PATCH", "/api/devices/:id", "admin", async (ctx, p) => {
     const d = data().devices.find(x => x.id === p.id); if (!d) throw new HttpError(404, "No such device"); const b = ctx.body;
-    if (b.name !== undefined) d.name = String(b.name).slice(0, 60); if (b.host !== undefined) d.host = String(b.host).trim(); if (b.ddpPort !== undefined) d.ddpPort = Number(b.ddpPort) || 4048;
+    if (b.name !== undefined) d.name = String(b.name).slice(0, 60); if (b.host !== undefined) d.host = String(b.host).trim(); if (b.ddpPort !== undefined) d.ddpPort = Number(b.ddpPort) || ({ govee: 4003, openrgb: 6742, nanoleaf: 60222, hue: 80 })[d.kind] || 4048;
     if (b.leds !== undefined) d.leds = Math.max(0, Math.round(Number(b.leds))); if (b.enabled !== undefined) d.enabled = !!b.enabled;
     if (b.protocol !== undefined) { if (!["ddp", "e131", "artnet"].includes(b.protocol)) throw new HttpError(400, "Protocol is ddp, e131 or artnet"); d.protocol = b.protocol; }
     if (b.universe !== undefined) d.universe = b.universe === null || b.universe === "" ? undefined : Math.max(0, Math.min(63999, Math.round(Number(b.universe))));
     if (b.goveeMode !== undefined && d.kind === "govee") d.goveeMode = b.goveeMode === "segments" ? "segments" : "color";
     if (b.goveeSegments !== undefined && d.kind === "govee") d.goveeSegments = b.goveeSegments ? Math.max(1, Math.min(60, Math.round(Number(b.goveeSegments)))) : undefined;
     if (b.maxAmps !== undefined) d.maxAmps = Math.max(0, Math.min(500, Number(b.maxAmps) || 0)); if (b.mAperLed !== undefined) d.mAperLed = Math.max(5, Math.min(200, Number(b.mAperLed) || 60));
-    runtime.rebuild(); changed("devices"); return d;
+    runtime.rebuild(); changed("devices"); return safeDev(d);
   });
   route("DELETE", "/api/devices/:id", "admin", (ctx, p) => {
     const i = data().devices.findIndex(x => x.id === p.id); if (i < 0) throw new HttpError(404, "No such device");
@@ -301,7 +301,7 @@ export function createCore({ store, runtime, env }) {
     const b = ctx.body, [found, govee] = await Promise.all([env.discoverWled({ scan: b.scan !== false, timeoutMs: 2500, extraHosts: (b.hosts || []).map(String) }),
       env.discoverGovee ? env.discoverGovee({ timeoutMs: 2500 }).catch(() => []) : []]);
     let orgb = []; if (env.listOpenRGB) orgb = await Promise.race([env.listOpenRGB("127.0.0.1").catch(() => []), new Promise(r => setTimeout(() => r([]), 1500))]); // OpenRGB on this computer
-    const haveOrgb = new Set(data().devices.filter(d => d.kind === "openrgb").map(d => d.orgbIndex || 0));
+    const haveOrgb = new Set(data().devices.filter(d => d.kind === "openrgb" && ["127.0.0.1", "localhost"].includes(env.ipOf(d.host))).map(d => d.orgbIndex || 0)); // only OpenRGB on this computer is listed
     const known = new Set(data().devices.map(d => env.ipOf(d.host)));
     return [...found.map(f => ({ ...f, added: known.has(f.ip) })), ...govee.map(g => ({ ...g, ip: g.host, kind: "govee", leds: 0, added: known.has(g.host) })),
       ...orgb.map(c => ({ host: "127.0.0.1", ip: "127.0.0.1", name: c.name, leds: c.leds, kind: "openrgb", index: c.index, added: haveOrgb.has(c.index) }))];

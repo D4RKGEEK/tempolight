@@ -38,3 +38,37 @@ test("OpenRGB: lists devices and streams LED colours in direct mode", async () =
     assert.equal(parseController(controllerData("X", 3, [])).leds, 3);
   } finally { closeOpenRGB(); await srv.close(); }
 });
+
+test("OpenRGB: sends exactly the device's LED count (OpenRGB ignores updates with too many colours)", async () => {
+  const srv = await fakeServer([["Fan", 3, []]]);
+  try {
+    const tx = new OpenRGBSender("127.0.0.1", { port: srv.port, leds: 3, fps: 1000 }); tx.send(new Uint8Array(15).fill(9)); await sleep(60);
+    let upd = srv.got.filter(p => p.id === 1050).at(-1); assert.equal(upd.body.readUInt16LE(4), 3); assert.equal(upd.body.length, 6 + 3 * 4);
+    tx.send(new Uint8Array([1, 2, 3])); await sleep(60); upd = srv.got.filter(p => p.id === 1050).at(-1);
+    assert.equal(upd.body.readUInt16LE(4), 3, "fewer colours: padded with black"); assert.deepEqual([...upd.body.subarray(6)], [1, 2, 3, 0, 0, 0, 0, 0, 0, 0, 0, 0]);
+    tx.close();
+  } finally { closeOpenRGB(); await srv.close(); }
+});
+
+test("OpenRGB: health checks share one listing; a server that stops answering fails instead of hanging", async () => {
+  const srv = await fakeServer([["A", 2, []], ["B", 2, []]]);
+  try {
+    const [a, b] = await Promise.all([listOpenRGB("127.0.0.1", srv.port), listOpenRGB("127.0.0.1", srv.port)]);
+    assert.deepEqual(a, b); assert.equal(srv.got.filter(p => p.id === 0).length, 1, "asked once");
+  } finally { closeOpenRGB(); await srv.close(); }
+  const mute = net.createServer(s => { s.on("data", () => {}); s.on("error", () => {}); }); await new Promise(r => mute.listen(0, "127.0.0.1", r));
+  try {
+    const tx = new OpenRGBSender("127.0.0.1", { port: mute.address().port, fps: 1000 }), keep = setInterval(() => tx.send(new Uint8Array(6)), 20); // LED updates keep the socket busy
+    const t = Date.now(); await assert.rejects(listOpenRGB("127.0.0.1", mute.address().port), /didn't answer/); clearInterval(keep);
+    assert.ok(Date.now() - t < 7000); tx.close();
+  } finally { closeOpenRGB(); await new Promise(r => mute.close(r)); }
+});
+
+test("OpenRGB: the last device on a server closes the shared connection", async () => {
+  let open = 0; const srv = net.createServer(s => { open++; s.resume(); s.on("close", () => open--); s.on("error", () => {}); }); await new Promise(r => srv.listen(0, "127.0.0.1", r));
+  try {
+    const port = srv.address().port, a = new OpenRGBSender("127.0.0.1", { port, index: 0 }), b = new OpenRGBSender("127.0.0.1", { port, index: 1 });
+    a.send(new Uint8Array(3)); b.send(new Uint8Array(3)); await sleep(80); assert.equal(open, 1, "one connection for both");
+    a.close(); await sleep(50); assert.equal(open, 1, "still used by the other device"); b.close(); await sleep(80); assert.equal(open, 0, "closed");
+  } finally { closeOpenRGB(); await new Promise(r => srv.close(r)); }
+});

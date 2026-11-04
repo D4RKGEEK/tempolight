@@ -6,6 +6,8 @@ import { buildLayout, createEffects, createDirector, segmentRanges, songView, me
 // Everything that touches the network or the sound card comes in through `io` (see node-io.js), so the same runtime
 // runs on a PC or Pi and, with pretend devices, inside the browser for the online demo.
 
+const DEFAULT_PORT = { govee: 4003, openrgb: 6742, nanoleaf: 60222, hue: 80 }; // when a device has no port of its own
+
 /**
  * @param {{data:object, save:()=>void}} store
  * @param {{io:object, logger?:Console|null}} opts io: DDPSender, AudioSyncSender, getInfo, setState, setSegments, ipOf,
@@ -38,11 +40,13 @@ export function createRuntime(store, { io, logger = console } = {}) {
     for (const [id, o] of outs) if (!ids.has(id)) { o.sender.close(); outs.delete(id); }
     for (const d of data().devices) {
       const used = Math.max(0, ...ranges.filter(r => r.dev === d.id).map(r => r.end + 1));
-      const size = Math.max(used, 1), ip = ipOf(d.host), port = d.ddpPort || 4048;
+      const size = Math.max(used, 1), ip = ipOf(d.host), port = d.ddpPort || DEFAULT_PORT[d.kind] || 4048;
       let o = outs.get(d.id);
-      const proto = d.kind === "govee" && GoveeSender ? "govee" : d.kind === "openrgb" && OpenRGBSender ? "openrgb" : d.kind === "nanoleaf" && NanoleafSender ? "nanoleaf" : d.kind === "hue" && HueSender ? "hue" : d.protocol && d.protocol !== "ddp" && E131Sender ? d.protocol : "ddp", key = `${ip}|${port}|${proto}|${d.universe ?? ""}|${d.goveeMode || ""}|${d.leds}|${d.orgbIndex ?? ""}`;
-      if (!o || o.key !== key) { if (o) o.sender.close();
-        o = { sender: proto === "ddp" ? new DDPSender(ip, port) : proto === "hue" ? new HueSender(d.host, { user: d.hue?.user, lights: d.hue?.lights }) : proto === "nanoleaf" ? new NanoleafSender(d.host, { token: d.nanoleaf?.token, panels: d.nanoleaf?.panels, port }) : proto === "openrgb" ? new OpenRGBSender(ip, { port, index: d.orgbIndex || 0 }) : proto === "govee" ? new GoveeSender(ip, { mode: d.goveeMode, segments: d.goveeSegments || d.leds, port }) : new E131Sender(ip, { protocol: proto, universe: d.universe }), ip, port, key }; outs.set(d.id, o); }
+      const proto = d.kind === "govee" && GoveeSender ? "govee" : d.kind === "openrgb" && OpenRGBSender ? "openrgb" : d.kind === "nanoleaf" && NanoleafSender ? "nanoleaf" : d.kind === "hue" && HueSender ? "hue" : d.protocol && d.protocol !== "ddp" && E131Sender ? d.protocol : "ddp";
+      // everything a sender is built from: a change to any of it (segments, a new token after pairing again, a restored backup) makes a new sender
+      const key = JSON.stringify([d.host, port, proto, d.universe ?? "", d.goveeMode || "", d.goveeSegments || 0, d.leds, d.orgbIndex ?? "", d.nanoleaf?.token, d.nanoleaf?.panels, d.hue?.user, d.hue?.lights, d.hue?.color]);
+      if (!o || o.key !== key) { const old = o; // the new sender first, so a connection shared with the old one (OpenRGB) stays open
+        o = { sender: proto === "ddp" ? new DDPSender(ip, port) : proto === "hue" ? new HueSender(d.host, { user: d.hue?.user, lights: d.hue?.lights, color: d.hue?.color }) : proto === "nanoleaf" ? new NanoleafSender(d.host, { token: d.nanoleaf?.token, panels: d.nanoleaf?.panels, port }) : proto === "openrgb" ? new OpenRGBSender(ip, { port, index: d.orgbIndex || 0, leds: d.leds }) : proto === "govee" ? new GoveeSender(ip, { mode: d.goveeMode, segments: d.goveeSegments || d.leds, port }) : new E131Sender(ip, { protocol: proto, universe: d.universe }), ip, port, key }; outs.set(d.id, o); if (old) old.sender.close(); }
       o.size = size; o.buf = new Uint8Array(size * 3); o.used = used;
     }
     col8 = new Uint8Array(L.N * 3);
