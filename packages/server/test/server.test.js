@@ -530,7 +530,7 @@ test("Pro DJ Link: in automatic mode the effect still changes every few bars", a
   } finally { await s.done(); }
 });
 
-test("Pro DJ Link: a port another app holds is reported, not silently ignored", async () => {
+test("Pro DJ Link: a port another app holds is reported, not silently ignored", { skip: process.platform === "win32" && "Windows lets both apps share the port (SO_REUSEADDR), so there is nothing to report" }, async () => {
   const s = await setup(), port = 52000 + Math.floor(Math.random() * 900), hog = dgram.createSocket({ type: "udp4", reuseAddr: false });
   try {
     await new Promise(r => hog.bind(port, r));
