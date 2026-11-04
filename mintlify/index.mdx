@@ -1,0 +1,122 @@
+---
+title: "Tempolight documentation"
+sidebarTitle: "Home"
+description: "Music-reactive lighting that understands the song: beats, build-ups, drops and mood. Guides, the API and how it works inside."
+icon: "house"
+mode: "frame"
+---
+
+{/* Hand-written landing page (scripts/build-mintlify.js never overwrites it). The other pages are made from docs/. */}
+
+<div className="tl-home">
+
+<div className="tl-hero">
+  <div className="tl-eyebrow">Documentation</div>
+  <h1 className="tl-title">Lights that know the song</h1>
+  <p className="tl-lead">
+    Tempolight finds the beats, build-ups and drops of a song ahead of time and plays them across every light in
+    your room: WLED, Hue, Nanoleaf, Govee, DMX and more. Free, open source, and light enough for a Raspberry Pi.
+  </p>
+  <div className="tl-actions">
+    <a className="tl-btn tl-btn-primary" href="/guides/first-run">Start your first show</a>
+    <a className="tl-btn" href="https://tempolight.pages.dev">Try the online demo</a>
+  </div>
+</div>
+
+<h2 className="tl-h2">Getting started</h2>
+<p className="tl-sub">From nothing to lights moving with music in about ten minutes.</p>
+
+<Columns cols={3}>
+  <Card title="Install Tempolight" icon="download" href="/install">
+    A one-file app for Windows, macOS and Linux, or Homebrew, winget, npx, Docker and the Pi image.
+  </Card>
+  <Card title="Your first show" icon="play" href="/guides/first-run">
+    Open it, follow the setup wizard, fix the timing once and play a song.
+  </Card>
+  <Card title="Connect your lights" icon="lightbulb" href="/guides/connect-lights">
+    WLED, Govee, Hue, Nanoleaf, LIFX, WiZ, Kasa, Twinkly, DMX, and your guests' phones.
+  </Card>
+</Columns>
+
+<h2 className="tl-h2">Everything Tempolight does</h2>
+<p className="tl-sub">One app, from the music in to the light out.</p>
+
+<Columns cols={3}>
+  <Card title="Song analysis" icon="audio-waveform" href="/guides/music-sources">
+    Songs are analysed before they play: beat grid, song parts, drops, key and mood.
+  </Card>
+  <Card title="Live listening" icon="ear" href="/hearing-music">
+    A microphone, the computer's sound or a sound card on a Pi, with songs recognised as they play.
+  </Card>
+  <Card title="Effects and the show editor" icon="wand-sparkles" href="/effects">
+    95 effects on the real shape of your room, chosen by a director that follows the song.
+  </Card>
+  <Card title="Devices" icon="lightbulb" href="/guides/connect-lights">
+    Found on your network by themselves, with zones, power limits and a latency meter.
+  </Card>
+  <Card title="Spotify sync" icon="disc-3" href="/spotify">
+    Exact sync once a song is learned, songs learned on their first play, shared beat maps.
+  </Card>
+  <Card title="Smart home" icon="house" href="/guides/smart-home">
+    Home Assistant, Apple Home, Google Assistant, Alexa, wake-up sunrises and night mode.
+  </Card>
+  <Card title="DJs and parties" icon="party-popper" href="/guides/party-and-dj">
+    Live pads, MIDI, Pro DJ Link, Ableton Link, scenes, guest requests and a safe mode.
+  </Card>
+  <Card title="Creators" icon="video" href="/guides/creators">
+    Stream Deck, OBS, game events, Twitch and Discord.
+  </Card>
+  <Card title="API" icon="braces" href="/api">
+    Everything the app does, over plain HTTP and one WebSocket.
+  </Card>
+</Columns>
+
+<h2 className="tl-h2">Install anywhere</h2>
+<p className="tl-sub">The same app everywhere; pick what fits where your lights live.</p>
+
+<Columns cols={4}>
+  <Card title="One-file app" icon="app-window" href="/install#one-file-app">
+    Download, double-click, done.
+  </Card>
+  <Card title="Docker" icon="container" href="/guides/docker">
+    Linux, NAS or Docker Desktop.
+  </Card>
+  <Card title="Raspberry Pi" icon="cpu" href="/raspberry-pi">
+    A ready-made image, always on.
+  </Card>
+  <Card title="Home Assistant add-on" icon="house-plug" href="/guides/smart-home#the-home-assistant-add-on">
+    Install it from your HA.
+  </Card>
+</Columns>
+
+<div className="tl-explore">
+  <h2 className="tl-h2">Explore</h2>
+  <div className="tl-explore-grid">
+    <div>
+      <h3>Learn</h3>
+      <a href="/overview">Overview</a>
+      <a href="/guides/overview">All guides</a>
+      <a href="/getting-started">Getting started</a>
+    </div>
+    <div>
+      <h3>Build</h3>
+      <a href="/api">HTTP API</a>
+      <a href="/websocket">WebSocket API</a>
+      <a href="/architecture">Architecture</a>
+    </div>
+    <div>
+      <h3>Help</h3>
+      <a href="/guides/troubleshooting">Troubleshooting</a>
+      <a href="/guides/faq">Questions and answers</a>
+      <a href="/roadmap">Roadmap</a>
+    </div>
+    <div>
+      <h3>Project</h3>
+      <a href="https://github.com/D4RKGEEK/tempolight">GitHub</a>
+      <a href="https://github.com/D4RKGEEK/tempolight/releases">Releases</a>
+      <a href="https://github.com/D4RKGEEK/tempolight/blob/main/CONTRIBUTING.md">Contributing</a>
+    </div>
+  </div>
+</div>
+
+</div>

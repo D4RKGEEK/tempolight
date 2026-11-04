@@ -1,0 +1,122 @@
+---
+title: "Security"
+description: "Tempolight is made for a home or venue network: anyone who can reach its port can see the lights' state and, without a PIN lock, change everything."
+icon: "shield"
+---
+{/* Generated from docs/internals/security.md by scripts/build-mintlify.js. Edit that file, then run: node scripts/build-mintlify.js */}
+
+Tempolight is made for a home or venue network: anyone who can reach its port can see the lights' state and, without
+a PIN lock, change everything. This page describes what protects what, and where it is in the code. To report a
+vulnerability, see [SECURITY.md](https://github.com/D4RKGEEK/tempolight/blob/main/SECURITY.md).
+
+## The PIN lock
+
+- `POST /api/lock {pin}` (4-8 digits) stores `lock: {salt, hash}` in `tempolight.json`: scrypt of the PIN with a
+  random 8-byte salt, 32 bytes, hex (`store.js` `hashPin`). The PIN itself is never stored. It answers with a token,
+  so the device that set the lock stays unlocked.
+- `POST /api/unlock {pin}` waits 300 ms before checking (slowing down guessing), compares with
+  `crypto.timingSafeEqual`, and answers `{token}` or 403 *Wrong PIN*.
+- A **token** is 16 random bytes (hex), valid for 12 hours, kept **in memory only** (a restart logs everyone out).
+  Setting a new PIN or removing the lock (`DELETE /api/lock`) clears all tokens. Backups never include `lock`, and a
+  restore keeps the current PIN.
+- The online demo uses a light FNV hash instead of scrypt, since everything there stays in the visitor's browser.
+
+### Areas
+
+Each route has an area ([the generated table in api.md](/api#all-routes)):
+
+| Area | Without a lock | With a lock |
+| --- | --- | --- |
+| open (`null`) | allowed | allowed |
+| `admin` | allowed | needs a valid token |
+| guest area: `effects`, `scenes`, `pads`, `brightness` | allowed | allowed when `settings.guest.<area>` is true (all four are by default), else needs a token |
+
+`core.authorised(ctx, area)` checks, in order: no lock → yes; the guest area is allowed → yes; the token from the
+`x-tempolight-token` header or `?token=` is known and not expired → yes. `need()` throws 403 *Settings are locked*.
+The web app keeps the token in `localStorage` and forgets it on any 403.
+
+Some open routes check something of their own:
+
+- `POST /api/wake`, `/api/wake/snooze`, `/api/wake/stop`, `DELETE /api/wake`, `POST /api/sleep`, `DELETE /api/sleep`:
+  allowed like the brightness area, or with the **link key** (`?key=`, header `x-tempolight-key`, or `key` in the body),
+  a random token made for phone automations that opens these calls only (compared in constant time).
+  `GET /api/home` returns `wake.key` only to callers who are unlocked.
+- `POST /api/gsi/:game`: the game's token from its config file (`auth.token` in the body, compared in constant time).
+- `POST /api/requests`: only while `settings.requests` is on.
+
+Open routes that read (`GET /api/state`, `/api/status`, `/api/devices`, `/api/room`, `/api/songs`, ...) are open on
+purpose: guests' phones and Home Assistant read them. They never contain secrets (below).
+
+### The WebSocket
+
+`/ws?token=<token>`. The token is checked per message type, against the same areas: `action` and `midi-clock` need the
+`pads` area, `screen` the `effects` area (refused with `{type: "screen-refused", why: "locked"}`), `map` (camera
+mapping) is admin. `preview`, `phone`, `audio-start`/`audio-stop`, binary audio and `clock` are open, like the HTTP
+song routes: they feed music in, they don't change settings.
+
+## The Origin check (cross-site requests)
+
+A page on any website could otherwise make a visitor's browser send requests to `http://192.168.1.x:8080`. So
+(`ws.js` `foreignOrigin`, used in `app.js`):
+
+- every `/api/` request that isn't a `GET` is refused with 403 *Requests from other websites aren't allowed* when it
+  carries an `Origin` header whose host differs from the request's `Host`;
+- WebSocket upgrades from another origin get `403 Forbidden`.
+
+Scripts, curl, Home Assistant and other apps send no `Origin` and aren't affected. Behind a reverse proxy that
+rewrites `Host`, list the public host in `TEMPOLIGHT_ALLOWED_ORIGINS` (comma-separated, with or without `https://`).
+`GET` requests are not checked (they don't change anything, and the browser's same-origin policy keeps other sites
+from reading the answers, since no CORS headers are sent).
+
+## Secrets
+
+| Secret | Where it is kept | Sent to browsers? | In a backup (`GET /api/backup`)? |
+| --- | --- | --- | --- |
+| PIN | `lock` (scrypt hash) | no | no |
+| Unlock tokens | memory | only to the caller who unlocked | no |
+| MQTT password | `settings.mqtt.password` | no: blanked, `hasPassword` instead | yes |
+| Hue user name and client key, Nanoleaf token | the device (`hue`, `nanoleaf`) | no: `safeDev()` removes them | yes |
+| OBS password, Twitch sign-in, Discord webhook | `integrations` | no: `hasPassword`, `auth: {login, scopes}`, a masked webhook | yes |
+| Game (GSI) tokens | `integrations.games` | to admins only (`GET /api/integrations`, `.../cfg`) | yes |
+| Wake-up link key | `home.wake.key` | to unlocked callers only | yes |
+| Spotify tokens | `spotify-token.json` (mode 0600) | no | no |
+| HomeKit identity, setup code, pairings | `homekit.json` (mode 0600) | the setup code to admins (`GET /api/homekit`) | no |
+| Beat-map install ID | `beatmaps-install-id` (mode 0600) | no | no |
+
+A backup is admin-only, but it does contain the secrets marked *yes*: treat backup files like the settings file.
+`tempolight.json` itself is written with the default file mode (the process's umask); on a shared computer, keep the
+data folder private. Status broadcasts carry no secrets, and the start-up line that shows an MQTT broker set from the environment strips
+its credentials.
+
+## Rate limits and size limits
+
+| What | Limit | Where |
+| --- | --- | --- |
+| PIN guesses | 300 ms per attempt | core.js `POST /api/unlock` |
+| Song requests | 30 a minute for everyone together (429) | core.js |
+| GSI posts | 40 a second per game; 30 wrong tokens a minute → 429 for a minute | integrations/index.js |
+| Twitch chat commands | `cooldownSec` (10 s) per command, `userCooldownSec` (30 s) per user (moderators exempt) | integrations/twitch.js |
+| Request bodies | 12 MB (413) | app.js `readBody` |
+| WebSocket frames | 16 MB (closed with 1009) | ws.js |
+| Screen sync pictures | 22,000 base64 characters, at most 4,096 pixels; one browser at a time | core.js, runtime.js `setScreen` |
+| Song memory | 400 kB per song, ~2 MB and 60 songs in all | runtime.js |
+| Lists | 100 custom effects, 200 requests, 32 zones, 128 DMX fixtures per universe, 500 timeline items of each kind, 8,192 LEDs per shape | core.js, pro-api.js, timeline.js |
+
+Slow consumers can't stall the server: preview frames, phones and broadcasts skip a client whose socket has more than
+256 KB queued.
+
+## Safety of people
+
+Not a network matter, but enforced in code: the photosensitivity limiter (`settings.safe`: at most 3 big brightness
+jumps a second), night mode (forces it), DMX lasers and fog off until turned on, lasers only in drops and never in
+safe or night mode, fog with a cool-down and a maximum duty cycle. See
+[director and effects](/internals/director-and-effects#overlays-pads-and-safe-mode) and
+[runtime and outputs](/internals/runtime-and-outputs#dmx).
+
+## Network exposure
+
+The server listens on `0.0.0.0:8080` by default (`--host`, `--port`), so phones on the same Wi-Fi can reach it; it
+speaks plain HTTP. Don't forward the port to the internet; for remote access put it behind a reverse proxy with TLS
+and authentication, and set `TEMPOLIGHT_ALLOWED_ORIGINS`. Other ports it may open: OSC (UDP 9000), Pro DJ Link (UDP
+50001), Ableton Link (UDP 20808), and HomeKit (a TCP port, advertised by mDNS), all off until turned on; on the Raspberry Pi image, the Wi-Fi setup
+service opens its own hotspot when there is no known network.

@@ -1,0 +1,75 @@
+# The Mintlify docs site
+
+Besides the VitePress site in [website/](../website/), the documentation can be published with
+[Mintlify](https://mintlify.com), which gives a site in the style of the big developer docs (top tabs, search, an API
+reference made from the OpenAPI spec). The pages are still written here, in `docs/*.md`: the Mintlify project in
+[mintlify/](../mintlify/) is generated from them and committed, because Mintlify deploys straight from the repository.
+
+## How the site is made
+
+`node scripts/build-mintlify.js` (no dependencies) reads `docs/` and writes `mintlify/`:
+
+| In `docs/` | In `mintlify/` |
+| --- | --- |
+| `index.md` | `overview.mdx` (the VitePress home's features become cards) |
+| `guides/README.md` | `guides/overview.mdx` |
+| any other `*.md` | the same path as `.mdx`, with `title`, `sidebarTitle`, `description` and `icon` front matter |
+| the `## WebSocket` section of `api.md` | a page of its own, `websocket.mdx` |
+| `images/` | `images/` (links become `/images/…`) |
+| `images/logo.svg`, `apps/web/icons/icon.svg` | `logo/light.svg`, `logo/dark.svg`, `favicon.svg` |
+| the navigation in the script | `docs.json` |
+
+On the way the Markdown is made safe for MDX: `<`, `{` and `}` outside code are escaped, HTML comments become MDX
+comments, `<https://…>` autolinks become links, links to other pages lose their `.md` (`/guides/first-run`), links to
+files outside `docs/` go to GitHub, `> [!NOTE]` / `> **Tip:**` blocks become `<Note>` / `<Tip>` / `<Warning>`
+callouts, and the VitePress `<div class="tl-…">` blocks become `<Columns>` and `<Card>`s. `docs/flash/` and
+`docs/index.html` are left out (they are pages of the VitePress site).
+
+Three files in `mintlify/` are written by hand and never overwritten: `index.mdx` (the landing page),
+`custom.css` (small style touches) and `openapi.json` (the API reference's spec, made by `scripts/gen-openapi.js`).
+
+The tabs and groups live in the `NAV` list at the top of the script, and each page's icon and short sidebar name in
+`META`. A new page in `docs/` that isn't listed there still shows up, under **Guides → More**.
+
+After changing anything in `docs/`, run the script again and commit `mintlify/` with it:
+
+```sh
+node scripts/build-mintlify.js           # rewrite mintlify/
+node scripts/build-mintlify.js --check   # what CI runs: fails if mintlify/ is out of date
+node scripts/build-mintlify.js --check --mermaid   # also compiles every Mermaid diagram (needs mmdc)
+```
+
+`--check` also checks the site: every page in the navigation exists and every page is in it, every internal link
+points at a page (and a heading on it), every image exists, nothing MDX can't read is left outside code, and
+`docs.json` has the shape of [Mintlify's schema](https://mintlify.com/docs.json).
+
+## Preview it
+
+With Node.js 20 or later:
+
+```sh
+cd mintlify
+npx mint dev          # http://localhost:3000
+npx mint broken-links # Mintlify's own link check
+```
+
+## Deploy it
+
+Once, by the owner of the GitHub repository:
+
+1. Go to [mintlify.com/start](https://mintlify.com/start) and sign up with **GitHub**.
+2. Name the project `tempolight`: the name is the subdomain, so the site will be at `https://tempolight.mintlify.site`
+   (pick another name if that one is taken).
+3. When it asks for the repository, connect GitHub, choose **D4RKGEEK/tempolight**, branch `main`, and install the
+   **Mintlify GitHub App** (choose **Only select repositories**, then `tempolight`). Later this is in the dashboard
+   under [Git settings](https://app.mintlify.com/settings/project/git-settings).
+4. In [Git settings](https://app.mintlify.com/settings/project/git-settings), turn on **docs.json is in a
+   subdirectory** (the monorepo setting) and enter `/mintlify` as the path, without a slash at the end. Saving starts
+   a deployment from that folder.
+5. Optional, a custom domain such as `docs.example.com`: in
+   [Custom domain setup](https://app.mintlify.com/settings/project/custom-domain), add the domain, then add the two
+   `TXT` records it shows at your DNS provider, and once both show a green check, the `CNAME` record (to
+   `cname.mintlify.builders`). The HTTPS certificate comes by itself.
+
+From then on every push to `main` that changes `mintlify/` redeploys the site, and pull requests get a preview at
+`tempolight-<branch>.mintlify.site` from the GitHub App.

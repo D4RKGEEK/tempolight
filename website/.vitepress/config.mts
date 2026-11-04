@@ -90,7 +90,7 @@ function sidebar(): DefaultTheme.SidebarItem[] {
   const music = [...page("spotify"), ...page("effects")];
   const home = [...page("voice"), ...page("wake-up", "Wake-up, sleep and ambient")];
   const streaming = [...page("integrations", "OBS, games, Twitch, Discord"), ...page("streamdeck")];
-  const hosting = [...page("deploy-cloudflare", "Host the online demo")];
+  const hosting = [...page("deploy-cloudflare", "Host the online demo"), ...page("mintlify", "The Mintlify docs site")];
   const guides = folder("guides");
   const reference = [...page("api", "HTTP and WebSocket API"), ...page("architecture")];
   const internals = folder("internals");

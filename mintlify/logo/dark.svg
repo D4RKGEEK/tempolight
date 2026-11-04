@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 128" width="560" height="128" role="img" aria-label="Tempolight">
+  <svg x="0" y="0" width="128" height="128" viewBox="0 0 128 128">
+  <defs>
+      <radialGradient id="g" cx="50%" cy="50%" r="50%"><stop offset="0" stop-color="#ffd27a"/><stop offset=".55" stop-color="#f5a524"/><stop offset="1" stop-color="#f5a524" stop-opacity="0"/></radialGradient>
+    </defs>
+    <rect width="128" height="128" rx="28" fill="#111317"/>
+    <circle cx="64" cy="64" r="44" fill="url(#g)" opacity=".35"/>
+    <g fill="#f5a524">
+      <rect x="25" y="56" width="10" height="16" rx="5"/>
+      <rect x="41" y="44" width="10" height="40" rx="5"/>
+      <rect x="57" y="28" width="14" height="72" rx="7" fill="#ffd27a"/>
+      <rect x="77" y="44" width="10" height="40" rx="5"/>
+      <rect x="93" y="56" width="10" height="16" rx="5"/>
+    </g>
+  </svg>
+  <text x="152" y="88" fill="#e6e9ee" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif" font-size="72" font-weight="700" letter-spacing="-1">Tempolight</text>
+</svg>

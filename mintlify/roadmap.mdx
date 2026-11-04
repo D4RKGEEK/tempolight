@@ -1,0 +1,46 @@
+---
+title: "Roadmap"
+description: "What is done, what is beta and what comes next."
+icon: "milestone"
+---
+{/* Generated from docs/roadmap.md by scripts/build-mintlify.js. Edit that file, then run: node scripts/build-mintlify.js */}
+
+## Done in v0.2
+
+- Online demo on Cloudflare Pages (tempolight.pages.dev), installable as an app on iPhone and Android
+- Web app: Home, Music, Effects, Live pads, Scenes & schedules, Room, Devices, Settings
+- Live listening from the browser (system sound, microphone) and on the server (PulseAudio, ALSA, ffmpeg)
+- Songs analysed in the browser before playing, with transport controls and drop markers
+- Director: style-aware automatic effects, crossfades, never-dark ambient floor, drop flash, photosensitive-safe mode
+- 74 effects (12 new: Warp Tunnel, Spiral Galaxy, Thunderstorm, Colour Chord, Bass Quake, Rising Embers, Beat Tiles,
+  Double Helix, Drop Countdown, Solar Flare, Zigzag Beams, Welding Sparks)
+- Live pads with keyboard shortcuts, including Build & drop
+- Scenes, day/time schedules, PIN lock with guest permissions
+- WLED discovery (mDNS + network scan), identify, segment sync, health, address change recovery, virtual devices
+- OSC input, WLED audio sync output, HTTP + WebSocket API
+- Installers for Linux/Pi/macOS (with systemd service) and Windows, Docker image
+
+## Done since v0.2 (coming in v0.3)
+
+| Area | What's in |
+| --- | --- |
+| Effects | Like or ban effects; per-effect speed, intensity, colour shift, saturation and mirror; accent layer; zones with their own effect and brightness; 21 new effects (Lighthouse, Corner Bounce, Gravity, Wave Collision, Portal, Stadium Wave, Vocal Glow, Chorus Bloom, Drop Rewind, Bass Rain, Beat Counter, Spectrum Rings, Neon Sign, Box Breathing, Focus Timer, Wake-up Sunrise, Colour Cannons, Strobe Scatter, Oscilloscope, Text Scroller, Screen Sync); make your own effects from parts, with share codes |
+| Timing and music | One-tap timing fix, audio input picker with level meter, song memory (songs heard live are recognised and use their stored beat map), vocal detection, auto-generated show timelines (editable per block) |
+| Home | Home Assistant through MQTT discovery, night mode, sunrise/sunset schedules, backup and restore, one-click updates, text on matrix panels |
+| Parties | Phones as extra lights (QR code), clip recording, guest song requests with votes |
+| More lights | E1.31 and Art-Net, Govee (LAN, beta), OpenRGB, Nanoleaf (real panel layout), Philips Hue (basic), screen colour sync, power limit per controller |
+| DJs and pros | Pioneer Pro DJ Link (beat grid from CDJs, listen-only), Ableton Link (tempo and beat, listen-only), MIDI clock (Web MIDI), MIDI controllers for the pads, DMX fixtures over Art-Net/sACN (pars, moving heads, strobes, lasers, fog) |
+| Setup | Camera LED mapping: the strip's real shape from a phone or laptop camera |
+
+## Still to do
+
+| Idea | Why it isn't done yet |
+| --- | --- |
+| Ableton Link: check against real apps | Written from the open protocol and tested against a pretend peer; needs a session with Ableton Live to confirm the wire format and the clock measurement |
+| DMX: check on a real node and fixtures | Packets and channel values are tested; moving-head aiming and colour-wheel/gobo values differ per fixture (use a custom profile) |
+| Philips Hue Entertainment (fast streaming) | Needs DTLS, which Node.js doesn't include; would need a dependency. Hue works now in basic mode (about 10 updates a second) |
+| Effect gallery online | Share codes work today; a public gallery needs a small hosted service |
+| Multi-room | Several rooms, each with its own music and show. Zones cover part of this today |
+| Govee segments on more models, Nanoleaf/Hue discovery | Needs testing on real hardware |
+
+Not planned: cloud accounts, heavy AI audio separation, custom ESP32 firmware (stock WLED is the point).

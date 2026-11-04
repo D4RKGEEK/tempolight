@@ -1,0 +1,186 @@
+---
+title: "Runtime and outputs"
+description: "The runtime (packages/server/src/runtime.js) owns the frame loop, the music sources, the devices and their senders. It is environment-free."
+icon: "cable"
+---
+{/* Generated from docs/internals/runtime-and-outputs.md by scripts/build-mintlify.js. Edit that file, then run: node scripts/build-mintlify.js */}
+
+The runtime ([`packages/server/src/runtime.js`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/server/src/runtime.js)) owns the frame loop, the music
+sources, the devices and their senders. It is environment-free: every socket, HTTP call and sound card comes in through
+`io` (on a PC or Pi [`node-io.js`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/server/src/node-io.js), which re-exports
+[`packages/outputs`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/outputs/src/index.js) and `capture.js`; in the online demo the pretend devices of
+`apps/web/demo.js`). The frame loop itself is described in [architecture](/architecture#the-frame-loop).
+
+## Device kinds and their senders
+
+A device in `tempolight.json` (`devices[]`) has `id`, `name`, `host`, `ddpPort` (the port, whatever the protocol),
+`leds`, `enabled` and a `kind`; no `kind` means WLED. `rebuild()` picks one sender per device:
+
+| Kind | Added with `POST /api/devices` | Sender (packages/outputs/src) | Wire | Notes |
+| --- | --- | --- | --- | --- |
+| WLED (no kind) | `{host, name?, ddpPort?, leds?, force?}`; the LED count is read from `/json/info` | `DDPSender` (`ddp.js`) | DDP over UDP 4048, 480 pixels (1,440 bytes) per packet, push flag on the last | `protocol: "e131"` or `"artnet"` (with `universe`) switches it to `E131Sender` (`e131.js`, UDP 5568 / 6454, 170 pixels per universe) for WLED set to those, or Falcon/FPP controllers |
+| Virtual | `{virtual: true, leds?}` | none | nothing is sent | shows in the preview; for trying the app without hardware |
+| `govee` | `{host, kind: "govee", goveeMode: "color"\|"segments", leds?}` | `GoveeSender` (`govee.js`) | UDP 4003: `colorwc` (one colour, ~10/s) or the "razer" stream (a colour per segment) | not health-checked (Govee answers on a shared port) |
+| `openrgb` | `{host, kind: "openrgb", index, ddpPort?}` | `OpenRGBSender` (`openrgb.js`) | OpenRGB SDK, TCP 6742 | one OpenRGB device per Tempolight device; connections to the same server are shared |
+| `nanoleaf` | `{host, kind: "nanoleaf", token?}` (hold the power button first) | `NanoleafSender` (`nanoleaf.js`) | HTTP 16021 to pair and switch on `extControl` v2, then one UDP packet per frame to 60222 | panels are placed where they really are (`panelPoints`) |
+| `hue` | `{host, kind: "hue", token?}` (press the link button first) | `HueSender` (`hue.js`) | the bridge's REST API: about 10 light commands a second in total, lights in turn, only on change | `PATCH {hueFast: true, hueArea?}` switches to `HueEntertainmentSender` (`hue-entertainment.js`): DTLS 1.2 PSK (`dtls.js`) to UDP 2100, up to 50 updates a second for the lights of an entertainment area; falls back to REST when streaming fails |
+| `lifx`, `wiz`, `kasa`, `yeelight`, `twinkly` | `{host, kind, name?, force?}` | from the `LIGHT_KINDS` table (`lights.js`) | LIFX LAN UDP 56700, WiZ UDP 38899, Kasa TCP/UDP 9999, Yeelight TCP 55443 (music mode), Twinkly HTTP + UDP 7777 | one table entry per kind: `probe`, `sender`, `check`, `discover`, `options` |
+| `dmx` | `{host, kind: "dmx", protocol?: "artnet"\|"e131", universe?}` | `E131Sender` with `channels: 512` | one full DMX universe | fixtures are added with `POST /api/devices/:id/fixtures`; see [DMX](#dmx) |
+
+Each sender has the same shape: `send(Uint8Array rgb)`, `close()`, a `sent` counter, and for kinds that can switch
+off by themselves `power(on)`. Smart lights and Hue/Nanoleaf/Govee get `power()` when the lights are switched; WLED
+gets `setState(host, {on})` over its JSON API.
+
+## rebuild and rebuildEffects
+
+`rebuild()` runs after anything that changes the room or the devices (adding, editing, removing a device or shape, a
+preset, a restore, a reset):
+
+1. `buildLayout(shapes)` (all LEDs, see [director and effects](/internals/director-and-effects#the-layout-every-effect-reads)),
+   `createEffects(L, {custom})` and `createDirector(L, fx)`, keeping the director's settings.
+2. `segmentRanges(shapes)`: each shape's LED range on its controller.
+3. For each device, a **key** of everything its sender is built from (host, port, protocol, universe, Govee mode and
+   segments, LED count, OpenRGB index, Nanoleaf token and panels, Hue user, lights and fast-mode area, smart-light
+   options). Only when the key changes is a new sender made (the new one first, so a connection shared with the old
+   one, OpenRGB, stays open), so editing a shape doesn't reconnect anything. Senders of removed devices are closed.
+4. Buffers sized to the highest LED used, and `syncDirector()`.
+
+`rebuildEffects()` runs when custom effects change: only the effects and the director are made again (not the
+layout or the senders), and what the director was doing carries over (the effect showing, the palette step, pads like
+blackout and strobe).
+
+`syncDirector()` copies `show` and `settings` into `director.settings` (mode, effect, style, palette, everyBeats, speed,
+ambient, moodColours, safe, dropFlash, prefs, params, layer, zones), applying night mode (warm palette, safe on, no drop
+flash).
+
+## Health and latency
+
+`healthLoop()` every 10 s checks every device (`checkDevice`), and `POST /api/devices/:id/check` checks one:
+
+- WLED: `GET /json/info` (2.5 s timeout): `online`, `rssi`, `signal`, `version`, `ledsReported`, `fps` (what it
+  shows), `live` (whether it shows our stream), `power` and `maxPower` (its own current limit). A device added with 0
+  LEDs takes the reported count.
+- Smart lights: the kind's `check()`; Hue: the light list (and, every 5 minutes, the entertainment areas for the
+  Devices page); Nanoleaf: its info; OpenRGB: the device list. DMX and Govee aren't asked (DMX nodes don't answer);
+  virtual devices are always online.
+- Each round trip is kept (`noteRtt`: the best of the last 6).
+- A WLED controller that went offline is looked for **by name** with mDNS (at most every 5 minutes): when the router gave
+  it a new address, the device's host is updated.
+
+The **latency meter** ([`latency.js`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/server/src/latency.js)) is computed per device for
+`status.devices[]`:
+
+```
+latencyMs = audioMs + analysisMs + networkMs + frameMs - offsetMs
+```
+
+| Part | Value |
+| --- | --- |
+| `audioMs` | live from a browser: the browser's own estimate (input latency + its 512-sample chunk + half the WebSocket round trip); from the sound card: the chunk length; songs: 0 (their clock already allows for the speakers) |
+| `analysisMs` | 23 for live audio (one 11.6 ms hop plus onset smoothing), else 0 |
+| `networkMs` | half the best HTTP round trip (UDP needs no answer) |
+| `frameMs` | the device's own update time (Hue 100, Hue fast 20, Nanoleaf 33, Govee 33, LIFX 50, WiZ 100, Kasa 100, Yeelight 50, Twinkly 40), else one frame at our rate |
+| `offsetMs` | `settings.syncOffsetMs` |
+
+`latencyLevel` is `good` under 40 ms, `ok` under 80 ms, else `slow`. `warnings[]` (`kind`, `text`): `offline`,
+`wifi` (signal under 45% or -72 dBm; very weak under 25% or -82 dBm), `slow` (over 60 ms each way), `notlive` (WLED
+isn't showing the stream after 4 s: "Receive UDP realtime" is off), `frames` (WLED shows fewer than 60% of the frames
+we send), `power` (WLED's limit, or ours, is holding brightness back).
+
+## Power limiter
+
+Per device, every frame, after its buffer is filled (WLED, E1.31 and other LED kinds):
+
+```
+mA = size + sum(bytes) * mAperLed / 765          // mAperLed default 60: one LED at full white; ~1 mA idle per LED
+if (maxAmps > 0 && mA > maxAmps * 1000) scale every byte by (maxAmps * 1000 - size) / (sum * mAperLed / 765)
+```
+
+`maxAmps` (0 = off, up to 500) and `mAperLed` (5-200) are set with `PATCH /api/devices/:id`. `status.devices[].amps`
+is the estimate smoothed over about 5 frames, `limited` says it is cutting now. This runs on our side, so it also
+covers protocols where the controller has no limiter of its own.
+
+## Mapping mode
+
+Camera mapping (the Room page's camera screen, `apps/web/mapper.js` with the pure `mapping.js`) lights one LED at a
+time and finds it in the camera picture. The server side is `runtime.mapLight(dev, led, level, owner)`, reached by
+`POST /api/map {device, led, level?}` or the WebSocket message `{type: "map", device, led}` (admin):
+
+- while mapping, every device's buffer is black except LED `led` of device `dev` at `level` (20-255, default 200);
+  `led: -1` keeps everything dark (for a reference picture). For Govee in segment mode the whole segment lights, or it
+  would be too dim to see;
+- a mapping ends by itself 5 s after the last message, at `{end: true}`, or as soon as the WebSocket that started it
+  closes (`endMap(owner)`); then black is sent for 600 ms when the power is off;
+- the browser turns the positions it found into a `points` shape and saves the room with `PUT /api/room`.
+
+## DMX
+
+A DMX device is one universe on an Art-Net or sACN node; its fixtures are points of the device's `points` shape, so
+the effects colour them like LEDs. [`fixtures.js`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/server/src/fixtures.js) turns those colours and the
+music into channel values with the profiles in [`packages/outputs/src/dmx.js`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/outputs/src/dmx.js):
+
+| Profile kind | What it does |
+| --- | --- |
+| par, dimmer (`rgb`, `rgbw`, `rgba`, `dimmer`) | the colour (or brightness) of its point |
+| moving head (`moving-head`, `-16`, `-wheel`, `-wheel-16`) | moves on the beat (`pattern`: circle, figure8, sweep, point at `target`, still; `cycle` beats per loop), colour from its point, brighter on drops, gobo changes in drops |
+| `strobe` | only on the strobe pad and the first 2 s of a drop |
+| `laser` | only during a drop (its first `laserMaxSec` seconds); off until `settings.dmx.lasers` |
+| `fog` | a `fogBurst` s burst `fogLead` s before a drop the analysis knows (or at the drop), at least `fogCooldown` s apart and at most `fogMaxDuty` of any 5 minutes; off until `settings.dmx.fog`; the fog pad holds it (at most 10 s) |
+| `custom` | a channel list (`red`, `green`, `blue`, `dimmer`, `pan`, `tilt`, `fixed:<value>`, ...; `GET /api/dmx/profiles`) |
+
+Strobes and lasers never run in safe or night mode. The runtime sends a DMX universe about 40 times a second
+whenever the device is enabled (DMX nodes hold the last values, so stopping could leave fog on), zeros for 2 s after
+it is disabled, and zeros at shutdown. `GET /api/dmx` shows every channel's live value.
+
+## Beat grids from outside
+
+- **Pro DJ Link** (`prolink.js`, UDP 50001, `settings.djlink`): CDJ/XDJ beat packets. One deck leads: a player beats the
+  mixer, a deck the mixer says is on air beats one that isn't, and the deck leading keeps the grid while it plays.
+  The grid follows beats smoothly (25% of the error) and re-anchors on a jump; the beat counter keeps counting across
+  deck changes.
+- **MIDI clock** (`beatsources.js`, `midiclock.js`): from a browser's Web MIDI input over the WebSocket; one browser at
+  a time.
+- **Ableton Link** (`ableton-link.js`, listen-only, UDP 20808, `settings.link`).
+
+`beats.grid(now, t)` gives `{P, off, barOff, bpm, kind, label}` for the first one running (MIDI clock before Link;
+DJ Link is checked before both). With live audio the grid replaces the analyser's; without, a `metronomeView` runs on
+it.
+
+## Performance modes
+
+[`perf.js`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/server/src/perf.js): `settings.performance` is `auto` (default), `full` or `lite`.
+
+| | full | lite |
+| --- | --- | --- |
+| frame rate | `settings.fps` (10-120, default 60) | at most 30 |
+| preview to browsers | 30 fps | 15 fps |
+| phones | 30 a second | 15 a second |
+| status messages | every 250 ms | every 500 ms |
+| live analyser | everything | chroma every 2nd frame, vocal estimate every 2nd hop |
+| static files | brotli 11 | brotli 9 |
+
+`auto` starts in lite on a weak computer (`weakHost`: a Raspberry Pi Zero, 1, 2 or 3, a 32-bit ARM, one core, or two
+cores under 1.6 GHz) and steps down to lite when the frame loop can't keep up (average work over 70% of the frame
+time, or under 80% of the target fps while busy, for two 5 s windows in a row). `perf.acc` keeps the milliseconds
+spent in `analysis`, `memory`, `render`, `output` and `broadcast`; `status.perf` shows `{mode, setting, why, fps,
+frameMs, cpu}`. `node scripts/bench.js` reports them per second (see [testing](/internals/testing#bench-and-smoke)).
+
+## Other outputs
+
+- **WLED audio sync** (`settings.audioSync`, `audiosync.js`): with live audio, a 44-byte "V2" packet to multicast
+  239.0.0.1:11988 at most every 20 ms (16 bands, level, peak, the dominant frequency), so WLED's own sound-reactive
+  effects can run on controllers that aren't streamed to.
+- **Segments**: `POST /api/devices/:id/segments` writes the room's LED ranges into WLED as segments (`setSegments`,
+  `stop` is exclusive).
+- **Discovery** (`POST /api/discover`): WLED by mDNS (`_wled._tcp.local`, with a unicast-reply fallback when 5353 is
+  taken) and a scan of the local /24 for `/json/info`; Govee by multicast; OpenRGB on this computer; and every smart-light
+  kind's `discover()`.
+
+The wire formats are in [protocols.md](/protocols).
+
+## Tests
+
+`packages/outputs/test/` checks the packets byte by byte against pretend devices (`fake-lights.js`: LIFX, WiZ, Kasa,
+Yeelight, Twinkly; `dtls-server.js`: a separately written DTLS server for Hue fast mode; `scripts/fake-wled.js`).
+`packages/server/test/lights.test.js`, `latency.test.js`, `perf.test.js` and `pro.test.js` cover the runtime's side.
+See [testing](/internals/testing).

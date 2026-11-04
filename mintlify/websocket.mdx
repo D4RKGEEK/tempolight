@@ -1,0 +1,42 @@
+---
+title: "WebSocket API"
+description: "Live status, LED previews, audio and pads over one WebSocket at /ws."
+icon: "radio"
+---
+{/* Generated from docs/api.md by scripts/build-mintlify.js. Edit that file, then run: node scripts/build-mintlify.js */}
+
+One connection per browser: `ws://<host>:8080/ws`, with `?token=<token>` when locked (the token is checked per
+message, against the same areas as HTTP). Text messages are JSON objects with a `type`; binary messages start with a
+type byte. Connections from other websites are refused (the [Origin rule](/api#auth)).
+
+## Server to client
+
+| Message | When | Content |
+| --- | --- | --- |
+| `{type: "hello", id, ...status}` | 10 ms after connecting | the connection's id (send it as `clientId` with `POST /api/song`) and a status |
+| `{type: "status", ...}` | every 250 ms (500 in low-power mode) | the [status](/api#status) |
+| `{type: "log", t, level, msg}` | each activity message | |
+| `{type: "changed", what}` | after anything is saved | `what`: `devices`, `room`, `zones`, `show`, `settings`, `scenes`, `schedules`, `songs`, `effects`, `requests`, `lock`, `home`, `all` (restore, reset), `nowplaying`, `spotify`, `homekit`, `integrations`: fetch what you show again |
+| `{type: "screen-refused", why: "busy"\|"locked", error}` | at most every 2 s | another browser already shares its screen, or the lock doesn't allow guests effects |
+| binary `[1, R, G, B, R, G, B, …]` | 30 fps (15 in lite), after `{type: "preview", on: true}` | every LED's colour in layout order (`GET /api/layout`) |
+| binary `[2, R, G, B, index]` | 30 a second (15 in lite), after `{type: "phone", on: true}` | this phone's colour (its slice of the room) and its place in the line-up (0-255) |
+
+A client that can't keep up (more than 256 KB queued) is skipped for previews and broadcasts until it catches up.
+
+## Client to server
+
+| Message | Area | What |
+| --- | --- | --- |
+| `{type: "preview", on: true\|false}` | open | start or stop the binary preview frames |
+| `{type: "audio-start", rate: 22050, label, latencyMs?}` | open | this connection becomes a live audio source; `latencyMs` is the browser's estimate of its capture delay (for the latency meter) |
+| binary: 16-bit little-endian mono samples | open | after `audio-start`, at that rate (the web app sends 512 samples, ~23 ms, a message). A browser that is sending wins over the server's sound card |
+| `{type: "audio-stop"}` | open | stop being an audio source |
+| `{type: "clock", pos, playing, rate?}` | open | the song's position (as `POST /api/song/clock`) |
+| `{type: "action", action: {type: "flash", ...}}` | pads | a live pad with low delay (the [actions](/api#lights-and-show)) |
+| `{type: "midi-clock", events: [[code, at, value?], ...], now, label}` | pads | follow MIDI clock: `code` 0xF8 clock, 0xFA start, 0xFB continue, 0xFC stop, 0xF2 song position (`value` in 16ths); `at` and `now` on the browser's `performance.now()` clock (mapped onto the server's with the smallest delay seen in 10 s); `{type: "midi-clock", end: true, events: [], now}` stops. One browser at a time |
+| `{type: "screen", w, h, px, label}` | effects | feed the Screen Sync effect: `px` is base64 of `w x h` RGB bytes (up to 4,096 pixels, 22,000 characters), a few times a second; `{type: "screen", end: true}` when sharing stops. One browser at a time |
+| `{type: "map", device, led, level?}`, `{type: "map", end: true}` | admin | camera mapping (as `POST /api/map`); ends when this connection closes |
+| `{type: "phone", on: true\|false}` | open | be a phone light. `GET /api/network` lists this computer's addresses for the QR code; `status.phones` counts them |
+
+When a connection closes, everything it started stops: its audio, its song, its screen share, its camera mapping and
+its MIDI clock.

@@ -1,0 +1,130 @@
+---
+title: "Extending Tempolight"
+description: "Recipes for the four most common changes, with the exact files to touch. Keep the boundaries from architecture: no I/O in the engine, no node."
+icon: "puzzle"
+---
+{/* Generated from docs/internals/extending.md by scripts/build-mintlify.js. Edit that file, then run: node scripts/build-mintlify.js */}
+
+Recipes for the four most common changes, with the exact files to touch. Keep the boundaries from
+[architecture](/architecture#packages-and-their-boundaries): no I/O in the engine, no `node:` imports in anything
+`core.js` or `runtime.js` imports (the online demo's build fails on them), and anything that needs the network or
+files comes in through `io` or `env`. No new dependencies.
+
+## Add a device kind
+
+### A smart light that fits the table (most bulbs and strips)
+
+LIFX, WiZ, Kasa, Yeelight and Twinkly share one table, so a new kind of the same sort is mostly one file and one entry.
+
+1. **`packages/outputs/src/<kind>.js`**: the protocol, Node built-ins only. Export a sender class with
+   `send(rgb: Uint8Array)` (3 bytes per "LED"), `power(on)`, `close()` and a `sent` counter; an `info(host)` that
+   asks the light what it is; a `discover({timeoutMs})` that returns `[{host, name, leds?}]`; and the default port.
+   Keep the rate the light accepts in mind (send only on change, or coalesce).
+2. **`packages/outputs/src/lights.js`**: add an entry to `LIGHT_KINDS`: `label`, `port`, `frameMs`, `probe(host)` →
+   `{name, leds, light, layout: "point"|"line"|{points}}`, `sender(dev)`, `check(dev)` → `{version, leds}`,
+   `discover(o)`, and optionally `options(dev, body)` for `PATCH /api/devices/:id {light: {...}}`.
+3. **`packages/outputs/src/index.js`**: nothing to do if it is only reached through `LIGHT_KINDS` (already exported);
+   export the sender too if tests or other modules need it.
+4. **`packages/server/src/lights.js`**: add the kind to `LIGHT_KIND_NAMES` (what the demo lists without
+   `env.lights`) and a hint to `HINTS` (what to check in the light's app when it doesn't answer).
+5. **`packages/server/src/latency.js`**: add its update time to `FRAME_MS` if it is slower than a frame.
+6. **`apps/web/app.js`**: add it to `SMART` and to a group in `KIND_GROUPS` (the Add device form), and a description
+   in the device row if it has options; **`apps/web/wizard.js`**: add it to `SMART` (the setup wizard's scan).
+7. **Tests**: a pretend light in `packages/outputs/test/fake-lights.js` and protocol tests in
+   `packages/outputs/test/smartlights.test.js`; adding it through the API in `packages/server/test/lights.test.js`.
+8. **Docs**: [api.md](/api) (`POST /api/devices` body), [runtime-and-outputs.md](/internals/runtime-and-outputs), and the
+   user guides' device list (owned by the guides).
+
+`core.addDevice()` already routes every `LIGHT_KINDS` kind to `lights.add()`, the runtime builds the sender from
+the table (`LK[d.kind].sender(d)`), health checks use `check()`, `POST /api/discover` uses `discover()`, and
+`setPower()` calls `power()`.
+
+### A device with its own protocol (like Nanoleaf, Hue, OpenRGB)
+
+1. **`packages/outputs/src/<kind>.js`**: the sender and any pairing/info functions; export them from `index.js`.
+2. **`packages/server/src/node-io.js`**: re-export them (that is what `io` is on a PC or Pi).
+3. **`packages/server/src/app.js`**: pass pairing and info functions into `env` (`createCore({env: {...}})`), for
+   example `env.nanoleafPair`, `env.nanoleafInfo`.
+4. **`packages/server/src/core.js` `addDevice()`**: a branch for `kind === "<kind>"`: refuse when `env.<fn>` is
+   missing (the demo), check for duplicates, pair or probe, build the device object (`id: env.newId("d")`, `name`,
+   `host`, `kind`, `ddpPort`, `leds`, `enabled`, kind-specific fields), push it, place a shape (`autoPlace(dev)` or a
+   `points` shape), then `runtime.rebuild(); runtime.checkDevice(dev); runtime.note(...); changed("devices")`.
+   Keep tokens out of answers in `safeDev()`.
+5. **`packages/server/src/runtime.js`**:
+   - `rebuild()`: destructure the sender from `io`, add the kind to the `proto` choice, every field the sender is
+     built from to the **key** (so it is rebuilt when they change), and construct it;
+   - `checkDevice()`: a branch that asks the device and calls `noteRtt()`;
+   - `setPower()`: whether it gets `sender.power(on)`;
+   - `DEFAULT_PORT` and core.js's `PATCH` default port map.
+6. `latency.js` `FRAME_MS`, the web app's `KIND_GROUPS`, tests and docs as above.
+
+## Add an integration
+
+An integration that talks to something outside (a broker, an app, a web service) belongs in the Node layer, started
+by `app.js`, and plugs into the core without the core knowing it.
+
+1. **`packages/server/src/<name>.js`** (or a folder like `integrations/`): `export function start<Name>({core, store,
+   runtime, ...inject})` returning `{close(), ...}`. Take every outside thing (`fetch`, a socket opener, a clock, URLs)
+   as an option with the real one as the default, so tests can pass pretend ones.
+2. **Settings**: either under `settings.<name>` (add defaults to [`defaults.js`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/server/src/defaults.js);
+   `GET /api/state` returns them, so blank secrets as core.js does for `mqtt.password`) or, when it holds secrets,
+   under a top-level key the module fills in itself (as `integrations` does with `merge(DEFAULTS, saved)`), or in a file
+   of its own next to `tempolight.json`, written with mode `0600` (as `spotify-token.json`, `homekit.json`).
+3. **Routes**: `core.route(method, path, "admin", fn)`; see [the next section](#add-an-api-route). Throw `HttpError`
+   from `core.js` for 4xx answers.
+4. **What it can do**: `core.applyScene(scene)`, `core.applyShow(body)`, `core.applySettings(body)`,
+   `runtime.action({type: ...})` (the pads), `runtime.setPower(on)`, `runtime.note(msg, level)` (the activity log).
+   React to changes with `core.onChange(what => ...)` and `core.onScene(scene => ...)`; read `runtime.status()`.
+   To draw on top of the show, chain the director's `post(COL, wall)` hook (keep the previous one and call it, as
+   `integrations/index.js` does, since Home & sleep uses it too).
+5. **`packages/server/src/app.js`**: start it after the core, pass `opts.<name>` through for tests, and close it in
+   `api.close()`.
+6. **Status**: put what the UI should show in a runtime field read by `status()` (as `rt.mqtt`), or in its own
+   `GET` route.
+7. **Web app**: a panel or a lazy page (`lazyPage(() => import("/<name>.js"), "<name>Page")` in `apps/web/app.js`,
+   and the file in `sw.js`'s `LATER` list). Don't load it in demo mode if it needs the server.
+8. **Tests**: `packages/server/test/<name>.test.js` with `createApp({dataDir, discover: false, logger: null, <name>:
+   {pretend services}})`.
+
+## Add an API route
+
+1. Register it where its feature lives:
+   - in **`packages/server/src/core.js`** with `route(method, path, area, fn)` (or in `pro-api.js`/`home.js`, which get
+     the same `route`);
+   - in a Node-layer module with `core.route(method, path, area, fn)`.
+
+   `path` is a string literal with `:name` parameters (they arrive as `params.name`); `area` is `null` (open),
+   `"admin"` (needs the unlock token while a PIN lock is set) or a guest area (`"effects"`, `"scenes"`, `"pads"`,
+   `"brightness"`). `fn(ctx, params)` gets `ctx = {headers, query, body}` and returns the JSON answer (or a promise).
+   Throw `new HttpError(code, message)` for errors; anything else becomes a 500.
+2. Validate everything in the body (clamp numbers, check ids exist), save with `changed("<what>")` in the core (it
+   saves, tells the browsers and the change listeners), and call `runtime.rebuild()` / `runtime.syncDirector()` if
+   the lights depend on it.
+3. Routes are tried in the order they were registered and the first match wins; methods must match exactly.
+4. A route that must answer something other than JSON (a redirect page, a file download) is a `handleHttp(req, res,
+   url)` in the module, called by `app.js` before the API; write it as `if (req.method !== "GET" || url.pathname !==
+   "/api/...") return false;` so the route reader finds it.
+5. Run `node scripts/gen-api-routes.js --write docs/api.md` and describe the route in its section of
+   [api.md](/api) as `` `METHOD /api/path` `` with its body and answer. `npm test` fails until both are done.
+6. Test it through HTTP in `packages/server/test/` (and with the lock on, if it has an area).
+
+The online demo gets every route registered in `core.js` (and what it imports) for free; Node-layer routes don't
+exist there and the web app has to cope (`api()` rejects with 404).
+
+## Add a setting
+
+1. **`packages/server/src/defaults.js`**: the default under `settings` (or `show`). Existing files get it through
+   `merge()` on load.
+2. **`packages/server/src/core.js` `applySettings(b)`**: read `b.<key>`, validate and clamp it (`num(v, lo, hi)`),
+   store it. If something must restart when it changes (the loop, capture, OSC, DJ Link), compare it in the
+   `before`/`after` snapshot at the top of the function. Settings for DMX and Link live in `pro-api.js`
+   `applySettings`, which core calls.
+3. **Use it**: in the runtime read `data().settings.<key>` each frame, or copy it into `director.settings` in
+   `syncDirector()` for the director (and add it to the director's `settings` defaults in `director.js`).
+4. **`apps/web/app.js`**: the control on the Settings page (`PATCH /api/settings`).
+5. **Docs**: the settings table in [data-model.md](/internals/data-model#settings) and the `PATCH /api/settings` row in
+   [api.md](/api).
+6. **Test**: `packages/server/test/server.test.js` (validation and that it takes effect).
+
+If the setting can come from the environment (like the MQTT broker for the Home Assistant add-on), read it in
+`env-settings.js` `settingsFromEnv()` and apply it in `applyEnvSettings()`.

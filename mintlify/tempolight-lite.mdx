@@ -1,0 +1,145 @@
+---
+title: "Tempolight Lite: music-reactive lights without a computer"
+sidebarTitle: "Tempolight Lite (ESP32)"
+description: "A WLED usermod for an ESP32 with a microphone: music-reactive lights without a computer (beta)."
+icon: "microchip"
+---
+{/* Generated from docs/tempolight-lite.md by scripts/build-mintlify.js. Edit that file, then run: node scripts/build-mintlify.js */}
+
+**Beta.** The analysis is tested on a computer with synthetic songs; it hasn't been tuned in real rooms yet (see
+[Status](#status)).
+
+Tempolight normally runs on a computer or a Raspberry Pi: it listens to the music, works out the beat, the build-ups
+and the drops, and streams every pixel to your WLED controllers. **Tempolight Lite** puts a small version of that
+listening on the controller itself. An ESP32 running WLED, with a cheap I2S microphone (an INMP441 costs a couple of
+euros), hears the room and drives its own LEDs with Tempolight effects. Nothing else has to be switched on.
+
+It's a WLED usermod. It doesn't replace WLED or its AudioReactive usermod: AudioReactive still drives the
+microphone and computes the spectrum, and Lite reads that spectrum and adds the Tempolight part.
+
+## What Lite can do, and what needs the full app
+
+| | Tempolight Lite (on the ESP32) | Tempolight (computer or Pi) |
+| --- | --- | --- |
+| Kicks and snares | Yes, from WLED's 16 frequency channels (43 Hz to 9 kHz, a new frame every 23 ms) | Yes, from its own FFT (11.6 ms hops), plus hi-hats |
+| Tempo and beat grid | Yes, 60 to 180 BPM, locked to the kicks; bars start on the drop | Yes, with half/double-time checks and song style |
+| Song part | Calm, build-up, drop, silent. Lite notices a drop about a beat after it starts | Same live; with a song file it knows where every drop is before it plays |
+| Build-up countdown to the exact drop | No: Lite shows how long the build-up has been running | Yes, with song files and beat maps |
+| Effects | 9 (below), on the segment's palette | over 90 ([effects.md](/effects)), across a whole room layout |
+| Several controllers as one show | No: each Lite controller listens on its own. You can share one microphone with WLED's audio sync | Yes, one show over every controller, Hue, DMX, Nanoleaf and more |
+| Key, mood colours, vocals, song memory, styles | No | Yes |
+| Scenes, schedules, live pads, phone remote, Home Assistant | WLED's own presets, playlists, schedules and app | Yes |
+| Photosensitivity limit | Yes, at most 3 flashes a second over all segments, and a "No flashes" switch | Yes |
+| Hardware | Classic ESP32 (dual core) with an I2S microphone | Any computer, a Pi, or a phone as the microphone |
+
+Lite and the full app work well together. When Tempolight streams to the controller (DDP), WLED shows the stream; when
+the stream stops, WLED goes back to its own effect, so a controller left on **TL Auto** is music-reactive on its own
+again a few seconds after the computer goes away. Tempolight can also send WLED audio sync packets (the 44-byte "V2"
+packet in [protocols.md](/protocols)); a Lite controller set to receive audio sync analyses those instead of its
+microphone.
+
+## The effects
+
+All of them follow the music; pick them in WLED like any other effect (they're listed with the audio effects, names
+start with **TL**). Colours come from the segment's palette.
+
+| Effect | What it does | Sliders |
+| --- | --- | --- |
+| TL Auto | Picks one of the others from the song part: Aurora when calm (Tempo Wave every other 8 bars when there's a beat), Build Fill in a build-up, Drop Strobe for the first 8 bars of a drop, then Kick Shockwave, Bass Rain, Beat Chase and Bar Pulse, changing every 8 bars | Speed, Intensity, No flashes |
+| TL Kick Shockwave | A ring flies out from the centre on every kick | Speed, Ring width |
+| TL Beat Chase | A comet that lands on the next quarter of the strip on every beat of the bar | Speed (without tempo), Tail |
+| TL Build Fill | Build-ups fill the strip from both ends towards the middle, flickering faster as they rise; bursts at the drop | |
+| TL Drop Strobe | White flashes when the drop hits and on kicks during it, never more than 3 a second; beat pulses in between | No flashes |
+| TL Aurora | Slow drifting colour waves that breathe with the loudness | Drift, Brightness |
+| TL Bass Rain | Drops fall along the strip on kicks; louder bass, longer drops | Fall speed, Fade |
+| TL Bar Pulse | A bar from the centre that grows with the bass and kicks, a new colour every bar | Bass gain |
+| TL Tempo Wave | A colour wave that travels one strip length per bar, brightened by the kicks | Waves |
+
+The effects are written for strips (1D). On a 2D matrix, WLED's segment mapping options ("Expand 1D FX": bar, arc,
+corner, pinwheel) spread them over the panel.
+
+## What you need
+
+- A classic ESP32 board (ESP32-WROOM, "esp32dev", 4 MB flash). ESP32-S3 should work but isn't tested yet; ESP32-S2,
+  ESP32-C3 and ESP8266 are too slow for AudioReactive.
+- An I2S MEMS microphone: INMP441 (or ICS-43434, SPH0645, any "generic I2S" microphone).
+- WS2812B / SK6812 LEDs and a power supply sized for them, as for any WLED build.
+
+## Wiring the INMP441
+
+| INMP441 | ESP32 |
+| --- | --- |
+| VDD | 3V3 (not 5 V) |
+| GND | GND |
+| L/R | GND (the microphone sends on the left channel) |
+| WS | GPIO 15 |
+| SCK | GPIO 14 |
+| SD | GPIO 32 |
+
+These are AudioReactive's defaults; the Lite firmware sets the microphone type to "Generic I2S" with them. LED data
+goes on GPIO 16, WLED's default. Keep the microphone wires short (under 20 cm), put the microphone where it hears the
+speakers rather than the LED power supply, and don't point the hole at a wall.
+
+## Flashing
+
+**From the browser:** open the [installer page](https://d4rkgeek.github.io/tempolight/flash/) in Chrome or Edge on a computer, plug the ESP32
+in with a USB data cable and press Install. It erases the board and installs WLED with AudioReactive and Tempolight
+Lite (a factory image from the latest release). The installer may offer to set up Wi-Fi right after flashing (WLED
+speaks Improv over USB); otherwise join the `WLED-AP` network (password `wled1234`) and follow WLED's setup.
+
+**Updating a controller that already runs WLED 16:** download `tempolight-lite-esp32-update.bin` from the release and
+upload it in WLED: Config > Security & Updates > Manual OTA update. Your settings stay. (A build without
+AudioReactive needs the microphone set up afterwards in Config > Usermods.)
+
+**Building it yourself:** see [firmware/README.md](https://github.com/D4RKGEEK/tempolight/blob/main/firmware/README.md). In short, clone WLED 16, run
+`firmware/scripts/add-to-wled.sh path/to/WLED`, then `npm ci && pio run -e esp32dev_tempolight` in the WLED folder.
+
+## Setting it up
+
+1. **Microphone:** Config > Usermods > AudioReactive: enabled, Generic I2S, the pins above. Play music and open the
+   GEQ effect: the low bars should jump on the kick.
+2. **Quiet room = dark:** raise AudioReactive's Squelch until the GEQ is empty with no music, and set AGC to Normal.
+   Leave "FFT scaling" on Square root (the default); if you change it, set the same in Tempolight's settings below.
+3. **LEDs:** Config > LED Preferences, as usual.
+4. **Effect:** choose **TL Auto** on a segment (or any TL effect). Info shows **tempolight** with the tempo and song part
+   and an on/off button.
+
+Settings (Config > Usermods > tempolight):
+
+| Setting | Default | |
+| --- | --- | --- |
+| enabled | on | Analysis on or off. Off: TL effects show their quiet look |
+| sensitivity | 128 | Higher finds quieter kicks (0 to 255). Lower it if hi-hats or bass notes count as kicks |
+| fftScale | 3 | Must match AudioReactive's FFT scaling (0 none, 1 log, 2 linear, 3 square root) |
+| latencyMs | 20 | How far the beat grid is moved earlier to make up for the microphone frame; add a little if lights look late |
+| strobe | on | Allow white flashes at all |
+| maxFlashes | 3 | Flashes per second over all segments; it can be lowered, never raised above 3 |
+
+## For apps: the JSON API
+
+`GET /json/info` on a Lite controller contains:
+
+```json
+"tempolight": { "lite": "0.1.0", "on": true, "audio": true,
+  "fx": { "shockwave": 186, "chase": 187, "build": 188, "strobe": 189, "aurora": 190, "rain": 191, "pulse": 192, "wave": 193, "auto": 194 } }
+```
+
+`lite` is the usermod version (its presence marks a Lite device), `audio` says whether AudioReactive is delivering
+data, and `fx` gives the effect ids, which WLED assigns at boot (they depend on the build). `GET /json/state`
+contains the live analysis:
+
+```json
+"tempolight": { "on": true, "bpm": 128, "locked": true, "section": "drop", "beat": 1, "drops": 1, "build": 0 }
+```
+
+`POST /json/state` with `{"tempolight":{"on":false}}` switches the analysis off (`true` on, `"t"` toggles), and
+`{"tempolight":{"auto":true}}` puts the selected segments (or the main segment) on TL Auto. Since `on` is part of the
+state, WLED presets can switch Lite on and off too.
+
+## Status
+
+The analysis and the effects are tested on a computer with synthetic songs (128, 100, 120, 132, 140 and 150 BPM, with
+and without microphone noise) passed through an emulation of AudioReactive's spectrum: tempo within 0.2 BPM, the beat grid
+within 6 ms of the real beats on average, the drop found within two beats of its start, no false drops in the
+build-up, silence and drumless music staying calm or silent, and never more than 3 flashes a second. Real rooms, real
+microphones and real music are the next step: thresholds may need tuning once it has been heard on hardware.

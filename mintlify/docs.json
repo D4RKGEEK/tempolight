@@ -1,0 +1,220 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "Tempolight",
+  "description": "Music-reactive lighting that understands the song: beats, build-ups, drops and mood. For WLED and many more lights.",
+  "colors": {
+    "primary": "#b86f00",
+    "light": "#f5a524",
+    "dark": "#b86f00"
+  },
+  "background": {
+    "color": {
+      "light": "#ffffff",
+      "dark": "#111317"
+    }
+  },
+  "appearance": {
+    "default": "dark"
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "logo": {
+    "light": "/logo/light.svg",
+    "dark": "/logo/dark.svg",
+    "href": "/"
+  },
+  "favicon": "/favicon.svg",
+  "styling": {
+    "eyebrows": "section",
+    "codeblocks": "system",
+    "latex": false
+  },
+  "navbar": {
+    "links": [
+      {
+        "type": "github",
+        "href": "https://github.com/D4RKGEEK/tempolight"
+      }
+    ],
+    "primary": {
+      "type": "button",
+      "label": "Try the demo",
+      "href": "https://tempolight.pages.dev"
+    }
+  },
+  "navigation": {
+    "global": {
+      "anchors": [
+        {
+          "anchor": "GitHub",
+          "icon": "github",
+          "href": "https://github.com/D4RKGEEK/tempolight"
+        },
+        {
+          "anchor": "Online demo",
+          "icon": "monitor-play",
+          "href": "https://tempolight.pages.dev"
+        },
+        {
+          "anchor": "Releases",
+          "icon": "tag",
+          "href": "https://github.com/D4RKGEEK/tempolight/releases"
+        }
+      ]
+    },
+    "tabs": [
+      {
+        "tab": "Start",
+        "icon": "rocket",
+        "groups": [
+          {
+            "group": "Get started",
+            "pages": [
+              "index",
+              "overview",
+              "install",
+              "guides/first-run",
+              "getting-started"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Guides",
+        "icon": "book-open",
+        "groups": [
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/overview"
+            ]
+          },
+          {
+            "group": "Lights and music",
+            "pages": [
+              "guides/connect-lights",
+              "guides/room-and-zones",
+              "guides/music-sources",
+              "hearing-music",
+              "spotify",
+              "effects"
+            ]
+          },
+          {
+            "group": "Run it anywhere",
+            "pages": [
+              "guides/docker",
+              "raspberry-pi",
+              "tempolight-lite",
+              "deploy-cloudflare"
+            ]
+          },
+          {
+            "group": "Smart home",
+            "pages": [
+              "guides/smart-home",
+              "voice",
+              "wake-up"
+            ]
+          },
+          {
+            "group": "Parties and streams",
+            "pages": [
+              "guides/party-and-dj",
+              "guides/creators",
+              "streamdeck",
+              "integrations"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Reference",
+        "icon": "code",
+        "groups": [
+          {
+            "group": "Reference",
+            "pages": [
+              "api",
+              "websocket",
+              "protocols"
+            ]
+          },
+          {
+            "group": "HTTP endpoints",
+            "openapi": "openapi.json"
+          }
+        ]
+      },
+      {
+        "tab": "Internals",
+        "icon": "cpu",
+        "groups": [
+          {
+            "group": "Architecture",
+            "pages": [
+              "architecture"
+            ]
+          },
+          {
+            "group": "Internals",
+            "pages": [
+              "internals/engine-analysis",
+              "internals/live-analyser",
+              "internals/song-memory",
+              "internals/director-and-effects",
+              "internals/runtime-and-outputs",
+              "internals/data-model",
+              "internals/web-app",
+              "internals/security",
+              "internals/extending",
+              "internals/testing",
+              "mintlify"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Help",
+        "icon": "life-buoy",
+        "groups": [
+          {
+            "group": "Help",
+            "pages": [
+              "guides/troubleshooting",
+              "guides/faq",
+              "roadmap"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "api": {
+    "playground": {
+      "display": "simple"
+    },
+    "examples": {
+      "languages": [
+        "curl",
+        "javascript",
+        "python"
+      ]
+    }
+  },
+  "contextual": {
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude"
+    ]
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/D4RKGEEK/tempolight"
+    }
+  }
+}

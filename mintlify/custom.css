@@ -1,0 +1,52 @@
+/* Small touches on top of the "mint" theme (hand-written; scripts/build-mintlify.js leaves this file alone).
+   Most of the look comes from docs.json: the colours, dark mode by default, the Lucide icons. */
+
+:root {
+  --tl-amber: #f5a524;
+  --tl-amber-deep: #b86f00;
+  --tl-line: rgba(28, 32, 38, 0.1);
+  --tl-muted: #5d6573;
+}
+:root.dark {
+  --tl-line: rgba(230, 233, 238, 0.09);
+  --tl-muted: #9aa3b2;
+}
+
+/* ---------- the landing page (index.mdx, mode: frame) ---------- */
+.tl-home { max-width: 72rem; margin: 0 auto; padding: 3rem 1rem 4rem; }
+@media (min-width: 640px) { .tl-home { padding: 4rem 2rem 5rem; } }
+
+.tl-hero { position: relative; padding: 1rem 0 2.5rem; margin-bottom: 1rem; border-bottom: 1px solid var(--tl-line); }
+.tl-hero::before {
+  /* the lamp glow from the logo, behind the title */
+  content: ""; position: absolute; z-index: -1; top: -6rem; left: -4rem; width: 28rem; height: 22rem;
+  background: radial-gradient(closest-side, rgba(245, 165, 36, 0.22), rgba(245, 165, 36, 0)); pointer-events: none;
+}
+.tl-eyebrow { font-size: 0.8rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--tl-amber-deep); }
+:root.dark .tl-eyebrow { color: var(--tl-amber); }
+.tl-title { margin: 0.5rem 0 0; font-size: 2.25rem; line-height: 1.15; font-weight: 600; letter-spacing: -0.02em; }
+@media (min-width: 640px) { .tl-title { font-size: 3rem; } }
+.tl-lead { max-width: 42rem; margin: 1rem 0 0; font-size: 1.125rem; line-height: 1.6; color: var(--tl-muted); }
+.tl-actions { display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 1.75rem; }
+.tl-btn {
+  display: inline-flex; align-items: center; padding: 0.55rem 1rem; border-radius: 0.5rem; font-size: 0.9rem;
+  font-weight: 500; text-decoration: none; border: 1px solid var(--tl-line);
+}
+.tl-btn:hover { border-color: var(--tl-amber); }
+.tl-btn-primary { background: var(--tl-amber); border-color: var(--tl-amber); color: #1c1406; }
+.tl-btn-primary:hover { filter: brightness(1.08); }
+
+.tl-h2 { margin: 3rem 0 0.25rem; font-size: 1.35rem; font-weight: 600; letter-spacing: -0.01em; }
+.tl-sub { margin: 0 0 1.25rem; color: var(--tl-muted); }
+
+.tl-explore { margin-top: 3.5rem; padding-top: 0.5rem; border-top: 1px solid var(--tl-line); }
+.tl-explore-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1.5rem; margin-top: 1rem; }
+@media (min-width: 768px) { .tl-explore-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.tl-explore h3 { margin: 0 0 0.5rem; font-size: 0.8rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em; color: var(--tl-muted); }
+.tl-explore a { display: block; padding: 0.2rem 0; font-size: 0.95rem; text-decoration: none; }
+.tl-explore a:hover { color: var(--tl-amber-deep); }
+:root.dark .tl-explore a:hover { color: var(--tl-amber); }
+
+/* ---------- every page ---------- */
+/* wide reference tables (the API pages) scroll instead of squeezing */
+.prose table { display: block; overflow-x: auto; }

@@ -40,7 +40,8 @@ jobs:
         run: node scripts/build-site.js && NODE_PATH=$(npm root -g) node scripts/e2e-demo.js
 
   docs:
-    # links, anchors and images in README.md and docs/ (fast; the Docs workflow also compiles the Mermaid diagrams)
+    # links, anchors and images in README.md and docs/ (fast; the Docs workflow also compiles the Mermaid diagrams),
+    # and the Mintlify site in mintlify/ is up to date with docs/ (node scripts/build-mintlify.js rewrites it)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
@@ -48,3 +49,4 @@ jobs:
         with:
           node-version: 22
       - run: node scripts/check-docs.js --no-mermaid
+      - run: node scripts/build-mintlify.js --check
