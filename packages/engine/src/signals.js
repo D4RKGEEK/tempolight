@@ -9,6 +9,14 @@ export function gridAt(pre, t) {
   return { has: true, P, phase: ph, idx, beatInBar: bib, env: Math.exp(-ph * P / 0.18), barPhase: (bib + ph) / 4, beatT: pre.off + idx * P };
 }
 
+// silent only when it has been quiet for a moment (0.6 s): the gap between two snare hits of a build-up isn't silence,
+// and calling it silence switched the build-up's effect to a calm one and back, several times a bar
+function quietFor(env, t, sec = 0.6) {
+  const j1 = Math.round(t / 0.02); if (!((env[j1] || 0) < 0.1)) return false;
+  for (let j = Math.max(0, j1 - Math.round(sec / 0.02)); j < j1; j++) if (env[j] >= 0.1) return false;
+  return true;
+}
+
 /** What the music is doing at time t: song part, loudness, last hits, next drop. */
 export function songView(pre, t) {
   const g = gridAt(pre, t), ki = lastLE(pre.kicks, t), si = lastLE(pre.snares, t), hi = lastLE(pre.hats, t);
@@ -16,7 +24,9 @@ export function songView(pre, t) {
   for (let i = ki; i >= 0 && t - pre.kicks[i] < 1; i--) pulses.push(pre.kicks[i]);
   for (let i = si; i >= 0 && t - pre.snares[i] < 0.7; i--) snares.push(pre.snares[i]);
   const bi = lastLE(pre.bars.map(b => b.t0), t);
-  const bar = bi >= 0 && t < pre.bars[bi].t1 ? pre.bars[bi] : null;
+  // a bar lasts until the next one starts: analysis leaves small gaps between bars, and treating a gap as "no bar"
+  // (calm) made the song part flicker build → calm → build for a frame or two at every bar line
+  const bar = bi >= 0 && (t < pre.bars[bi].t1 || (bi + 1 < pre.bars.length && t < pre.bars[bi + 1].t0 && t - pre.bars[bi].t1 < 1)) ? pre.bars[bi] : null;
   let state = bar ? bar.state : "calm", buildP = 0;
   if (state === "build") {
     let a = bi, b = bi; while (a > 0 && pre.bars[a - 1].state === "build") a--; while (b < pre.bars.length - 1 && pre.bars[b + 1].state === "build") b++;
@@ -26,7 +36,7 @@ export function songView(pre, t) {
   const loud = Math.min(1, ln ? la / ln : 0), lvl = (bar ? bar.level : loud) * 0.7 + loud * 0.3;
   const di = lastLE(pre.drops, t + 1e-3);
   return { g, bpm: pre.bpm, style: pre.style, loud, level: lvl < 0.35 ? "low" : lvl < 0.72 ? "mid" : "peak",
-    state: (pre.env[Math.round(t / 0.02)] || 0) < 0.1 ? "silent" : state, buildP,
+    state: quietFor(pre.env, t) ? "silent" : state, buildP,
     dropT: di >= 0 ? pre.drops[di] : -9, nextDrop: di + 1 < pre.drops.length ? pre.drops[di + 1] : null,
     kick, snare: si >= 0 ? pre.snares[si] : -9, hat: hi >= 0 ? pre.hats[hi] : -9, pulses, snares, pulseN: ki,
     key: pre.key || null, mode: pre.mode || null, keyConf: pre.keyConfidence ?? 0, mood: pre.mood || null }; // key and mood: whole-song (tonal.js)

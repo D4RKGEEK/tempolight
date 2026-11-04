@@ -41,6 +41,11 @@ export function planShow(pre, fx, o = {}) {
     }
   }
   push(pre.dur, curPart);
+  // a block shorter than a bar is a flicker, not a look: give its time to the block before (or after) it
+  const minLen = Math.max(1, pre.P * 2);
+  for (let i = 0; i < out.length; i++) if (out.length > 1 && out[i].t1 - out[i].t0 < minLen) {
+    if (i > 0) out[i - 1].t1 = out[i].t1; else out[1].t0 = out[0].t0; out.splice(i, 1); i = Math.max(-1, i - 2); }
+  for (let i = 1; i < out.length; i++) if (out[i].effect === out[i - 1].effect) { out[i - 1].t1 = out[i].t1; out.splice(i, 1); i--; }
   if (out.length) { out[0].t0 = 0; out.at(-1).t1 = Math.max(out.at(-1).t1, r3(pre.dur)); }
   return out;
 }
