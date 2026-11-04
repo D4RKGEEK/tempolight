@@ -65,8 +65,19 @@ await step("room: camera mapping runs end to end (fake camera)", async () => {
   await until(() => page.isEnabled("#mp-go"), 6000, "camera didn't start"); await page.selectOption("#mp-n", "40"); await page.click("#mp-go");
   let sawOne = false; for (let k = 0; k < 40 && !sawOne; k++) { const m = status().mapping; if (m && m.led >= 0) sawOne = true; await sleep(100); }
   ok(sawOne, "no LED was lit for mapping");
-  await until(() => page.textContent("#mp-go").then(t => /again/.test(t)), 30000, "mapping didn't finish"); ok(!status().mapping, "mapping mode left on");
+  // it first measures how fast the lights and the camera respond, then waits that long for each LED
+  await until(() => page.textContent("#mp-go").then(t => /again/.test(t)), 60000, "mapping didn't finish"); ok(!status().mapping, "mapping mode left on");
   const msg = await page.textContent("#mp-msg"); ok(/found|hardly/i.test(msg), `no result message: ${msg}`);
+  if (await page.isVisible("#mp-use")) { // use it, then drag the mapped shape hard against the left edge: it moves as a whole instead of being squashed
+    await page.click("#mp-use"); await until(() => app.store.data.room.shapes.some(x => x.type === "points"), 4000, "mapped layout not saved"); await page.waitForSelector("#r-stage canvas");
+    const sh = () => app.store.data.room.shapes.find(x => x.type === "points"), width = s => Math.max(...s.pts.map(p => p[0])) - Math.min(...s.pts.map(p => p[0])), w0 = width(sh());
+    const i = app.store.data.room.shapes.indexOf(sh()), box = await page.locator("#r-stage").boundingBox(), p0 = sh().pts[0];
+    await page.mouse.move(box.x + p0[0] / 16 * box.width, box.y + p0[1] / 9 * box.height); await page.mouse.down(); await page.mouse.move(box.x - 300, box.y + p0[1] / 9 * box.height, { steps: 6 }); await page.mouse.up();
+    await page.click("#r-save"); await until(() => Math.min(...app.store.data.room.shapes[i].pts.map(p => p[0])) < 0.05, 4000, "shape not dragged to the edge");
+    ok(Math.abs(width(app.store.data.room.shapes[i]) - w0) < 0.01, `the mapped shape was squashed (${w0} → ${width(app.store.data.room.shapes[i])})`);
+  }
+  await go("map"); await page.click("#mp-cam"); await until(() => page.isEnabled("#mp-go"), 6000, "camera didn't start again"); await page.click("#mp-go");
+  await until(() => status().mapping, 4000, "mapping didn't start again"); await go("home"); await until(() => !status().mapping, 1500, "leaving the page mid-scan left the lights in mapping mode");
 });
 await step("music: play a song, it is analysed and drives the lights", async () => {
   await go("music"); await page.setInputFiles("#m-files", path.join(root, "apps/playground/demo.mp3"));
@@ -145,7 +156,7 @@ await step("music: input picker, level meter and timing fix are there", async ()
 await step("screen sync: share a screen and the Screen Sync effect turns on", async () => {
   await go("music"); await page.click("#m-scr"); await until(() => status().screen, 6000, "no screen frames arrive");
   ok(app.store.data.show.effect === "screen", "effect not switched"); await until(() => page.textContent("#m-scr").then(t => /Stop/.test(t)), 2000, "button not updated");
-  await page.click("#m-scr"); await sleep(3500); ok(!status().screen, "sharing did not stop");
+  await page.click("#m-scr"); await until(() => !status().screen, 1000, "sharing did not stop straight away");
   await app.core.handle("PATCH", "/api/show", { body: { mode: "auto" } });
 });
 await step("scenes: save, apply; schedules: add and run now", async () => {

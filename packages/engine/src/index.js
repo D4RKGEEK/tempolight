@@ -2,7 +2,7 @@
 // the same code runs in the browser playground, in tests and on a PC or Raspberry Pi.
 export { preAnalyseCore, lastLE } from "./analysis.js";
 export { buildLayout, exampleRoom, segmentRanges, outline, samplePath, STAGE_W, STAGE_H } from "./layout.js";
-export { createEffects } from "./effects.js";
+export { createEffects, createLetterbox } from "./effects.js";
 export { songView, metronomeView, buildSignals, gridAt } from "./signals.js";
 export { LiveAnalyser } from "./live.js";
 export { memoryEntry, memoryAnalysis, recognise, refineByKicks, fingerprint, FingerprintTap } from "./memory.js";

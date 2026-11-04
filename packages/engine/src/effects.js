@@ -2,6 +2,25 @@
 // Extracted from the playground (apps/playground). Each effect reads per-LED arrays from the layout
 // and a signals object S (see signals.js) and writes linear RGB into COL.
 /* eslint-disable */
+/**
+ * Finds a film's black bars (letterbox above and below, pillarbox at the sides) in screen-sync pictures, so the room
+ * gets the picture and not the bars. A row or column at the edge counts as a bar while it has stayed black: it is
+ * picture again the moment anything shows in it, and only turns back into a bar after 20 s of black, so a dark scene
+ * or a fade to black doesn't shrink the picture. At most 40% is cut from each side; an all-black picture isn't cut.
+ */
+export function createLetterbox({ black = 28, holdMs = 20000 } = {}) {
+  let rows = null, cols = null, key = "", last = 0;
+  return function update(sc) {
+    const { w, h, px } = sc, at = sc.at ?? 0, k = `${w}x${h}`;
+    if (k !== key || at - last > 3000 || at < last) { key = k; rows = new Float64Array(h).fill(-Infinity); cols = new Float64Array(w).fill(-Infinity); } // a new share: start again
+    last = at;
+    for (let y = 0, q = 0; y < h; y++) for (let x = 0; x < w; x++, q += 3) if (px[q] > black || px[q + 1] > black || px[q + 2] > black) { rows[y] = at; cols[x] = at; } // when each row and column last showed something
+    const bar = t => at - t > holdMs, edge = (a, n) => { if (a.every(bar)) return [0, n - 1]; let i0 = 0, i1 = n - 1; const lim = Math.floor(n * 0.4);
+      while (i0 < lim && bar(a[i0])) i0++; while (n - 1 - i1 < lim && bar(a[i1])) i1--; return [i0, i1]; };
+    const [y0, y1] = edge(rows, h), [x0, x1] = edge(cols, w); return { x0, x1, y0, y1 };
+  };
+}
+
 export function createEffects(layout, opts = {}) {
   const { N, LX, LY, LS, LA, LU, LH, LR, LF, LL, LD, PX, PY, LG, shapes } = layout;
   let COL = new Float32Array(N * 3);
@@ -474,15 +493,16 @@ export function createEffects(layout, opts = {}) {
     for (let i = 0; i < N; i++) if (LF[i] === si) { MC[i] = Math.round((LX[i] - x0) / dx); MR[i] = Math.round((LY[i] - y0) / dy); MCOLS[i] = sh.cols; } });
   const hasMatrix = MC.some(v => v >= 0);
   // ---- screen sync: colours from a shared screen (a film, a game, a music video), mapped over the room like a big ambilight
-  const SCR = new Float32Array(N * 3);
+  const SCR = new Float32Array(N * 3), letterbox = createLetterbox(); let scLast = null, crop = null;
   FX2.push({ id: "screen", name: "Screen Sync", tag: "home", run(S) {
     const sc = S.screen;
     if (!sc) { for (let i = 0; i < N; i++) add(i, S.pal[i % 2], 0.08 + 0.06 * Math.sin(S.t * 1.5 + LS[i] * 6)); return; } // nothing shared yet
-    const { w, h, px } = sc;
+    if (sc !== scLast) { scLast = sc; crop = letterbox(sc); } // once per new picture, not per frame
+    const { w, px } = sc, { x0, x1, y0, y1 } = crop;
     for (let i = 0; i < N; i++) {
       const u = (PX[i] - BB.x0) / Math.max(1e-3, BB.x1 - BB.x0), v = 1 - (PY[i] - BB.y0) / Math.max(1e-3, BB.y1 - BB.y0);
-      const cx = Math.min(w - 1, Math.max(0, Math.round(u * (w - 1)))), cy = Math.min(h - 1, Math.max(0, Math.round(v * (h - 1)))); let r = 0, g = 0, b = 0, n = 0;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const x = cx + dx, y = cy + dy; if (x < 0 || y < 0 || x >= w || y >= h) continue; const q = (y * w + x) * 3; r += px[q]; g += px[q + 1]; b += px[q + 2]; n++; }
+      const cx = Math.min(x1, Math.max(x0, Math.round(x0 + u * (x1 - x0)))), cy = Math.min(y1, Math.max(y0, Math.round(y0 + v * (y1 - y0)))); let r = 0, g = 0, b = 0, n = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) { const x = cx + dx, y = cy + dy; if (x < x0 || y < y0 || x > x1 || y > y1) continue; const q = (y * w + x) * 3; r += px[q]; g += px[q + 1]; b += px[q + 2]; n++; }
       r /= n * 255; g /= n * 255; b /= n * 255;
       const m = (r + g + b) / 3, sat = 1.25; r = Math.max(0, m + (r - m) * sat); g = Math.max(0, m + (g - m) * sat); b = Math.max(0, m + (b - m) * sat); // a little richer than the screen
       const j = i * 3; SCR[j] += (r - SCR[j]) * 0.35; SCR[j + 1] += (g - SCR[j + 1]) * 0.35; SCR[j + 2] += (b - SCR[j + 2]) * 0.35; // smooth, so it doesn't flicker

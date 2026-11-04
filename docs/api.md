@@ -54,7 +54,7 @@ Calls marked with a guest area (effects, scenes, pads, brightness) work without 
 | `POST /api/discover` | admin | `{scan: true}` returns WLED controllers found by mDNS and a network scan, Govee lights (`kind: "govee"`) and OpenRGB devices on this computer (`kind: "openrgb"`, `index`) |
 | `GET /api/room`, `PUT /api/room` | admin | `{name, shapes: [...]}` |
 | `POST /api/room/preset` | admin | `{id: "fourwalls"}`, built for your controllers |
-| `POST /api/map` | admin | camera mapping: `{device, led}` lights only that LED (`-1`: all dark), `{end: true}` goes back to the show; also over the WebSocket as `{type: "map", device, led}`. Stops by itself after 5 s without news |
+| `POST /api/map` | admin | camera mapping: `{device, led}` lights only that LED (`-1`: all dark), `{end: true}` goes back to the show; also over the WebSocket as `{type: "map", device, led}`. Stops by itself after 5 s without news, or as soon as the WebSocket that started it closes |
 
 A shape: `{type: "line"|"pole"|"free"|"circle"|"rect"|"hex"|"tri"|"matrix"|"points", name, dev: "<device id>", count, from: <first LED or null for "after the previous shape">, rev, ...}` plus
 `pts: [[x, y], ...]` for lines (and for `points`: one LED exactly at each point, used by camera mapping and Nanoleaf), or `cx, cy, size` (and `w, h` for rectangles, `cols, rows, w, h` for matrices). Positions are on a 16 × 9 wall view, y = 0 at the top.
@@ -123,7 +123,9 @@ Add `?token=` when locked. The server sends `{type: "status", ...}` four times a
 - `{type: "audio-start", rate: 22050, label}` then binary messages of 16-bit little-endian mono samples to be a live audio source; `{type: "audio-stop"}`
 - `{type: "clock", pos, playing}` while a song plays
 - `{type: "action", action: {type: "flash"}}` for pads, with low delay
-- `{type: "screen", w, h, px, label}` to feed the Screen Sync effect: `px` is base64 of `w × h` RGB bytes (up to 4,096 pixels), a few times a second
+- `{type: "screen", w, h, px, label}` to feed the Screen Sync effect: `px` is base64 of `w × h` RGB bytes (up to 4,096 pixels), a few times a second;
+  `{type: "screen", end: true}` when sharing stops. One browser shares at a time: another one's pictures (or a guest's while the PIN lock
+  doesn't allow effects) get `{type: "screen-refused", why: "busy" | "locked", error}` back
 - `{type: "phone", on: true}` to be a phone light: binary messages, byte 0 = 2, then R, G, B and the phone's place in
   the line-up (30 a second). `GET /api/network` lists this computer's addresses for the QR code; `status.phones` counts them
 

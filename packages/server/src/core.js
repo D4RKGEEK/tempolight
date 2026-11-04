@@ -44,11 +44,12 @@ export function createCore({ store, runtime, env }) {
     const o = { type: s.type, name: String(s.name || s.type).slice(0, 60), count: Math.round(Number(s.count) || 0), dev: s.dev, rot: Number(s.rot) || 0, start: Number(s.start) || 0, rev: !!s.rev,
       from: s.from === null || s.from === undefined || s.from === "" ? null : Math.max(0, Math.round(Number(s.from))), zone: s.zone ? String(s.zone).slice(0, 40) : null };
     if (!devIds.has(o.dev)) throw new HttpError(400, `Shape "${o.name}" points at a device that doesn't exist`);
+    if (s.type === "points") { if (!Array.isArray(s.pts) || !s.pts.length) throw new HttpError(400, `Shape "${o.name}" needs points`); o.count = Math.min(o.count || s.pts.length, s.pts.length); }
     if (s.type === "matrix") { o.cols = Math.max(1, Math.min(256, Math.round(s.cols || 16))); o.rows = Math.max(1, Math.min(256, Math.round(s.rows || 16))); o.count = o.cols * o.rows; }
     if (!(o.count >= 1 && o.count <= 8192)) throw new HttpError(400, `Shape "${o.name}" needs between 1 and 8192 LEDs`);
     for (const k of ["cx", "cy", "size", "w", "h"]) if (s[k] !== undefined) o[k] = Number(s[k]);
-    if (s.type === "points") { if (!Array.isArray(s.pts) || !s.pts.length) throw new HttpError(400, `Shape "${o.name}" needs points`); o.count = Math.min(o.count || s.pts.length, s.pts.length); }
-    if (s.pts) { if (!Array.isArray(s.pts) || s.pts.length < (s.type === "points" ? 1 : 2)) throw new HttpError(400, `Shape "${o.name}" needs at least two points`); o.pts = s.pts.map(p => [Number(p[0]), Number(p[1])]); }
+    if (s.pts) { if (!Array.isArray(s.pts) || s.pts.length < (s.type === "points" ? 1 : 2)) throw new HttpError(400, `Shape "${o.name}" needs at least two points`);
+      o.pts = s.pts.slice(0, 8192).map(p => [Number(p?.[0]), Number(p?.[1])]); if (!o.pts.every(p => Number.isFinite(p[0]) && Number.isFinite(p[1]))) throw new HttpError(400, `Shape "${o.name}" has a point that isn't two numbers`); }
     if (["line", "pole", "free"].includes(o.type) && !o.pts) throw new HttpError(400, `Shape "${o.name}" needs points`);
     if (["circle", "hex", "tri", "rect"].includes(o.type) && !(o.size > 0)) o.size = o.w || 1;
     if (o.type === "rect") { o.w = o.w || o.size; o.h = o.h || o.size; }
@@ -385,16 +386,20 @@ export function createCore({ store, runtime, env }) {
         if (binary) { if (c.data.audio) runtime.pushPcm(msg, "browser", c.data.audio.label, c.data.id, c.data.audio.rate); return; }
         let m; try { m = JSON.parse(msg); } catch { return; }
         if (m.type === "preview") { if (m.on) runtime.previewClients.add(c); else runtime.previewClients.delete(c); }
-        else if (m.type === "screen" && typeof m.px === "string") { if (c.data.auth("effects")) { try { const b = atob(m.px), px = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) px[i] = b.charCodeAt(i);
-          runtime.setScreen(Number(m.w) | 0, Number(m.h) | 0, px, String(m.label || "").slice(0, 80)); } catch {} } }
-        else if (m.type === "map") { if (c.data.auth(null)) runtime.mapLight(m.end ? null : String(m.device), m.led ?? -1, m.level); } // camera mapping (admin)
+        else if (m.type === "screen") { // screen sync: a small picture, or {end: true} when sharing stops
+          if (m.end) runtime.clearScreen(c.data.id);
+          else if (typeof m.px === "string" && m.px.length <= 22000) { const now = Date.now(), tell = (why, error) => { if (now - (c.data.screenTold || 0) > 2000) { c.data.screenTold = now; c.sendJSON({ type: "screen-refused", why, error }); } };
+            if (!c.data.auth("effects")) tell("locked", "Tempolight is locked with a PIN, and guests may not pick effects, so the screen can't be shared.");
+            else { try { const b = atob(m.px), px = new Uint8Array(b.length); for (let i = 0; i < b.length; i++) px[i] = b.charCodeAt(i);
+              if (runtime.setScreen(Number(m.w) | 0, Number(m.h) | 0, px, String(m.label || "").slice(0, 80), c.data.id) === "busy") tell("busy", "Another browser is already sharing its screen. Stop it there first."); } catch {} } } }
+        else if (m.type === "map") { if (c.data.auth(null)) runtime.mapLight(m.end ? null : String(m.device), m.led ?? -1, m.level, c.data.id); } // camera mapping (admin)
         else if (m.type === "phone") { if (m.on) { if (!runtime.phones.has(c)) { runtime.phones.add(c); runtime.note(`A phone joined as a light (${runtime.phones.size} now)`); } } else runtime.phones.delete(c); }
         else if (m.type === "audio-start") { c.data.audio = { rate: Number(m.rate) || 22050, label: String(m.label || "Browser audio").slice(0, 80) }; }
         else if (m.type === "audio-stop") { c.data.audio = null; runtime.stopLive(c.data.id); }
         else if (m.type === "clock") runtime.songClock(m, null);
         else if (m.type === "action" && m.action) { if (c.data.auth("pads")) { try { runtime.action(m.action); } catch {} } }
       },
-      close() { clients.delete(c); runtime.previewClients.delete(c); runtime.phones.delete(c); runtime.stopLive(c.data.id); runtime.clearSong(c.data.id); },
+      close() { clients.delete(c); runtime.previewClients.delete(c); runtime.phones.delete(c); runtime.stopLive(c.data.id); runtime.clearSong(c.data.id); runtime.clearScreen(c.data.id); runtime.endMap(c.data.id); },
     };
   }
   function broadcast(o) { const s = JSON.stringify(o); for (const c of clients) if (c.open && !c.busy) c.send(s); }

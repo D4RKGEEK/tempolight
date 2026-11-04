@@ -25,7 +25,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
     capture: null,   // {proc, sourceId, label, error}
     song: null,      // {name, pre, pos, playing, rate, at, clientId}
     forced: null,    // {kind:"build"|"drop", t0, dur}
-    taps: [], view: null, powerOffAt: 0,
+    taps: [], view: null, powerOffAt: 0, mapEndAt: -1e9,
   };
 
   function rebuild() {
@@ -200,13 +200,15 @@ export function createRuntime(store, { io, logger = console } = {}) {
     toRGB8(col, col8, bri);
     // copy each shape's LEDs into its controller's buffer at its segment range
     const shapes = data().room.shapes;
-    const sendNow = sh.power || now - rt.powerOffAt < 600; // after power-off, send black briefly, then go quiet
-    const map = rt.mapping && now - rt.mapping.at < 5000 ? rt.mapping : null; if (!map) rt.mapping = null;
+    const map = rt.mapping && now - rt.mapping.at < 5000 ? rt.mapping : null; if (!map && rt.mapping) { rt.mapping = null; rt.mapEndAt = now; }
+    const sendNow = sh.power || now - rt.powerOffAt < 600 || now - rt.mapEndAt < 600; // after power-off (or mapping with the power off), send black briefly, then go quiet
     for (const d of data().devices) {
       const o = outs.get(d.id); if (!o || !d.enabled) continue;
       if (map) { // camera mapping: everything dark except the one LED being looked for
         const n = Math.max(o.size, d.leds || 0); if (!o.mapBuf || o.mapBuf.length !== n * 3) o.mapBuf = new Uint8Array(n * 3); o.mapBuf.fill(0);
-        if (map.dev === d.id && map.led >= 0 && map.led < n) o.mapBuf.fill(map.level, map.led * 3, map.led * 3 + 3);
+        if (map.dev === d.id && map.led >= 0 && map.led < n) { let a = map.led, b = map.led + 1;
+          if (d.kind === "govee") { const segs = Math.max(1, d.goveeMode === "segments" ? d.goveeSegments || d.leds || 1 : 1); const k = Math.floor(map.led * segs / n); a = Math.floor(k * n / segs); b = Math.max(a + 1, Math.floor((k + 1) * n / segs)); } // Govee averages LEDs into segments: light the whole segment, or it's too dim to see
+          o.mapBuf.fill(map.level, a * 3, b * 3); }
         if (!d.virtual) o.sender.send(o.mapBuf); continue; }
       o.buf.fill(0);
       shapes.forEach((sp, si) => { if (sp.dev !== d.id) return; const r = ranges[si], a = L.chainStart[si], n = Math.min(sp.type === "matrix" ? sp.cols * sp.rows : sp.count, o.size - r.start);
@@ -230,9 +232,22 @@ export function createRuntime(store, { io, logger = console } = {}) {
     rt.frames++; fpsN++; if (now - fpsT > 1000) { rt.fps = fpsN * 1000 / (now - fpsT); fpsN = 0; fpsT = now; }
   }
   /** Camera mapping: light only LED `led` of device `dev` (-1: all dark); call again within 5 s to keep it going, or end(). */
-  function mapLight(dev, led, level = 200) { if (dev == null) { rt.mapping = null; return; } rt.mapping = { dev, led: Number(led), level: Math.max(20, Math.min(255, level)), at: performance.now() }; }
-  /** A small picture of a shared screen (RGB bytes), for the Screen Sync effect. */
-  function setScreen(w, h, px, label) { if (!(w > 0 && h > 0 && w * h <= 4096 && px.length >= w * h * 3)) return false; rt.screen = { w, h, px, at: performance.now(), label }; return true; }
+  /** `owner` (a browser's id) lets endMap(owner) stop it when that browser goes away mid-scan. */
+  function mapLight(dev, led, level = 200, owner = null) {
+    if (dev == null) { if (rt.mapping) rt.mapEndAt = performance.now(); rt.mapping = null; return; }
+    rt.mapping = { dev, led: Number.isFinite(Number(led)) ? Math.round(Number(led)) : -1, level: Math.max(20, Math.min(255, Number(level) || 200)), at: performance.now(), owner };
+  }
+  function endMap(owner) { if (rt.mapping && rt.mapping.owner === owner) mapLight(null); }
+  /**
+   * A small picture of a shared screen (RGB bytes), for the Screen Sync effect. One browser at a time: while one
+   * shares (frames less than 1.5 s old), another browser's pictures are refused ("busy"), so two don't flicker.
+   */
+  function setScreen(w, h, px, label, owner = null) {
+    if (!(w > 0 && h > 0 && w * h <= 4096 && px.length >= w * h * 3)) return false;
+    const now = performance.now(); if (rt.screen && rt.screen.owner !== owner && now - rt.screen.at < 1500) return "busy";
+    rt.screen = { w, h, px, at: now, label, owner }; return true;
+  }
+  function clearScreen(owner) { if (rt.screen && rt.screen.owner === owner) rt.screen = null; }
   function sendPhones(on) {
     const list = [...phones].filter(c => c.open), n = list.length, N = L.N; if (!N) return;
     const win = Math.max(1, Math.round(N / Math.max(6, n * 2)));
@@ -354,7 +369,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
   return {
     get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, rt, log, listeners, previewClients, phones, health,
     rebuild, syncDirector, startLoop, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
-    identify, syncSegments, setPower, action, status, setScreen, remember, forget, djBeat, planFor, mapLight, layoutInfo, checkDevice, note,
+    identify, syncSegments, setPower, action, status, setScreen, clearScreen, remember, forget, djBeat, planFor, mapLight, endMap, layoutInfo, checkDevice, note,
     close() { clearInterval(timer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
   };
 }

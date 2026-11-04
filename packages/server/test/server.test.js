@@ -232,6 +232,55 @@ test("screen sync: a shared screen's colours reach the LEDs", { skip: typeof Web
   } finally { await s.done(); await wled.close(); }
 });
 
+test("screen sync: one browser at a time, it lets go when it stops or leaves, and a locked guest is told why", { skip: typeof WebSocket === "undefined" && "this Node.js has no WebSocket client (Node 22+)" }, async () => {
+  const s = await setup(), open = async (q = "") => { const ws = new WebSocket(`ws://127.0.0.1:${s.port}/ws${q}`), got = []; ws.onmessage = e => { try { got.push(JSON.parse(e.data)); } catch {} }; await new Promise(r => ws.onopen = r); return { ws, got }; };
+  const pic = (c, label) => JSON.stringify({ type: "screen", w: 4, h: 2, px: Buffer.alloc(24, c).toString("base64"), label });
+  const label = async () => (await s.call("GET", "/api/status")).body.screen;
+  try {
+    const a = await open(), b = await open();
+    a.ws.send(pic(200, "Film")); assert.ok(await until(async () => await label() === "Film"));
+    b.ws.send(pic(10, "Game")); assert.ok(await until(() => b.got.some(m => m.type === "screen-refused" && m.why === "busy")), "the second browser is told someone else shares");
+    assert.equal(await label(), "Film", "the first browser's picture stays"); assert.equal(s.app.runtime.status().screen, "Film");
+    a.ws.send(JSON.stringify({ type: "screen", end: true })); assert.ok(await until(async () => await label() === null), "stopping lets go straight away");
+    b.ws.send(pic(10, "Game")); assert.ok(await until(async () => await label() === "Game"), "then the other browser can share");
+    b.ws.close(); assert.ok(await until(async () => await label() === null), "a browser that leaves lets go");
+    a.ws.close();
+    const l = await s.call("POST", "/api/lock", { pin: "1357" }); await s.call("PATCH", "/api/settings", { guest: { effects: false } }, { "x-tempolight-token": l.body.token });
+    const g = await open(); g.ws.send(pic(200, "Guest")); assert.ok(await until(() => g.got.some(m => m.type === "screen-refused" && m.why === "locked")), "a guest who may not pick effects is told");
+    assert.equal(await label(), null); g.ws.close();
+  } finally { await s.done(); }
+});
+
+test("camera mapping: a browser that leaves mid-scan ends it, the power-off show goes dark again, Govee lights a whole segment", { skip: typeof WebSocket === "undefined" && "this Node.js has no WebSocket client (Node 22+)" }, async () => {
+  const wled = await startFakeWled({ leds: 40 }), s = await setup();
+  try {
+    const add = await s.call("POST", "/api/devices", { host: wled.host }); await s.call("PATCH", `/api/devices/${add.body.id}`, { ddpPort: wled.ddpPort });
+    const lit = () => { const f = wled.lastFrame || [], on = []; for (let i = 0; i < f.length / 3; i++) if (f[i * 3] + f[i * 3 + 1] + f[i * 3 + 2] > 0) on.push(i); return on; };
+    await s.call("POST", "/api/power", { on: false }); await sleep(800);
+    const ws = new WebSocket(`ws://127.0.0.1:${s.port}/ws`); await new Promise(r => ws.onopen = r);
+    ws.send(JSON.stringify({ type: "map", device: add.body.id, led: 5 })); assert.ok(await until(() => lit().join() === "5"), "mapping lights the LED even with the show off");
+    ws.close(); assert.ok(await until(() => s.app.runtime.status().mapping === null, 1000), "leaving ends mapping at once (not after 5 s)");
+    assert.ok(await until(() => lit().length === 0, 1500), "and the LED goes dark again, as the show is off");
+    // a pretend Govee light in segment mode (4 segments of 10 LEDs): mapping LED 13 lights the whole second segment
+    const sock = dgram.createSocket("udp4"), got = []; await new Promise(r => sock.bind(0, "127.0.0.1", r)); sock.on("message", b => got.push(JSON.parse(b.toString()).msg));
+    try {
+      await s.call("POST", "/api/power", { on: true });
+      const gv = await s.call("POST", "/api/devices", { host: "127.0.0.1", kind: "govee", name: "Strip" }); await s.call("PATCH", `/api/devices/${gv.body.id}`, { ddpPort: sock.address().port, goveeMode: "segments", goveeSegments: 4, leds: 40 });
+      await s.call("POST", "/api/map", { device: gv.body.id, led: 13 });
+      assert.ok(await until(() => got.some(m => { if (m.cmd !== "razer") return false; const b = Buffer.from(m.data.pt, "base64"); return b[5] === 4 && b[9] >= 190 && b[6] === 0 && b[12] === 0; })), "segment 2 at full brightness, the others dark");
+    } finally { await s.call("POST", "/api/map", { end: true }); sock.close(); }
+  } finally { await s.done(); wled.close(); }
+});
+
+test("room: points shapes don't need a count, and points must be numbers", async () => {
+  const wled = await startFakeWled({ leds: 10 }), s = await setup();
+  try {
+    const add = await s.call("POST", "/api/devices", { host: wled.host }), room = (await s.call("GET", "/api/room")).body;
+    const ok = await s.call("PUT", "/api/room", { ...room, shapes: [{ type: "points", name: "Mapped", dev: add.body.id, pts: [[1, 1], [2, 1]] }] }); assert.equal(ok.status, 200); assert.equal(ok.body.shapes[0].count, 2);
+    const bad = await s.call("PUT", "/api/room", { ...room, shapes: [{ type: "points", name: "Mapped", dev: add.body.id, pts: [[1, 1], ["x", null]] }] }); assert.equal(bad.status, 400); assert.match(bad.body.error, /two numbers/);
+  } finally { await s.done(); wled.close(); }
+});
+
 test("Govee lights: added without WLED, get the room's colour over the LAN API", async () => {
   const sock = dgram.createSocket("udp4"), got = []; await new Promise(r => sock.bind(0, "127.0.0.1", r)); sock.on("message", b => got.push(JSON.parse(b.toString()).msg));
   const s = await setup();
