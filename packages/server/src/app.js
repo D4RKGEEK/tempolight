@@ -82,7 +82,7 @@ export async function createApp(opts) {
   const runtime = createRuntime(store, { io, logger: opts.logger === undefined ? console : opts.logger, now: opts.now, host: opts.host, cpuUsage: () => process.cpuUsage() }); // opts.host: pretend computer (tests)
   const core = createCore({ store, runtime, env: {
     version: pkg.version, newId, hashPin, checkPin, randomToken: () => crypto.randomBytes(16).toString("hex"),
-    getInfo: io.getInfo, discoverWled: io.discoverWled, discoverGovee: io.discoverGovee, listOpenRGB: io.listOpenRGB, nanoleafPair: io.nanoleafPair, nanoleafInfo: io.nanoleafInfo, panelPoints: io.panelPoints, huePair: io.huePair, hueLights: io.hueLights, ipOf: io.ipOf, listSources: io.listSources, startOsc,
+    getInfo: io.getInfo, discoverWled: io.discoverWled, discoverGovee: io.discoverGovee, listOpenRGB: io.listOpenRGB, nanoleafPair: io.nanoleafPair, nanoleafInfo: io.nanoleafInfo, panelPoints: io.panelPoints, huePair: io.huePair, hueLights: io.hueLights, huePairKey: io.huePairKey, hueAreas: io.hueEntertainmentAreas, lights: io.LIGHT_KINDS, discoverLights: io.discoverLights, ipOf: io.ipOf, listSources: io.listSources, startOsc,
     uptime: () => process.uptime(), now: opts.now, discover: opts.discover,
     update: updater, startProLink, startLink, wifi,
     quit: embedded?.sea ? async () => { try { await closeApp(); } catch {} process.exit(0); } : null, // the one-file app has no terminal to stop it from

@@ -9,3 +9,6 @@ export { OpenRGBSender, listOpenRGB, parseController, orgbPacket, closeOpenRGB, 
 export { NanoleafSender, nanoleafPair, nanoleafInfo, nanoleafStream, nanoleafPower, nanoleafFrame, panelPoints, NANOLEAF_PORT, NANOLEAF_STREAM_PORT } from "./nanoleaf.js";
 export { HueSender, huePair, hueLights, rgbToXy } from "./hue.js";
 export { DMX_PROFILES, CHANNEL_TYPES, DMX_CHANNELS, fixtureProfile, channelCount, writeFixture, normChannel, kindOf, overlaps } from "./dmx.js";
+export { HueEntertainmentSender, huePairKey, hueEntertainmentAreas, hueEntertainmentAction, hueStreamMessage, HUE_STREAM_PORT } from "./hue-entertainment.js";
+export { DtlsClient } from "./dtls.js";
+export { LIGHT_KINDS, discoverLights } from "./lights.js";

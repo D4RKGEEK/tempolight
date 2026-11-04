@@ -92,8 +92,9 @@ function stepLights(el) {
   const have = () => { const d = app.state.devices; $("#wz-have").innerHTML = d.length ? `${ic("done", "ok")} ${d.length} light${d.length > 1 ? "s" : ""} ready: ${d.map(x => esc(x.name)).join(", ")}` : ""; setNext(d.length > 0); };
   const added = async () => { await refreshState(); await loadLayout(); have(); };
   let found = [];
-  const body = f => f.kind === "govee" ? { host: f.host, name: f.name, kind: "govee" } : f.kind === "openrgb" ? { host: f.host, name: f.name, kind: "openrgb", index: f.index, leds: f.leds } : { host: f.host, name: f.name, leds: f.leds, force: true };
-  const kindName = f => f.kind === "govee" ? "Govee" : f.kind === "openrgb" ? "PC lighting" : `WLED · ${f.leds ?? "?"} LEDs`;
+  const SMART = { lifx: "LIFX", wiz: "WiZ", kasa: "TP-Link Kasa", yeelight: "Yeelight", twinkly: "Twinkly" }; // smart lights from the scan
+  const body = f => f.kind === "govee" || SMART[f.kind] ? { host: f.host, name: f.name, kind: f.kind } : f.kind === "openrgb" ? { host: f.host, name: f.name, kind: "openrgb", index: f.index, leds: f.leds } : { host: f.host, name: f.name, leds: f.leds, force: true };
+  const kindName = f => f.kind === "govee" ? "Govee" : SMART[f.kind] ? SMART[f.kind] : f.kind === "openrgb" ? "PC lighting" : `WLED · ${f.leds ?? "?"} LEDs`;
   function tiles() {
     $("#wz-found").innerHTML = found.map((f, i) => `<button class="wz-tile found${f.added ? " sel" : ""}" type="button" data-wzf="${i}" aria-pressed="${!!f.added}">${ic(f.added ? "done" : "lights")}<b>${esc(f.name || "WLED")}</b><small>${esc(kindName(f))}</small></button>`).join("");
     $$("[data-wzf]").forEach(b => b.onclick = async () => { const f = found[Number(b.dataset.wzf)]; if (f.added) return; b.disabled = true;

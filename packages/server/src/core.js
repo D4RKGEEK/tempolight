@@ -6,6 +6,7 @@ import { DEFAULTS, merge } from "./defaults.js";
 import { createHome, homeRoutes } from "./home.js";
 import { ROOM_PRESETS, buildPreset, cleanTimeline } from "../../engine/src/index.js";
 import { createPro } from "./pro-api.js";
+import { createLights } from "./lights.js";
 
 const SHAPE_TYPES = new Set(["line", "pole", "free", "circle", "rect", "hex", "tri", "matrix", "points"]);
 export class HttpError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
@@ -72,13 +73,14 @@ export function createCore({ store, runtime, env }) {
     host = String(host || "").trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
     if (!host) throw new HttpError(400, "Enter the controller's IP address, for example 192.168.1.42");
     if (kind === "dmx") return pro.addDmx(arguments[0], host); // a DMX universe on an Art-Net / sACN node (pro-api.js)
+    if (lights.kinds.includes(kind)) return lights.add(kind, arguments[0], host); // LIFX, WiZ, Kasa, Yeelight, Twinkly (lights.js)
     if (kind === "hue") { // Philips Hue bridge: pair with the link button, then each colour light is one LED
       if (!env.huePair) throw new HttpError(400, "Hue needs Tempolight running on your network");
       if (data().devices.find(d => d.kind === "hue" && d.host === host)) throw new HttpError(400, "That Hue bridge is already added");
-      let user = token, lights;
-      try { user ||= await env.huePair(host); lights = await env.hueLights(host, user); } catch (e) { throw new HttpError(400, e.code === "pair" ? e.message : `Couldn't reach a Hue bridge at ${host} (${e.message})`); }
+      let user = token, lights, clientkey = null; // the client key is for fast mode (Entertainment streaming)
+      try { if (!user) ({ user, clientkey } = env.huePairKey ? await env.huePairKey(host) : { user: await env.huePair(host) }); lights = await env.hueLights(host, user); } catch (e) { throw new HttpError(400, e.code === "pair" ? e.message : `Couldn't reach a Hue bridge at ${host} (${e.message})`); }
       if (!lights.length) throw new HttpError(400, "That Hue bridge has no lights");
-      const dev = { id: env.newId("d"), name: String(name || "Hue lights").slice(0, 60), host, kind: "hue", hue: { user, lights: lights.map(l => l.id), names: lights.map(l => l.name), color: lights.map(l => l.color !== false) }, ddpPort: 80, leds: lights.length, enabled: true };
+      const dev = { id: env.newId("d"), name: String(name || "Hue lights").slice(0, 60), host, kind: "hue", hue: { user, clientkey, lights: lights.map(l => l.id), names: lights.map(l => l.name), color: lights.map(l => l.color !== false) }, ddpPort: 80, leds: lights.length, enabled: true };
       data().devices.push(dev);
       const y = 1 + (data().room.shapes.length % 7) * 1.1, n = lights.length, pts = lights.map((_, i) => [Math.round((2 + (n > 1 ? i / (n - 1) : 0.5) * 12) * 100) / 100, y]);
       data().room.shapes.push({ type: "points", name: dev.name, count: n, dev: dev.id, rot: 0, start: 0, rev: false, from: null, pts });
@@ -199,6 +201,7 @@ export function createCore({ store, runtime, env }) {
   const route = (method, pattern, area, fn) => routes.push({ method, re: new RegExp("^" + pattern.replace(/:(\w+)/g, "(?<$1>[^/]+)") + "$"), area, fn });
   // area: null = open to everyone, "admin" = needs unlock when a PIN is set, or a guest area name (effects, scenes, pads, brightness)
   const pro = createPro({ store, runtime, env, route, HttpError, changed }); // DMX fixtures, Ableton Link, MIDI clock
+  const lights = createLights({ store, runtime, env, HttpError, changed }); // smart lights, Hue fast mode
 
   route("GET", "/api/state", null, () => pub());
   route("GET", "/api/status", null, () => runtime.status());
@@ -312,18 +315,19 @@ export function createCore({ store, runtime, env }) {
   route("PATCH", "/api/settings", "admin", async (ctx) => { applySettings(ctx.body); return pub().settings; });
 
   // devices
-  const safeDev = x => x.nanoleaf ? { ...x, nanoleaf: { panels: x.nanoleaf.panels } } : x.hue ? { ...x, hue: { lights: x.hue.lights, names: x.hue.names } } : x; // Nanoleaf tokens and Hue user names stay on the server
+  const safeDev = x => x.nanoleaf ? { ...x, nanoleaf: { panels: x.nanoleaf.panels } } : x.hue ? { ...x, hue: { lights: x.hue.lights, names: x.hue.names, fast: !!x.hue.ent?.on, area: x.hue.ent?.on ? x.hue.ent.name : null, areas: x.hue.areas || [], fastKey: !!x.hue.clientkey } } : x; // Nanoleaf tokens, Hue user names and client keys stay on the server
   route("GET", "/api/devices", null, () => data().devices.map(d => ({ ...safeDev(d), health: runtime.health.get(d.id) || null })));
   route("POST", "/api/devices", "admin", async (ctx) => safeDev(await addDevice(ctx.body)));
   route("PATCH", "/api/devices/:id", "admin", async (ctx, p) => {
     const d = data().devices.find(x => x.id === p.id); if (!d) throw new HttpError(404, "No such device"); const b = ctx.body;
-    if (b.name !== undefined) d.name = String(b.name).slice(0, 60); if (b.host !== undefined) d.host = String(b.host).trim(); if (b.ddpPort !== undefined) d.ddpPort = Number(b.ddpPort) || ({ govee: 4003, openrgb: 6742, nanoleaf: 60222, hue: 80 })[d.kind] || 4048;
+    if (b.name !== undefined) d.name = String(b.name).slice(0, 60); if (b.host !== undefined) d.host = String(b.host).trim(); if (b.ddpPort !== undefined) d.ddpPort = Number(b.ddpPort) || ({ govee: 4003, openrgb: 6742, nanoleaf: 60222, hue: 80 })[d.kind] || env.lights?.[d.kind]?.port || 4048;
     if (b.leds !== undefined) d.leds = Math.max(0, Math.round(Number(b.leds))); if (b.enabled !== undefined) d.enabled = !!b.enabled;
     if (b.protocol !== undefined) { if (!["ddp", "e131", "artnet"].includes(b.protocol)) throw new HttpError(400, "Protocol is ddp, e131 or artnet"); if (d.kind === "dmx" && b.protocol === "ddp") throw new HttpError(400, "A DMX device sends Art-Net or E1.31 (sACN)"); d.protocol = b.protocol; }
     if (b.universe !== undefined) d.universe = b.universe === null || b.universe === "" ? undefined : Math.max(0, Math.min(63999, Math.round(Number(b.universe))));
     if (b.goveeMode !== undefined && d.kind === "govee") d.goveeMode = b.goveeMode === "segments" ? "segments" : "color";
     if (b.goveeSegments !== undefined && d.kind === "govee") d.goveeSegments = b.goveeSegments ? Math.max(1, Math.min(60, Math.round(Number(b.goveeSegments)))) : undefined;
     if (b.maxAmps !== undefined) d.maxAmps = Math.max(0, Math.min(500, Number(b.maxAmps) || 0)); if (b.mAperLed !== undefined) d.mAperLed = Math.max(5, Math.min(200, Number(b.mAperLed) || 60));
+    await lights.patch(d, b); // {light: {...}} options, {hueFast, hueArea}
     runtime.rebuild(); changed("devices"); return safeDev(d);
   });
   route("DELETE", "/api/devices/:id", "admin", (ctx, p) => {
@@ -334,13 +338,13 @@ export function createCore({ store, runtime, env }) {
   route("POST", "/api/devices/:id/segments", "admin", async (ctx, p) => ({ segments: await runtime.syncSegments(p.id) }));
   route("POST", "/api/devices/:id/check", null, async (ctx, p) => { const d = data().devices.find(x => x.id === p.id); if (!d) throw new HttpError(404, "No such device"); return runtime.checkDevice(d); });
   route("POST", "/api/discover", "admin", async (ctx) => {
-    const b = ctx.body, [found, govee] = await Promise.all([env.discoverWled({ scan: b.scan !== false, timeoutMs: 2500, extraHosts: (b.hosts || []).map(String) }),
-      env.discoverGovee ? env.discoverGovee({ timeoutMs: 2500 }).catch(() => []) : []]);
+    const b = ctx.body, [found, govee, smart] = await Promise.all([env.discoverWled({ scan: b.scan !== false, timeoutMs: 2500, extraHosts: (b.hosts || []).map(String) }),
+      env.discoverGovee ? env.discoverGovee({ timeoutMs: 2500 }).catch(() => []) : [], lights.discover(2500)]);
     let orgb = []; if (env.listOpenRGB) orgb = await Promise.race([env.listOpenRGB("127.0.0.1").catch(() => []), new Promise(r => setTimeout(() => r([]), 1500))]); // OpenRGB on this computer
     const haveOrgb = new Set(data().devices.filter(d => d.kind === "openrgb" && ["127.0.0.1", "localhost"].includes(env.ipOf(d.host))).map(d => d.orgbIndex || 0)); // only OpenRGB on this computer is listed
     const known = new Set(data().devices.map(d => env.ipOf(d.host)));
     return [...found.map(f => ({ ...f, added: known.has(f.ip) })), ...govee.map(g => ({ ...g, ip: g.host, kind: "govee", leds: 0, added: known.has(g.host) })),
-      ...orgb.map(c => ({ host: "127.0.0.1", ip: "127.0.0.1", name: c.name, leds: c.leds, kind: "openrgb", index: c.index, added: haveOrgb.has(c.index) }))];
+      ...orgb.map(c => ({ host: "127.0.0.1", ip: "127.0.0.1", name: c.name, leds: c.leds, kind: "openrgb", index: c.index, added: haveOrgb.has(c.index) })), ...smart];
   });
 
   // room
