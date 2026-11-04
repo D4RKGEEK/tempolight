@@ -71,6 +71,11 @@ await step("music: the song is remembered in song memory", async () => {
   await until(() => page.textContent("#m-songs").then(t => /BPM/.test(t)), 6000, "song not in the memory list");
   ok(app.store.data.songs.length === 1, "not stored");
 });
+await step("music: the song has a show timeline; a block can be changed", async () => {
+  await until(() => page.$$("#m-show .blk").then(b => b.length >= 2), 6000, "no show blocks");
+  await page.click("#m-show .blk"); await page.waitForSelector("#m-blkfx"); await page.selectOption("#m-blkfx", "fireworks");
+  await until(() => app.store.data.songs[0].showEdited && app.store.data.songs[0].show[0].effect === "fireworks", 4000, "block not saved"); await shot("04b-show");
+});
 await step("guest requests: a guest asks for a song, the host sees it", async () => {
   const g = await ctx.newPage(); g.on("pageerror", e => errors.push("request: " + e.message)); await g.goto(`${base}/request`);
   await g.fill("#title", "Daft Punk – One More Time"); await g.fill("#by", "Sam"); await g.click("#send"); await until(() => g.textContent("#msg").then(t => /Sent/.test(t)), 4000, "request not sent");

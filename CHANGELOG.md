@@ -5,6 +5,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- Auto-generated shows: every remembered song gets a timeline of effects, one block per section (build-ups get build effects, drops the big ones), shown under the song on the Music page. Tap a block to change its effect, or ask for a new show. Played or recognised songs follow their show in automatic mode.
+
 - Nanoleaf panels: pair by holding the power button, and the panels are placed in the room where they really are (new `points` shape: one light at each point). Streams with Nanoleaf's extControl mode at 30 fps; the token never leaves the server.
 
 - OpenRGB: PC lighting (RAM, fans, keyboards, motherboards, GPUs) joins the show through OpenRGB's SDK server. Scan network lists its devices with their LED counts.

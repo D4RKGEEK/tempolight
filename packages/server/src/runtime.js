@@ -2,7 +2,7 @@
 // Sources, best first: a song playing in the browser (analysed ahead of time), live audio (from a browser or this
 // computer's sound card), the metronome, and finally the idle/ambient effect when nothing is playing.
 import { inWindow } from "./sun.js";
-import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, gridAt, toRGB8, LiveAnalyser, memoryEntry, memoryAnalysis, recognise, refineByKicks } from "../../engine/src/index.js";
+import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, gridAt, toRGB8, LiveAnalyser, memoryEntry, memoryAnalysis, recognise, refineByKicks, planShow } from "../../engine/src/index.js";
 // Everything that touches the network or the sound card comes in through `io` (see node-io.js), so the same runtime
 // runs on a PC or Pi and, with pretend devices, inside the browser for the online demo.
 
@@ -90,7 +90,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
     for (const k of ["kicks", "snares", "hats", "drops"]) pre[k] = Array.from(pre[k] || []);
     pre.env = Float32Array.from(pre.env || []); pre.bars = pre.bars || [];
     rt.song = { name: song.name || "Song", pre, pos: 0, playing: false, rate: 1, at: performance.now(), clientId };
-    if (data().settings.songMemory && pre.dur > 20 && pre.env.length) remember(rt.song.name, pre);
+    if (data().settings.songMemory && pre.dur > 20 && pre.env.length) rt.song.memId = remember(rt.song.name, pre).id;
     note(`Song ready: ${rt.song.name} (${Math.round(pre.bpm)} BPM, ${fx.styles[pre.style]?.name || pre.style})`);
   }
   // ---------------------------------------------------------------- Pro DJ Link: the decks' beat grid
@@ -106,8 +106,16 @@ export function createRuntime(store, { io, logger = console } = {}) {
   function remember(name, pre) {
     const list = data().songs, old = list.findIndex(e => e.name === name && Math.abs(e.dur - pre.dur) < 1.5);
     const e = memoryEntry(name, pre, old >= 0 ? list[old].id : "m" + Math.random().toString(36).slice(2, 10));
+    e.show = old >= 0 && list[old].showEdited ? list[old].show : planShow(pre, fx, { seed: name, prefs: data().settings.effectPrefs }); e.showEdited = old >= 0 && !!list[old].showEdited; // a show of its own; hand edits are kept
     if (old >= 0) list.splice(old, 1); else note(`Remembered “${name}”: Tempolight will recognise it when it plays again`);
-    list.push(e); while (list.length > 60) list.shift(); store.save();
+    list.push(e); while (list.length > 60) list.shift(); store.save(); return e;
+  }
+  const planFor = (e, seed = e.name + ":" + Date.now()) => planShow(memoryAnalysis(e), fx, { seed, prefs: data().settings.effectPrefs }); // a fresh one: a new seed
+  /** The show timeline for the song playing now (played or recognised), when shows are on. */
+  function currentPlan() {
+    if (data().settings.shows === false) return null;
+    const id = rt.source === "song" ? rt.song?.memId : rt.mem.lock && liveFresh() ? rt.mem.lock.id : null; if (!id) return null;
+    const e = data().songs.find(x => x.id === id); if (!e) return null; if (!e.show) { e.show = planFor(e, e.name); store.save(); } return e.show;
   }
   let memT = 0;
   function songMemoryTick() { // once a second while listening live: is this a song we know?
@@ -178,6 +186,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
   function frame() {
     const now = performance.now(), wall = now / 1000, sh = data().show, s = data().settings;
     let { V, t, extra } = currentView(now);
+    D.settings.plan = V ? currentPlan() : null;
     if (rt.forced && !V) V = metronomeView(wall, s.metronome.bpm || 124), t = wall; // "build & drop" pad works even with no music
     V = applyForced(V, t, now);
     rt.view = V; rt.t = t;
@@ -311,8 +320,8 @@ export function createRuntime(store, { io, logger = console } = {}) {
       type: "status", source: rt.source, sourceLabel: rt.sourceLabel, fps: Math.round(rt.fps), leds: L.N, effect: D.showing, effectName: fx.list.find(e => e.id === D.showing)?.name || D.showing, style: D.style,
       styleName: fx.styles[D.style]?.name || D.style, bpm: V && V.bpm ? Math.round(V.bpm * 10) / 10 : null, part: V ? V.state : "idle",
       beat: V && V.g.has ? V.g.beatInBar : null, level: an ? Math.round(Math.min(1, an.eFast / an.eMax) * 100) / 100 : V ? Math.round((V.loud || 0) * 100) / 100 : 0,
-      bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, djlink: djFresh(performance.now()) ? { name: rt.dj.name, bpm: rt.dj.bpm, beatInBar: rt.dj.beatInBar } : null, recognised: rt.mem.lock && liveFresh() ? { name: rt.mem.lock.name, pos: Math.round((rt.mem.lock.pos0 + rt.live.an.t - rt.mem.lock.t0) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
-      song: rt.song ? { name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
+      bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, djlink: djFresh(performance.now()) ? { name: rt.dj.name, bpm: rt.dj.bpm, beatInBar: rt.dj.beatInBar } : null, recognised: rt.mem.lock && liveFresh() ? { id: rt.mem.lock.id, name: rt.mem.lock.name, pos: Math.round((rt.mem.lock.pos0 + rt.live.an.t - rt.mem.lock.t0) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
+      song: rt.song ? { memId: rt.song.memId || null, name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
       capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null,
       overlay: overlayState(), devices: data().devices.map(d => ({ id: d.id, ...health.get(d.id), sent: outs.get(d.id)?.sender.sent || 0, used: outs.get(d.id)?.used || 0, amps: Math.round((outs.get(d.id)?.amps || 0) * 100) / 100, limited: !!outs.get(d.id)?.limited })),
       uptime: Math.round((Date.now() - rt.startedAt) / 1000),
@@ -336,7 +345,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
   return {
     get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, rt, log, listeners, previewClients, phones, health,
     rebuild, syncDirector, startLoop, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
-    identify, syncSegments, setPower, action, status, setScreen, remember, forget, djBeat, layoutInfo, checkDevice, note,
+    identify, syncSegments, setPower, action, status, setScreen, remember, forget, djBeat, planFor, layoutInfo, checkDevice, note,
     close() { clearInterval(timer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
   };
 }

@@ -346,3 +346,25 @@ test("Nanoleaf: pairs, places the panels where they are, streams extControl fram
     const st = (await s.call("GET", "/api/state")).body.devices.find(d => d.id === add.body.id); assert.equal(st.nanoleaf.token, undefined);
   } finally { await s.done(); udp.close(); await new Promise(r => api.close(r)); }
 });
+
+test("auto-generated shows: a remembered song gets a timeline the director follows, and blocks can be changed", async () => {
+  const s = await setup();
+  try {
+    await s.call("POST", "/api/devices", { virtual: true });
+    const song = edm(22050), pre = await preAnalyseCore(song.x, song.sr);
+    await s.call("POST", "/api/song", { name: "Showtime", analysis: { ...pre, env: Array.from(pre.env) } });
+    const id = s.app.runtime.status().song.memId; assert.ok(id, "the song is remembered");
+    const sh = (await s.call("GET", `/api/songs/${id}/show`)).body; assert.ok(sh.show.length >= 3); assert.equal(sh.show[0].t0, 0);
+    assert.ok(sh.show.some(b => b.part === "build") && sh.show.some(b => b.part === "drop"), "build-up and drop blocks");
+    const dropBlk = sh.show.find(b => b.part === "drop"), mid = (dropBlk.t0 + dropBlk.t1) / 2;
+    await s.call("POST", "/api/song/clock", { pos: mid, playing: true }); await sleep(150);
+    assert.equal(s.app.runtime.status().effect, dropBlk.effect, "the director plays the show's block");
+    const edited = sh.show.map(b => b === dropBlk || (b.t0 === dropBlk.t0) ? { ...b, effect: "fireworks" } : b);
+    assert.equal((await s.call("PUT", `/api/songs/${id}/show`, { show: edited })).status, 200);
+    assert.equal((await s.call("PUT", `/api/songs/${id}/show`, { show: [{ t0: 0, t1: 5, effect: "nope" }] })).status, 400);
+    await s.call("POST", "/api/song/clock", { pos: mid, playing: true }); await sleep(150); assert.equal(s.app.runtime.status().effect, "fireworks");
+    await s.call("PATCH", "/api/settings", { shows: false }); await sleep(150); assert.equal(s.app.runtime.director.settings.plan, null, "shows can be turned off");
+    await s.call("PATCH", "/api/settings", { shows: true });
+    const fresh = (await s.call("DELETE", `/api/songs/${id}/show`)).body; assert.ok(fresh.show.length >= 3); assert.equal((await s.call("GET", `/api/songs/${id}/show`)).body.edited, false);
+  } finally { await s.done(); }
+});

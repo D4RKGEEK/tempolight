@@ -237,3 +237,11 @@ body.demo .side { top: 0; padding-top: 0; }
 .phones .qr svg { width: 168px; height: 168px; display: block; }
 .phones .stack { flex: 1 1 220px; min-width: 0; }
 .phones a { overflow-wrap: anywhere; }
+
+/* the show timeline */
+.showline { position: relative; height: 30px; border-radius: 6px; background: var(--line-2); overflow: hidden; }
+.showline:empty { display: none; }
+.showline .blk { position: absolute; top: 0; bottom: 0; border: 0; border-right: 1px solid var(--panel); padding: 0 4px; font: 600 10.5px/30px system-ui, sans-serif; color: #fff; text-align: left; overflow: hidden; white-space: nowrap; cursor: pointer; background: #6c63c8; }
+.showline .blk span { pointer-events: none; }
+.showline .blk.calm, .showline .blk.silent { background: #4a6fa5; } .showline .blk.build { background: #c58a1d; } .showline .blk.drop { background: #c8366e; }
+.showline .blk:focus-visible { outline: 2px solid var(--text, #000); outline-offset: -2px; }

@@ -300,13 +300,27 @@ function musicPage(el) {
       now.innerHTML = `<div class="stack"><div class="row" style="justify-content:space-between"><b>${esc(q.name)}</b><span class="faint mono">${Math.round(q.analysis.bpm)} BPM</span></div>
         <div class="progress" id="m-prog"><div class="fill" id="m-fill"></div>${q.analysis.drops.map(t => `<div class="drop" style="left:${t / d * 100}%" title="Drop at ${fmtTime(t)}"></div>`).join("")}</div>
         <div class="times"><span id="m-pos">0:00</span><span>${fmtTime(d)}</span></div>
+        <div class="showline" id="m-show" aria-label="The show: effects on a timeline"></div><div id="m-showed" class="row" hidden></div>
         <div class="row"><button class="btn" id="m-prev" type="button">Previous</button><button class="btn primary" id="m-play" type="button">${a.song.playing ? "Pause" : "Play"}</button><button class="btn" id="m-next" type="button">Next</button><button class="btn" id="m-stopsong" type="button">Stop</button></div></div>`;
       $("#m-prog").onclick = e => { const r = e.currentTarget.getBoundingClientRect(); A.seek((e.clientX - r.left) / r.width * d); };
+      showLine();
       $("#m-play").onclick = () => A.toggle(); $("#m-next").onclick = () => A.next(); $("#m-prev").onclick = () => A.prev(); $("#m-stopsong").onclick = () => A.stopSong(); }
     else now.innerHTML = "";
     $("#m-err").hidden = !a.error; $("#m-err").textContent = a.error || "";
     $("#m-stop").hidden = !(a.mode === "system" || a.mode === "mic");
     $("#m-system").setAttribute("aria-pressed", a.mode === "system"); $("#m-mic").setAttribute("aria-pressed", a.mode === "mic");
+  }
+  // the show: an auto-generated timeline of effects for the song playing, one block per section; tap a block to change it
+  let showFor = null, showData = null;
+  async function showLine(force) {
+    const box = $("#m-show"); if (!box) return; const memId = app.status?.song?.memId; if (!memId) { box.innerHTML = '<span class="faint" style="font-size:12.5px">The show appears here once the song is remembered.</span>'; showFor = null; return; }
+    if (force || showFor !== memId || !showData) { showData = await api("GET", `/api/songs/${memId}/show`).catch(() => null); showFor = memId; }
+    if (!showData) return; const d = showData.dur || 1, names = Object.fromEntries(st.effects.map(e => [e.id, e.name]));
+    box.innerHTML = showData.show.map((b, i) => `<button class="blk ${esc(b.part)}" type="button" data-blk="${i}" style="left:${b.t0 / d * 100}%;width:${(b.t1 - b.t0) / d * 100}%" title="${fmtTime(b.t0)}–${fmtTime(b.t1)}: ${esc(names[b.effect] || b.effect)}"><span>${esc(names[b.effect] || b.effect)}</span></button>`).join("");
+    $$("#m-show [data-blk]").forEach(b => b.onclick = () => { const i = Number(b.dataset.blk), blk = showData.show[i], ed = $("#m-showed"); ed.hidden = false;
+      ed.innerHTML = `<span class="faint">${fmtTime(blk.t0)}–${fmtTime(blk.t1)}</span><select id="m-blkfx" aria-label="Effect for this part" style="width:auto;max-width:240px">${st.effects.map(e => opt(e.id, e.name, e.id === blk.effect)).join("")}</select><button class="btn sm" id="m-shownew" type="button">New show</button>${showData.edited ? '<span class="faint" style="font-size:12px">edited by hand</span>' : ""}`;
+      $("#m-blkfx").onchange = async e => { const next = showData.show.map((x, k) => k === i ? { ...x, effect: e.target.value } : x); const r = await act(() => api("PUT", `/api/songs/${memId}/show`, { show: next }), "Show updated").catch(() => null); if (r) { showData.show = r.show; showData.edited = true; showLine(); } };
+      $("#m-shownew").onclick = async () => { const r = await act(() => api("DELETE", `/api/songs/${memId}/show`), "A new show for this song").catch(() => null); if (r) { showData = null; ed.hidden = true; showLine(true); } }; });
   }
   renderQueue(); songs(); requests();
   const partName = { calm: "Calm", build: "Build-up", drop: "Drop", silent: "Quiet", idle: "–" };
@@ -316,6 +330,7 @@ function musicPage(el) {
       $("#m-src").textContent = m.sourceLabel; $("#m-bpm").textContent = m.bpm ? m.bpm.toFixed(0) : "–"; $("#m-part").textContent = partName[m.part] || m.part; $("#m-style").textContent = m.source === "idle" ? "–" : m.styleName; $("#m-voc").textContent = m.vocal == null ? "–" : m.vocal > 0.35 ? "Yes" : m.vocal > 0.15 ? "A little" : "No";
       const bars = $$("#m-spec i"); bars.forEach((b, i) => b.style.height = (m.bands ? Math.max(2, m.bands[i] * 100) : 2) + "%");
       const lv = A.level(); $("#m-lvl").style.width = Math.round(lv * 100) + "%"; $("#m-lvl-o").textContent = A.state.stream ? (lv < 0.02 ? "very quiet: turn it up or move closer" : Math.round(lv * 100) + "%") : "not listening";
+      if (m.song?.memId && m.song.memId !== showFor) showLine();
       if (A.state.song && $("#m-fill")) { const p = A.pos(); $("#m-fill").style.width = (p / A.duration * 100) + "%"; $("#m-pos").textContent = fmtTime(p); }
       if (DEMO) return;
       const c = app.state.settings.capture; $("#m-cap").textContent = c.enabled ? "Stop listening on the server" : "Start listening on the server";

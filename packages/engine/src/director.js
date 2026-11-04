@@ -1,6 +1,7 @@
 // The director decides what the room shows each frame: which effect fits the song right now (by style and song
 // part), crossfades between effects, keeps quiet music from going dark, plays the ambient effect when nothing is
 // playing, and applies live overlays (flash, strobe, blackout, colour hold) and the photosensitivity limiter.
+import { showAt } from "./show.js";
 import { buildSignals } from "./signals.js";
 
 const G = (x, w) => Math.exp(-(x / w) * (x / w));
@@ -92,6 +93,8 @@ export function createDirector(layout, fx) {
   function choose(t, V) {
     const g = V.g;
     if (settings.mode !== "auto") { const want = ids.has(settings.effect) ? settings.effect : "shock"; if (st.cur !== want) { st.prev = st.cur; st.cur = want; st.xfadeT = t; } return; }
+    if (settings.plan && settings.plan.length) { const b = showAt(settings.plan, t); // a show timeline for this song: play it
+      if (b && ids.has(b.effect)) { if (st.cur !== b.effect) { st.prev = st.cur; st.cur = b.effect; st.xfadeT = t; st.palIdx++; } return; } }
     const ST = style(V);
     const sec = ST.mode === "sections" ? (V.state === "silent" ? "calm" : V.state) : V.level, pool = withPrefs(ST.pools[sec] || ST.pools.calm || ST.pools.low);
     const wrongPool = !pool.includes(st.cur), hot = sec === "drop" || sec === "peak";

@@ -134,6 +134,7 @@ export function createCore({ store, runtime, env }) {
         maxBrightness: b.night.maxBrightness !== undefined ? num(b.night.maxBrightness, 0.02, 1) : s.night.maxBrightness, warm: b.night.warm ?? s.night.warm }); }
     if (b.songMemory !== undefined) s.songMemory = !!b.songMemory;
     if (b.requests !== undefined) s.requests = !!b.requests;
+    if (b.shows !== undefined) s.shows = !!b.shows;
     if (b.djlink) Object.assign(s.djlink, { enabled: b.djlink.enabled ?? s.djlink.enabled, port: b.djlink.port !== undefined ? Math.round(num(b.djlink.port, 1024, 65535)) : s.djlink.port });
     if (b.mqtt) { const m = s.mqtt; for (const k of ["url", "username", "prefix", "base"]) if (b.mqtt[k] !== undefined) m[k] = String(b.mqtt[k]).trim().slice(0, 200);
       if (b.mqtt.password) m.password = String(b.mqtt.password).slice(0, 200); if (b.mqtt.clearPassword) m.password = ""; if (b.mqtt.enabled !== undefined) m.enabled = !!b.mqtt.enabled;
@@ -186,6 +187,14 @@ export function createCore({ store, runtime, env }) {
   route("GET", "/api/update", "admin", () => env.update ? env.update.check() : { method: "demo", canUpdate: false, message: "The online demo is always the latest version." });
   route("POST", "/api/update", "admin", async () => { if (!env.update) throw new HttpError(400, "Nothing to update in the online demo"); try { const r = await env.update.apply(); runtime.note("Updating Tempolight and restarting…"); return r; } catch (e) { throw new HttpError(400, e.message); } });
   route("GET", "/api/songs", null, () => data().songs.map(e => ({ id: e.id, name: e.name, bpm: e.bpm, dur: e.dur, style: e.style, drops: e.drops.length, at: e.at })));
+  const songById = id => { const e = data().songs.find(x => x.id === id); if (!e) throw new HttpError(404, "That song isn't remembered"); return e; };
+  route("GET", "/api/songs/:id/show", null, (ctx, p) => { const e = songById(p.id); if (!e.show) { e.show = runtime.planFor(e, e.name); store.save(); } return { id: e.id, name: e.name, dur: e.dur, edited: !!e.showEdited, show: e.show || [] }; });
+  route("PUT", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id), ids = effectIds(), segs = ctx.body.show;
+    if (!Array.isArray(segs) || !segs.length || segs.length > 500) throw new HttpError(400, "show is a list of {t0, t1, effect}");
+    const clean = segs.map(x => ({ t0: Number(x.t0), t1: Number(x.t1), part: String(x.part || "calm").slice(0, 10), effect: String(x.effect) })).sort((a, b) => a.t0 - b.t0);
+    for (const x of clean) { if (!ids.has(x.effect)) throw new HttpError(400, `Unknown effect "${x.effect}"`); if (!(x.t1 > x.t0 && x.t0 >= 0)) throw new HttpError(400, "Each block needs t0 < t1"); }
+    e.show = clean; e.showEdited = true; changed("songs"); return { ok: true, show: e.show }; });
+  route("DELETE", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id); e.show = runtime.planFor(e); e.showEdited = false; changed("songs"); return { ok: true, show: e.show }; });
   route("DELETE", "/api/songs/:id", "admin", (ctx, p) => { if (!runtime.forget(p.id)) throw new HttpError(404, "That song isn't remembered"); changed("songs"); return { ok: true }; });
   // guest song requests
   const reqList = () => data().requests.filter(r => !r.done).sort((a, b) => b.votes - a.votes || a.at - b.at).map(({ id, title, by, votes, at }) => ({ id, title, by, votes, at }));

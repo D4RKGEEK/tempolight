@@ -7,6 +7,7 @@ export { songView, metronomeView, buildSignals, gridAt } from "./signals.js";
 export { LiveAnalyser } from "./live.js";
 export { memoryEntry, memoryAnalysis, recognise, refineByKicks, fingerprint, FingerprintTap } from "./memory.js";
 export { createDirector, idleSignals } from "./director.js";
+export { planShow, showAt } from "./show.js";
 export { ROOM_PRESETS, buildPreset } from "./presets.js";
 
 /** Convert linear effect output (0..~2) to 8-bit RGB with a soft roll-off and a brightness factor. */
