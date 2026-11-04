@@ -16,6 +16,7 @@ import { startHomeAssistant } from "./homeassistant.js";
 import { createUpdater } from "./update.js";
 import { startProLink } from "./prolink.js";
 import { startNowPlaying } from "./nowplaying.js";
+import { startLink } from "./ableton-link.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(here, "../../..");
@@ -41,7 +42,7 @@ export async function createApp(opts) {
     version: pkg.version, newId, hashPin, checkPin, randomToken: () => crypto.randomBytes(16).toString("hex"),
     getInfo: io.getInfo, discoverWled: io.discoverWled, discoverGovee: io.discoverGovee, listOpenRGB: io.listOpenRGB, nanoleafPair: io.nanoleafPair, nanoleafInfo: io.nanoleafInfo, panelPoints: io.panelPoints, huePair: io.huePair, hueLights: io.hueLights, ipOf: io.ipOf, listSources: io.listSources, startOsc,
     uptime: () => process.uptime(), now: opts.now, discover: opts.discover,
-    update: updater, startProLink,
+    update: updater, startProLink, startLink,
     lan: () => Object.values(os.networkInterfaces()).flat().filter(a => a && a.family === "IPv4" && !a.internal).map(a => a.address) } });
   const ha = startHomeAssistant({ core, store, runtime, version: pkg.version });
   const np = startNowPlaying({ core, store, runtime, dataDir: opts.dataDir, port: () => server.address()?.port || 8080, ...opts.nowPlaying }); // opts.nowPlaying: test runner/platform

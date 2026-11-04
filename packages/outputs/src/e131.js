@@ -6,9 +6,10 @@ import crypto from "node:crypto";
 export const E131_PORT = 5568, ARTNET_PORT = 6454, PIXELS_PER_UNIVERSE = 170;
 const CID = crypto.randomBytes(16);
 
-/** E1.31 data packets for one frame. universe: the first universe number (WLED's default is 1). */
-export function e131Packets(rgb, universe = 1, seq = 0, sourceName = "Tempolight", priority = 100) {
-  const out = [], per = PIXELS_PER_UNIVERSE * 3;
+/** E1.31 data packets for one frame. universe: the first universe number (WLED's default is 1). per: channels in
+ * each universe (510 = 170 RGB pixels; 512 for DMX fixtures, one full universe). */
+export function e131Packets(rgb, universe = 1, seq = 0, sourceName = "Tempolight", priority = 100, per = PIXELS_PER_UNIVERSE * 3) {
+  const out = [];
   for (let off = 0, u = universe; off < rgb.length || off === 0; off += per, u++) {
     const ch = Math.min(per, rgb.length - off), len = 126 + ch, p = Buffer.alloc(len);
     p.writeUInt16BE(0x0010, 0); p.writeUInt16BE(0, 2); p.write("ASC-E1.17\0\0\0", 4, "latin1");      // root layer
@@ -22,9 +23,9 @@ export function e131Packets(rgb, universe = 1, seq = 0, sourceName = "Tempolight
   return out;
 }
 
-/** Art-Net ArtDmx packets for one frame. universe: the first port-address (WLED's default is 0). */
-export function artnetPackets(rgb, universe = 0, seq = 0) {
-  const out = [], per = PIXELS_PER_UNIVERSE * 3;
+/** Art-Net ArtDmx packets for one frame. universe: the first port-address (WLED's default is 0). per: as for e131Packets. */
+export function artnetPackets(rgb, universe = 0, seq = 0, per = PIXELS_PER_UNIVERSE * 3) {
+  const out = [];
   for (let off = 0, u = universe; off < rgb.length || off === 0; off += per, u++) {
     let ch = Math.min(per, rgb.length - off); const len = ch + (ch & 1); // DMX length must be even
     const p = Buffer.alloc(18 + len);
@@ -35,14 +36,16 @@ export function artnetPackets(rgb, universe = 0, seq = 0) {
   return out;
 }
 
-/** A sender with the same shape as DDPSender: new E131Sender(ip, {protocol, universe, port}).send(rgb) */
+/** A sender with the same shape as DDPSender: new E131Sender(ip, {protocol, universe, port, channels}).send(rgb).
+ * channels: per universe (default 510, RGB pixels; 512 for a DMX universe). */
 export class E131Sender {
-  constructor(host, { protocol = "e131", universe, port } = {}) {
+  constructor(host, { protocol = "e131", universe, port, channels = PIXELS_PER_UNIVERSE * 3 } = {}) {
+    this.channels = channels;
     this.host = host; this.protocol = protocol; this.universe = universe ?? (protocol === "artnet" ? 0 : 1);
     this.port = port || (protocol === "artnet" ? ARTNET_PORT : E131_PORT); this.seq = 0; this.sent = 0; this.errors = 0;
     this.sock = dgram.createSocket("udp4"); this.sock.on("error", () => { this.errors++; });
   }
   send(rgb) { const seq = this.seq = (this.seq + 1) & 255; this.sent++;
-    for (const p of (this.protocol === "artnet" ? artnetPackets : e131Packets)(rgb, this.universe, seq)) this.sock.send(p, this.port, this.host, e => { if (e) this.errors++; }); }
+    for (const p of this.protocol === "artnet" ? artnetPackets(rgb, this.universe, seq, this.channels) : e131Packets(rgb, this.universe, seq, "Tempolight", 100, this.channels)) this.sock.send(p, this.port, this.host, e => { if (e) this.errors++; }); }
   close() { try { this.sock.close(); } catch {} }
 }

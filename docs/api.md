@@ -31,7 +31,7 @@ the public address in `TEMPOLIGHT_ALLOWED_ORIGINS` (comma-separated, for example
 | `POST /api/custom-effects` | effects | `{name, pattern: "wave"\|"chase"\|"pulse"\|"sparkle"\|"fill"\|"breathe"\|"gradient", axis: "along"\|"x"\|"y"\|"around"\|"centre", drive: "beat"\|"kick"\|"bass"\|"loud"\|"time", tag: "calm"\|"build"\|"drop"\|"home", colors: "palette" \| ["#ff0066", "#00ccff"], speed, width, cycles, bg}`; returns it with an id (`u-…`) to use like any effect |
 | `PUT /api/custom-effects/:id`, `DELETE /api/custom-effects/:id` | effects | |
 | `PUT /api/zones` | effects | `{zones: [{id, name, mode: "follow"\|"effect"\|"ambient"\|"off", effect, brightness}]}`; shapes join a zone with their `zone` field |
-| `POST /api/action` | pads | `{type: "flash", color: "#ff0000"}`, `{type: "strobe", on: true}`, `blackout`, `freeze`, `hold` (`color` or none to release), `boost` (`value` 0–2), `next`, `drop`, `build` (`seconds`), `tap`, `cancel`, `identify` (`device` or `shape`) |
+| `POST /api/action` | pads | `{type: "flash", color: "#ff0000"}`, `{type: "strobe", on: true}`, `blackout`, `freeze`, `hold` (`color` or none to release), `boost` (`value` 0–2), `next`, `drop`, `build` (`seconds`), `tap`, `cancel`, `identify` (`device` or `shape`), `fog` (`on: true` while held, at most 10 s; DMX fog must be on) |
 
 ## Scenes and schedules
 
@@ -76,6 +76,11 @@ The Home Assistant device also gets the buttons Sleep timer, Snooze wake-up and 
 | `DELETE /api/devices/:id` | admin | also removes its shapes |
 | `POST /api/devices/:id/identify` | | lights that controller's shapes |
 | `POST /api/devices/:id/segments` | admin | writes the room's LED ranges into WLED as segments |
+| `POST /api/devices` (DMX) | admin | `{kind: "dmx", host: "192.168.1.60", name?, protocol?: "artnet"\|"e131", universe?}`: one DMX universe on an Art-Net or sACN node (Art-Net counts from 0, sACN from 1) |
+| `POST /api/devices/:id/fixtures` | admin | `{profile, address: 1-512, name?, channels? (custom), pattern?, target?, x?, y?}`. Profiles: `rgb`, `rgbw`, `rgba`, `dimmer`, `strobe`, `moving-head`, `moving-head-16`, `moving-head-wheel`, `moving-head-wheel-16`, `laser`, `fog`, `custom` (`channels: ["dimmer", "red", "green", "blue", "fixed:0", ...]`, types from `GET /api/dmx/profiles`). Moving heads: `pattern: "circle"\|"figure8"\|"sweep"\|"point"\|"still"`, `target: [x, y]` (room position, for `point`), `cycle` (beats per loop, 8), `size` (0-0.5), `home: [pan, tilt]`, `panRange`/`tiltRange` (degrees). Also `wheel: [{value, color: [r,g,b]}]`, `gobos`, `patterns`, `shutter: {open, closed, strobe: [lo, hi]}` for fixtures that differ. Each fixture is a point of the device's `points` shape in the room; `x, y` place it. Returns `{fixture, warnings}` (overlapping channels) |
+| `PATCH /api/devices/:id/fixtures/:fid`, `DELETE /api/devices/:id/fixtures/:fid` | admin | |
+| `GET /api/dmx` | | `{settings, status: {lasers: {on, why}, fog: {on, why, duty, maxDuty, cooldownLeft}}, devices: [{id, values: [512], fixtures: [{..., kind, live: [{n, type, value}]}], warnings}]}`: every channel's value now |
+| `GET /api/dmx/profiles` | | built-in profiles with their channels, channel types, movement patterns |
 | `POST /api/discover` | admin | `{scan: true}` returns WLED controllers found by mDNS and a network scan, Govee lights (`kind: "govee"`) and OpenRGB devices on this computer (`kind: "openrgb"`, `index`) |
 | `GET /api/room`, `PUT /api/room` | admin | `{name, shapes: [...]}` |
 | `POST /api/room/preset` | admin | `{id: "fourwalls"}`, built for your controllers |
@@ -145,7 +150,10 @@ Turn requests off with `PATCH /api/settings {requests: false}`.
 | `GET /api/backup` | admin: everything except the PIN, as one JSON file |
 | `POST /api/restore` | admin: a backup file; the current PIN is kept |
 
-Settings (`PATCH /api/settings`, admin) also take `songMemory: true|false`, `shows: true|false`, `requests: true|false`, `djlink: {enabled, port}`, `location: {lat, lon}`, `night: {enabled, from, to, maxBrightness, warm}`
+Settings (`PATCH /api/settings`, admin) also take `link: {enabled, port}` (Ableton Link, listen-only; `GET /api/status` then has `link: {peers, bpm, measured, following, beat, playing, error}`),
+`dmx: {enabled, lasers, fog, fogWhen: "before"|"drop", fogLead, fogBurst, fogCooldown, fogMaxDuty, fogLevel, laserMaxSec}` (lasers and fog are off by
+default; lasers run only during the first `laserMaxSec` seconds of a drop and never in photosensitive-safe or night mode; fog bursts `fogLead` s
+before a drop the song analysis knows, else at the drop, at least `fogCooldown` s apart and at most `fogMaxDuty` of any 5 minutes), `songMemory: true|false`, `shows: true|false`, `requests: true|false`, `djlink: {enabled, port}`, `location: {lat, lon}`, `night: {enabled, from, to, maxBrightness, warm}`
 (times like `23:00`, `sunset` or `sunrise-30`) and `text: {source: "song"|"bpm"|"clock"|"custom", custom}` for the
 Text Scroller. Schedules accept `time: "sunset+30"` or `"sunrise-15"` once a location is set.
 
@@ -173,6 +181,10 @@ Add `?token=` when locked. The server sends `{type: "status", ...}` four times a
 - `{type: "audio-start", rate: 22050, label}` then binary messages of 16-bit little-endian mono samples to be a live audio source; `{type: "audio-stop"}`
 - `{type: "clock", pos, playing}` while a song plays
 - `{type: "action", action: {type: "flash"}}` for pads, with low delay
+- `{type: "midi-clock", events: [[code, at, value?], ...], now, label}` to follow MIDI clock: `code` 0xF8 clock, 0xFA start, 0xFB continue,
+  0xFC stop, 0xF2 song position (`value` in 16ths); `at` and `now` on the browser's `performance.now()` clock; `{type: "midi-clock", end: true, events: [], now}`
+  stops. One browser at a time. `status.midiClock` is `{running, stopped, barKnown, bpm, input}`. The beat grid comes from Pro DJ Link first, then
+  MIDI clock, then Ableton Link (`status.source` is `djlink`, `midiclock` or `link` when there's no audio)
 - `{type: "screen", w, h, px, label}` to feed the Screen Sync effect: `px` is base64 of `w × h` RGB bytes (up to 4,096 pixels), a few times a second;
   `{type: "screen", end: true}` when sharing stops. One browser shares at a time: another one's pictures (or a guest's while the PIN lock
   doesn't allow effects) get `{type: "screen-refused", why: "busy" | "locked", error}` back

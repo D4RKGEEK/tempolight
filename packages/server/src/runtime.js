@@ -2,6 +2,8 @@
 // Sources, best first: a song playing in the browser (analysed ahead of time), live audio (from a browser or this
 // computer's sound card), the metronome, and finally the idle/ambient effect when nothing is playing.
 import { inWindow } from "./sun.js";
+import { createFixtures } from "./fixtures.js";
+import { createBeatSources } from "./beatsources.js";
 import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, gridAt, toRGB8, LiveAnalyser, memoryEntry, memoryAnalysis, recognise, matchAt, refineByKicks, planShow } from "../../engine/src/index.js";
 // Everything that touches the network or the sound card comes in through `io` (see node-io.js), so the same runtime
 // runs on a PC or Pi and, with pretend devices, inside the browser for the online demo.
@@ -20,6 +22,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   function note(msg, level = "info") { const e = { t: Date.now(), level, msg }; log.push(e); if (log.length > 200) log.shift(); for (const f of listeners) f(e); if (logger) logger.log(`[tempolight] ${msg}`); }
 
   let L, fx, D, ranges, outs = new Map();
+  const fixtures = createFixtures(), beats = createBeatSources(); // DMX fixtures; MIDI clock and Ableton Link beat grids
   const health = new Map(); // device id -> {online, rssi, version, ledsReported, lastSeen, error}
   const rt = {
     frames: 0, fps: 0, startedAt: Date.now(), source: "idle", sourceLabel: "Nothing playing", mem: { lock: null, cand: null },
@@ -43,11 +46,11 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       const used = Math.max(0, ...ranges.filter(r => r.dev === d.id).map(r => r.end + 1));
       const size = Math.max(used, 1), ip = ipOf(d.host), port = d.ddpPort || DEFAULT_PORT[d.kind] || 4048;
       let o = outs.get(d.id);
-      const proto = d.kind === "govee" && GoveeSender ? "govee" : d.kind === "openrgb" && OpenRGBSender ? "openrgb" : d.kind === "nanoleaf" && NanoleafSender ? "nanoleaf" : d.kind === "hue" && HueSender ? "hue" : d.protocol && d.protocol !== "ddp" && E131Sender ? d.protocol : "ddp";
+      const proto = d.kind === "dmx" ? "dmx" : d.kind === "govee" && GoveeSender ? "govee" : d.kind === "openrgb" && OpenRGBSender ? "openrgb" : d.kind === "nanoleaf" && NanoleafSender ? "nanoleaf" : d.kind === "hue" && HueSender ? "hue" : d.protocol && d.protocol !== "ddp" && E131Sender ? d.protocol : "ddp";
       // everything a sender is built from: a change to any of it (segments, a new token after pairing again, a restored backup) makes a new sender
       const key = JSON.stringify([d.host, port, proto, d.universe ?? "", d.goveeMode || "", d.goveeSegments || 0, d.leds, d.orgbIndex ?? "", d.nanoleaf?.token, d.nanoleaf?.panels, d.hue?.user, d.hue?.lights, d.hue?.color]);
       if (!o || o.key !== key) { const old = o; // the new sender first, so a connection shared with the old one (OpenRGB) stays open
-        o = { sender: proto === "ddp" ? new DDPSender(ip, port) : proto === "hue" ? new HueSender(d.host, { user: d.hue?.user, lights: d.hue?.lights, color: d.hue?.color }) : proto === "nanoleaf" ? new NanoleafSender(d.host, { token: d.nanoleaf?.token, panels: d.nanoleaf?.panels, port }) : proto === "openrgb" ? new OpenRGBSender(ip, { port, index: d.orgbIndex || 0, leds: d.leds }) : proto === "govee" ? new GoveeSender(ip, { mode: d.goveeMode, segments: d.goveeSegments || d.leds, port }) : new E131Sender(ip, { protocol: proto, universe: d.universe }), ip, port, key }; outs.set(d.id, o); if (old) old.sender.close(); }
+        o = { sender: proto === "dmx" ? (E131Sender ? new E131Sender(ip, { protocol: d.protocol === "e131" ? "e131" : "artnet", universe: d.universe, channels: 512, port: Number(/:(\d+)$/.exec(d.host)?.[1]) || undefined }) : { sent: 0, send() { this.sent++; }, close() {} }) : proto === "ddp" ? new DDPSender(ip, port) : proto === "hue" ? new HueSender(d.host, { user: d.hue?.user, lights: d.hue?.lights, color: d.hue?.color }) : proto === "nanoleaf" ? new NanoleafSender(d.host, { token: d.nanoleaf?.token, panels: d.nanoleaf?.panels, port }) : proto === "openrgb" ? new OpenRGBSender(ip, { port, index: d.orgbIndex || 0, leds: d.leds }) : proto === "govee" ? new GoveeSender(ip, { mode: d.goveeMode, segments: d.goveeSegments || d.leds, port }) : new E131Sender(ip, { protocol: proto, universe: d.universe }), ip, port, key }; outs.set(d.id, o); if (old) old.sender.close(); }
       o.size = size; o.buf = new Uint8Array(size * 3); o.used = used;
     }
     col8 = new Uint8Array(L.N * 3);
@@ -224,12 +227,14 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
         return { V: { ...songView(L.pre, pos), live: true, vocal: an.vocal }, t: pos, extra: an.extras() }; }
       const V = an.view(t, { predict: s.predict });
       rt.source = rt.live.kind; rt.sourceLabel = rt.live.label;
-      if (djFresh(now)) { const G = djGrid(now, t); V.g = gridAt(G, t); V.bpm = rt.dj.bpm; if (V.g.has && t - V.kick > 0.6) { V.kick = V.g.beatT; V.pulses = [V.g.beatT]; V.pulseN = V.g.idx; } rt.sourceLabel += ` + DJ Link (${rt.dj.name})`; }
+      const G = djFresh(now) ? { ...djGrid(now, t), bpm: rt.dj.bpm, label: `DJ Link (${rt.dj.name})` } : beats.grid(now, t); // DJ Link, else MIDI clock, else Ableton Link
+      if (G) { V.g = gridAt(G, t); V.bpm = G.bpm; if (V.g.has && t - V.kick > 0.6) { V.kick = V.g.beatT; V.pulses = [V.g.beatT]; V.pulseN = V.g.idx; } rt.sourceLabel += ` + ${G.label}`; }
       if (V.state === "silent" && V.quietFor > (s.idleAfterSec ?? 8)) { rt.source = "idle"; rt.sourceLabel = `${rt.live.label} (quiet)`; return { V: null, t: now / 1000 }; }
       return { V, t, extra: an.extras() };
     }
     if (djFresh(now)) { const t = now / 1000, V = metronomeView(t, rt.dj.bpm, djGrid(now, t)); // decks but no audio: a steady show on their beat
       rt.source = "djlink"; rt.sourceLabel = `DJ Link: ${rt.dj.name} ${rt.dj.bpm.toFixed(1)} BPM`; return { V, t }; }
+    { const t = now / 1000, G = beats.grid(now, t); if (G) { rt.source = G.kind; rt.sourceLabel = `${G.label} ${G.bpm.toFixed(1)} BPM`; return { V: metronomeView(t, G.bpm, G), t }; } } // MIDI clock or Link, no audio
     if (s.metronome.enabled) { const t = now / 1000; rt.source = "metronome"; rt.sourceLabel = `Metronome ${Math.round(s.metronome.bpm)} BPM`; return { V: metronomeView(t, s.metronome.bpm), t }; }
     rt.source = "idle"; rt.sourceLabel = "Nothing playing"; return { V: null, t: now / 1000 };
   }
@@ -262,12 +267,14 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     const col = D.frame(V, t, extra, wall);
     if (!sh.power) { bri = 0; }
     toRGB8(col, col8, bri);
+    fixtures.begin({ V, t, wall, cfg: s.dmx, safe: s.safe, night: !!rt.night, power: sh.power, overlay: D.state.overlay, bri });
     // copy each shape's LEDs into its controller's buffer at its segment range
     const shapes = data().room.shapes;
     const map = rt.mapping && now - rt.mapping.at < 5000 ? rt.mapping : null; if (!map && rt.mapping) { rt.mapping = null; rt.mapEndAt = now; }
     const sendNow = sh.power || now - rt.powerOffAt < 600 || now - rt.mapEndAt < 600; // after power-off (or mapping with the power off), send black briefly, then go quiet
     for (const d of data().devices) {
-      const o = outs.get(d.id); if (!o || !d.enabled) continue;
+      const o = outs.get(d.id); if (o && d.kind === "dmx") { dmxOut(d, o, map, now); continue; }
+      if (!o || !d.enabled) continue;
       if (map) { // camera mapping: everything dark except the one LED being looked for
         const n = Math.max(o.size, d.leds || 0); if (!o.mapBuf || o.mapBuf.length !== n * 3) o.mapBuf = new Uint8Array(n * 3); o.mapBuf.fill(0);
         if (map.dev === d.id && map.led >= 0 && map.led < n) { let a = map.led, b = map.led + 1;
@@ -294,6 +301,16 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     // phones as extra lights: each phone shows the colour of its own part of the room, so a crowd of phones moves with it
     if (phones.size && previewTick % Math.max(1, Math.round((s.fps || 60) / 30)) === 0) sendPhones(sh.power ? 1 : 0);
     rt.frames++; fpsN++; if (now - fpsT > 1000) { rt.fps = fpsN * 1000 / (now - fpsT); fpsN = 0; fpsT = now; }
+  }
+  // DMX: one universe per device, always sent (DMX nodes hold the last values, so stopping could leave fog on),
+  // about 40 times a second; dark while camera mapping; zeros for 2 s after it is turned off, then nothing
+  function dmxOut(d, o, map, now) {
+    if (!d.enabled) { if (o.dmxOn !== false) { o.dmxOn = false; o.offAt = now; } if (now - o.offAt > 2000 || d.virtual) return; if (now - (o.lastSend || 0) >= 100) { o.lastSend = now; o.sender.send(new Uint8Array(512)); } return; }
+    o.dmxOn = true; o.buf.fill(0);
+    const shapes = data().room.shapes, pts = shapes.find(sp => sp.dev === d.id && sp.type === "points")?.pts || [];
+    shapes.forEach((sp, si) => { if (sp.dev !== d.id) return; const r = ranges[si], a = L.chainStart[si], n = Math.min(sp.count, o.size - r.start); if (n > 0) o.buf.set(col8.subarray(a * 3, (a + n) * 3), r.start * 3); });
+    const dmx = map ? new Uint8Array(512) : fixtures.render(d, o.buf, pts);
+    if (!d.virtual && now - (o.lastSend || 0) >= 24) { o.lastSend = now; o.sender.send(dmx); }
   }
   /** Camera mapping: light only LED `led` of device `dev` (-1: all dark); call again within 5 s to keep it going, or end(). */
   /** `owner` (a browser's id) lets endMap(owner) stop it when that browser goes away mid-scan. */
@@ -338,6 +355,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     if (d.kind === "openrgb") { try { const list = await io.listOpenRGB(ipOf(d.host), d.ddpPort || 6742), c = list.find(x => x.index === (d.orgbIndex || 0));
         return Object.assign(h, { online: !!c, version: c ? `OpenRGB: ${c.name}` : "OpenRGB", ledsReported: c?.leds, lastSeen: Date.now(), error: c ? null : "device not found in OpenRGB" }); }
       catch (e) { if (h.online !== false) note(`${d.name}: OpenRGB is not answering (${d.host}). Is its SDK server running?`, "warn"); return Object.assign(h, { online: false, error: e.message }); } }
+    if (d.kind === "dmx") return Object.assign(h, { online: true, version: `DMX: ${d.protocol === "e131" ? "sACN" : "Art-Net"} universe ${d.universe ?? (d.protocol === "e131" ? 1 : 0)}`, ledsReported: (d.fixtures || []).length, lastSeen: Date.now() }); // DMX nodes don't answer
     if (d.kind === "govee") return Object.assign(h, { online: true, version: "Govee (LAN)", ledsReported: d.leds, lastSeen: Date.now() }); // Govee answers status on a shared port; not checked
     try { const info = await getInfo(d.host, 2500); Object.assign(h, { online: true, rssi: info.rssi, signal: info.signal, version: info.version, ledsReported: info.leds, fps: info.fps, live: info.live, lastSeen: Date.now(), error: null });
       if (!d.leds && info.leds) { d.leds = info.leds; store.save(); } }
@@ -369,7 +387,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   async function setPower(on) {
     data().show.power = !!on; store.save(); if (!on) rt.powerOffAt = performance.now();
     note(on ? "Lights on" : "Lights off");
-    await Promise.all(data().devices.filter(d => d.enabled && !d.virtual).map(d => d.kind === "openrgb" ? null : d.kind === "govee" || d.kind === "nanoleaf" || d.kind === "hue" ? outs.get(d.id)?.sender.power?.(!!on) : setState(d.host, { on: !!on }, 2000).catch(() => {})));
+    await Promise.all(data().devices.filter(d => d.enabled && !d.virtual).map(d => d.kind === "openrgb" || d.kind === "dmx" ? null : d.kind === "govee" || d.kind === "nanoleaf" || d.kind === "hue" ? outs.get(d.id)?.sender.power?.(!!on) : setState(d.host, { on: !!on }, 2000).catch(() => {})));
   }
 
   // ---------------------------------------------------------------- live controls (pads, OSC, API)
@@ -388,6 +406,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       case "cancel": rt.forced = null; Object.assign(o, { strobe: false, blackout: false, freeze: false, hold: null, boost: 1 }); break;
       case "tap": tap(); break;
       case "identify": identify(a); break;
+      case "fog": { const r = fixtures.manualFog(on ?? true, wall); if (!r.ok && on !== false) note(`Fog: ${r.why}`, "warn"); break; } // the manual fog pad (DMX)
       default: throw new Error(`Unknown action "${a.type}"`);
     }
     return overlayState();
@@ -414,6 +433,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null,
       overlay: overlayState(), devices: data().devices.map(d => ({ id: d.id, ...health.get(d.id), sent: outs.get(d.id)?.sender.sent || 0, used: outs.get(d.id)?.used || 0, amps: Math.round((outs.get(d.id)?.amps || 0) * 100) / 100, limited: !!outs.get(d.id)?.limited })),
       uptime: Math.round((Date.now() - rt.startedAt) / 1000),
+      ...beats.status(performance.now()), dmx: data().devices.some(d => d.kind === "dmx") ? fixtures.status(performance.now() / 1000) : null,
     };
   }
 
@@ -434,8 +454,9 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   return {
     get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, rt, log, listeners, previewClients, phones, health,
     rebuild, rebuildEffects, syncDirector, startLoop, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
-    identify, syncSegments, setPower, action, status, setScreen, clearScreen, remember, forget, djBeat, djOnAir, planFor, setDraft, mapLight, endMap, layoutInfo, checkDevice, note,
-    close() { clearInterval(timer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
+    fixtures, beats, identify, syncSegments, setPower, action, status, setScreen, clearScreen, remember, forget, djBeat, djOnAir, planFor, setDraft, mapLight, endMap, layoutInfo, checkDevice, note,
+    close() { for (const [id, o] of outs) if (data().devices.find(d => d.id === id)?.kind === "dmx") try { o.sender.send(new Uint8Array(512)); } catch {} // DMX: leave everything at zero
+      clearInterval(timer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
   };
 }
 

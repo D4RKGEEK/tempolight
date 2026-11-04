@@ -9,6 +9,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { createApp } from "../packages/server/src/app.js";
 import { startFakeWled } from "./fake-wled.js";
+import dgram from "node:dgram";
 
 const require = createRequire(import.meta.url);
 let chromium; try { ({ chromium } = require("playwright")); } catch { console.error("Playwright is not installed: npm i -g playwright && npx playwright install chromium"); process.exit(2); }
@@ -178,6 +179,25 @@ await step("room: a zone switched off goes dark on its controller", async () => 
 await step("devices: power limit", async () => {
   await go("devices"); const inp = page.locator("[data-amps]").first(); await inp.fill("1.5"); await inp.dispatchEvent("change");
   await until(() => app.store.data.devices[0].maxAmps === 1.5, 3000, "power limit not saved");
+});
+await step("devices: a DMX universe, fixtures by profile and address, live channel values, fog pad", async () => {
+  const rx = dgram.createSocket("udp4"), got = []; rx.on("message", b => got.push(b)); await new Promise(r => rx.bind(0, "127.0.0.1", r));
+  const rowsFor = async id => (await page.$$(`[data-xlive^="${id}:"]`)).length;
+  try {
+    await go("devices"); await sleep(600); // let the re-render from the last step land first
+    await page.fill("#x-host", `127.0.0.1:${rx.address().port}`); await page.fill("#x-univ", "1"); await page.click("#x-add");
+    const d = await until(() => app.store.data.devices.find(x => x.kind === "dmx"), 4000, "DMX universe not added");
+    await page.waitForSelector(`[data-xadd="${d.id}"]`); await sleep(300);
+    await page.selectOption(`[data-xprof="${d.id}"]`, "moving-head-16"); await page.fill(`[data-xnaddr="${d.id}"]`, "10"); await page.click(`[data-xadd="${d.id}"]`);
+    await until(() => d.fixtures.length === 1 && d.fixtures[0].address === 10, 4000, "fixture not added"); await until(async () => await rowsFor(d.id) === 1, 4000, "fixture not shown"); await sleep(300);
+    await page.selectOption(`[data-xprof="${d.id}"]`, "custom"); await page.fill(`[data-xch="${d.id}"]`, "dimmer, red, green, blue"); await page.fill(`[data-xnaddr="${d.id}"]`, "1"); await page.click(`[data-xadd="${d.id}"]`);
+    await until(() => d.fixtures.length === 2 && d.fixtures[1].profile === "custom", 4000, "custom fixture not added"); await until(async () => await rowsFor(d.id) === 2, 4000, "custom fixture not shown");
+    await until(async () => (await page.$$(`[data-xlive^="${d.id}:"] b`)).length === 15, 4000, "live channel values not shown");
+    await until(() => got.some(b => b.toString("latin1", 0, 7) === "Art-Net" && b[14] === 1 && b.readUInt16BE(16) === 512), 4000, "no Art-Net packets for universe 1");
+    await page.check("#x-las"); await until(() => app.store.data.settings.dmx.lasers === true, 3000, "lasers setting not saved"); await sleep(400);
+    await page.uncheck("#x-las"); await until(() => app.store.data.settings.dmx.lasers === false, 3000, "lasers not turned off again");
+    await shot("08c-dmx"); await go("live"); ok(await page.isVisible('[data-pad="fog"]'), "no fog pad with a DMX device");
+  } finally { rx.close(); }
 });
 await step("music: input picker, level meter and timing fix are there", async () => {
   await go("music"); ok(await page.isVisible("#m-input") && await page.isVisible("#m-cal") && (await page.$("#m-lvl")) !== null, "controls missing");
