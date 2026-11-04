@@ -8,3 +8,4 @@ data/
 dist/
 website/.vitepress/dist/
 website/.vitepress/cache/
+docs/node_modules

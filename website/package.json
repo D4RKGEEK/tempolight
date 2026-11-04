@@ -4,7 +4,9 @@
   "description": "The Tempolight documentation site (VitePress). The pages are the Markdown files in ../docs.",
   "type": "module",
   "scripts": {
+    "predev": "node link-deps.mjs",
     "dev": "vitepress dev",
+    "prebuild": "node link-deps.mjs",
     "build": "vitepress build",
     "preview": "vitepress preview",
     "check": "node ../scripts/check-docs.js"
