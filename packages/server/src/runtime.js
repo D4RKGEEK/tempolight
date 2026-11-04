@@ -38,6 +38,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     forced: null,    // {kind:"build"|"drop", t0, dur}
     taps: [], view: null, powerOffAt: 0, mapEndAt: -1e9,
     nowPlaying: null, // set by nowplaying.js on a PC: {follow(now), memId, info()}: what the music apps here play
+    spotify: null,    // set by spotify.js on a PC: {info(), paused(), dim(), timeline(tl)}; and pcmTap(samples, rate, kind, inMs): what is heard, to learn songs
   };
 
   function rebuild() {
@@ -90,6 +91,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       rt.live.an.lite = perf.lite; note(`Listening to ${label}`);
     }
     const t0 = performance.now(); rt.live.an.push(samples); perf.add("analysis", performance.now() - t0); rt.live.lastPush = performance.now(); rt.live.inMs = inMs; rt.live.chunkMs = samples.length / rate * 1000;
+    if (rt.pcmTap) rt.pcmTap(samples, rate, kind, inMs);
   }
   function liveFresh() { return rt.live && performance.now() - rt.live.lastPush < 1500; }
   function stopLive(clientId) { if (rt.live && (clientId == null || rt.live.clientId === clientId)) { note(`Stopped listening to ${rt.live.label}`); rt.live = null; rt.mem.lock = null; rt.mem.cand = null; } }
@@ -244,6 +246,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     }
     const np = rt.nowPlaying && rt.nowPlaying.follow(now); // a music app here plays a remembered song: its beat map, at the app's position
     if (np) { const t = np.pos + off; rt.source = "nowplaying"; rt.sourceLabel = `${np.app}: ${np.name} (remembered)`; return { V: songView(np.pre, t), t, extra: liveFresh() ? rt.live.an.extras() : {} }; }
+    if (rt.spotify && rt.spotify.paused()) { rt.source = "idle"; rt.sourceLabel = "Spotify paused"; return { V: null, t: now / 1000 }; } // fade to the ambient look
     if (liveFresh()) {
       const an = rt.live.an, t = an.t + Math.min(0.12, (now - rt.live.lastPush) / 1000) + (s.predict ? off : 0);
       songMemoryTick();
@@ -280,6 +283,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     let { V, t, extra } = currentView(now);
     const pe = V ? currentPlan() : null; D.settings.plan = pe ? pe.show : null;
     D.settings.timeline = pe && (pe.colors?.length || pe.cues?.length || pe.bright?.length) ? { colors: pe.colors || [], cues: pe.cues || [], bright: pe.bright || [] } : null;
+    if (rt.spotify && V) D.settings.timeline = rt.spotify.timeline(D.settings.timeline); // the album cover's colours, if on
     if (rt.forced && !V) V = metronomeView(wall, s.metronome.bpm || 124), t = wall; // "build & drop" pad works even with no music
     V = applyForced(V, t, now);
     rt.view = V; rt.t = t;
@@ -288,6 +292,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     if (rt.screen && now - rt.screen.at < 3000) extra.screen = rt.screen; else rt.screen = null;
     let bri = s.brightness; if (!V && sh.mode === "auto") bri *= rt.home?.idleBrightness() ?? s.idleBrightness; // the ambient plan's brightness for this hour, if on
     if (rt.night) bri = Math.min(bri, s.night.maxBrightness);
+    if (rt.spotify) bri *= rt.spotify.dim(); // Spotify muted, or a skip's dip
     rt.bri = bri; // the sunrise alarm draws at its own brightness, whatever this is
     const tr = performance.now(), col = D.frame(V, t, extra, wall), tr2 = performance.now(); perf.add("render", tr2 - tr);
     if (!sh.power) { bri = 0; }
@@ -467,7 +472,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       beat: V && V.g.has ? V.g.beatInBar : null, level: an ? Math.round(Math.min(1, an.eFast / an.eMax) * 100) / 100 : V ? Math.round((V.loud || 0) * 100) / 100 : 0,
       bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, key: V && V.key ? { key: V.key, mode: V.mode, name: `${V.key} ${V.mode}`, confidence: V.keyConf ?? 0 } : null, mood: V && V.mood ? { ...V.mood, name: moodName(V.mood) } : null, hears: V ? hearsLabel(V.key, V.mode, V.mood) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, mapping: rt.mapping ? { device: rt.mapping.dev, led: rt.mapping.led } : null, djlink: djFresh(performance.now()) ? { name: rt.dj.name, bpm: rt.dj.bpm, beatInBar: rt.dj.beatInBar } : null, recognised: rt.mem.lock && liveFresh() ? { id: rt.mem.lock.id, name: rt.mem.lock.name, pos: Math.round(lockPos(rt.mem.lock, rt.live.an.t) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, home: rt.home ? rt.home.status() : null, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
       song: rt.song ? { memId: rt.song.memId || null, name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
-      nowPlaying: rt.nowPlaying ? rt.nowPlaying.info() : null,
+      nowPlaying: rt.nowPlaying ? rt.nowPlaying.info() : null, spotify: rt.spotify ? rt.spotify.info() : null,
       capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null,
       overlay: overlayState(), devices: data().devices.map(d => { const o = outs.get(d.id), { rtts, ...h } = health.get(d.id) || {}; void rtts;
         return { id: d.id, ...h, sent: o?.sender.sent || 0, used: o?.used || 0, amps: Math.round((o?.amps || 0) * 100) / 100, limited: !!o?.limited, ...latencyOf(d, h, o) }; }),

@@ -43,6 +43,9 @@ export const nodeRunner = {
 
 const num = v => { const x = typeof v === "string" ? Number(v.replace(",", ".")) : Number(v); return Number.isFinite(x) ? x : 0; };
 const clean = s => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+/** A Spotify track ID (22 base-62 characters) from "spotify:track:ID", "/com/spotify/track/ID" or an open.spotify.com link; null otherwise. */
+export function spotifyIdOf(s) { const m = /(?:spotify[:/]track[:/]|open\.spotify\.com\/track\/)([0-9A-Za-z]{22})\b/.exec(String(s ?? "")); return m ? m[1] : null; }
+const withId = (t, raw) => { const id = spotifyIdOf(raw); return id ? { ...t, spotifyId: id } : t; };
 
 // ---------------------------------------------------------------- macOS: Spotify and Music
 // JavaScript for Automation rather than AppleScript: it prints JSON (no locale decimal commas), and an app that
@@ -55,7 +58,7 @@ const out = [];
 for (const [name, id] of [["Spotify", "com.spotify.client"], ["Music", "com.apple.Music"]]) {
   if (!running.has(id)) continue;
   try { const a = Application(id), st = a.playerState(); if (st === "stopped") continue; const t = a.currentTrack();
-    out.push({ app: name, state: st, title: t.name(), artist: t.artist(), album: t.album(), duration: t.duration(), position: a.playerPosition() }); }
+    out.push({ app: name, state: st, title: t.name(), artist: t.artist(), album: t.album(), duration: t.duration(), position: a.playerPosition(), id: name === "Spotify" ? String(t.id() || "") : "" }); }
   catch (e) { out.push({ app: name, error: String(e.message || e) }); }
 }
 JSON.stringify(out);`;
@@ -67,14 +70,14 @@ export function parseMac(stdout) {
   const errors = list.filter(x => x && x.error).map(x => `${x.app}: ${x.error}`), tracks = [];
   for (const x of list) { if (!x || x.error || !x.title) continue;
     let dur = num(x.duration); if (x.app === "Spotify" || dur > 36000) dur /= 1000; // Spotify gives milliseconds, Music seconds
-    tracks.push({ app: x.app, title: clean(x.title), artist: clean(x.artist), album: clean(x.album), dur, pos: num(x.position), playing: x.state === "playing", posOk: true }); }
+    tracks.push(withId({ app: x.app, title: clean(x.title), artist: clean(x.artist), album: clean(x.album), dur, pos: num(x.position), playing: x.state === "playing", posOk: true }, x.id)); }
   return { tracks, error: errors.length && !tracks.length ? errors.join("; ") : null };
 }
 const macHint = e => /-1743|not authori[sz]ed|not allowed/i.test(e) ? "macOS hasn't allowed Tempolight to ask Spotify / Music what's playing. Allow it in System Settings → Privacy & Security → Automation (for Terminal or node), then restart Tempolight." : e;
 
 // ---------------------------------------------------------------- Linux: MPRIS
 const SEP = "\u001f";
-export const PLAYERCTL_FORMAT = ["{{playerName}}", "{{status}}", "{{xesam:title}}", "{{xesam:artist}}", "{{xesam:album}}", "{{mpris:length}}", "{{position}}"].join(SEP);
+export const PLAYERCTL_FORMAT = ["{{playerName}}", "{{status}}", "{{xesam:title}}", "{{xesam:artist}}", "{{xesam:album}}", "{{mpris:length}}", "{{position}}", "{{mpris:trackid}}"].join(SEP);
 const PLAYER_NAMES = { spotify: "Spotify", vlc: "VLC", rhythmbox: "Rhythmbox", firefox: "Firefox", chromium: "Chromium", chrome: "Chrome", brave: "Brave", mpv: "mpv", strawberry: "Strawberry", elisa: "Elisa", audacious: "Audacious", clementine: "Clementine", lollypop: "Lollypop", cmus: "cmus", kdeconnect: "KDE Connect", plasma: "Plasma browser", tauon: "Tauon", amarok: "Amarok", deadbeef: "DeaDBeeF", quodlibet: "Quod Libet", cider: "Cider", youtube: "YouTube Music" };
 const playerName = n => { const k = String(n).replace(/^org\.mpris\.MediaPlayer2\./, "").split(".")[0].toLowerCase(); return PLAYER_NAMES[k] || (k ? k[0].toUpperCase() + k.slice(1) : "A music player"); };
 
@@ -82,7 +85,7 @@ const playerName = n => { const k = String(n).replace(/^org\.mpris\.MediaPlayer2
 export function parsePlayerctl(stdout) {
   const tracks = [];
   for (const line of String(stdout).split("\n")) { const f = line.split(SEP); if (f.length < 7 || !f[2].trim()) continue;
-    tracks.push({ app: playerName(f[0]), title: clean(f[2]), artist: clean(f[3]), album: clean(f[4]), dur: num(f[5]) / 1e6, pos: num(f[6]) / 1e6, playing: f[1].trim() === "Playing", posOk: true }); }
+    tracks.push(withId({ app: playerName(f[0]), title: clean(f[2]), artist: clean(f[3]), album: clean(f[4]), dur: num(f[5]) / 1e6, pos: num(f[6]) / 1e6, playing: f[1].trim() === "Playing", posOk: true }, f[7])); }
   return tracks;
 }
 
@@ -113,7 +116,7 @@ export function parseDbusReply(text) {
 export function mprisTrack(name, props) {
   const md = props && props.Metadata; if (!md || !md["xesam:title"]) return null;
   const artist = Array.isArray(md["xesam:artist"]) ? md["xesam:artist"].join(", ") : md["xesam:artist"];
-  return { app: playerName(name), title: clean(md["xesam:title"]), artist: clean(artist), album: clean(md["xesam:album"]), dur: num(md["mpris:length"]) / 1e6, pos: num(props.Position) / 1e6, playing: props.PlaybackStatus === "Playing", posOk: true };
+  return withId({ app: playerName(name), title: clean(md["xesam:title"]), artist: clean(artist), album: clean(md["xesam:album"]), dur: num(md["mpris:length"]) / 1e6, pos: num(props.Position) / 1e6, playing: props.PlaybackStatus === "Playing", posOk: true }, /spotify/i.test(name) ? md["mpris:trackid"] || md["xesam:url"] : md["xesam:url"]);
 }
 
 // ---------------------------------------------------------------- Windows: media sessions (Windows 10 1809 and later)
@@ -245,8 +248,22 @@ function createSpotify({ dataDir, fetch, clientId, note, wallNow }) {
       error = null; note("Spotify connected: Tempolight can see what plays on your other devices"); return true;
     },
     disconnect() { tok = null; pending = null; error = null; save(); },
+    /** Set by spotify.js while "Sync with Spotify" polls the same endpoint: its latest answer (or null to ask here). */
+    feed: null,
+    /** A GET on the Web API with the user's token: {status, json, retryAfter} (status 0: not connected or no network). */
+    async api(p) {
+      if (wallNow() < backoffUntil) return { status: 429, json: null, retryAfter: (backoffUntil - wallNow()) / 1000 };
+      const at = await access(); if (!at) return { status: 0, json: null, noAuth: true };
+      let r; try { r = await fetch(`https://api.spotify.com${p}`, { headers: { authorization: `Bearer ${at}` } }); } catch (e) { error = e.message; return { status: 0, json: null, error: e.message }; }
+      const retryAfter = num(r.headers.get("retry-after"));
+      if (r.status === 401) tok.expires_at = 0;
+      if (r.status === 429) backoffUntil = wallNow() + (retryAfter || 10) * 1000;
+      if (r.ok || r.status === 204) error = null;
+      return { status: r.status, json: r.status === 204 ? null : await r.json().catch(() => null), retryAfter };
+    },
     /** What Spotify plays anywhere, or [] (nothing / not connected); null when it couldn't ask. */
     async read() {
+      if (this.feed) { const f = this.feed(); if (f) return f; }
       if (wallNow() < backoffUntil) return null;
       const at = await access(); if (!at) return [];
       let r; try { r = await fetch("https://api.spotify.com/v1/me/player", { headers: { authorization: `Bearer ${at}` } }); } catch (e) { error = e.message; return null; }
@@ -330,8 +347,8 @@ export function createNowPlaying(o = {}) {
     const key = `${r.source}|${r.app}|${r.title}|${r.artist}`, t = r.t;
     if (cur && cur.key === key) { const pred = cur.pos + (cur.playing ? (t - cur.at) / 1000 : 0), d = r.pos - pred;
       cur.pos = r.playing && cur.playing && Math.abs(d) < 0.75 ? pred + d * 0.3 : r.pos; // small differences are timing noise between readings; a big one is a seek
-      cur.zero = r.playing && r.pos === 0 && cur.playing ? cur.zero + 1 : 0; Object.assign(cur, { playing: r.playing, dur: r.dur || cur.dur, at: t, seen: t, posOk: r.posOk && cur.zero < 2, album: r.album, device: r.device }); }
-    else cur = { key, source: r.source, app: r.app, title: r.title, artist: r.artist, album: r.album, device: r.device, dur: r.dur, pos: r.pos, playing: r.playing, at: t, seen: t, zero: 0, posOk: r.posOk };
+      cur.zero = r.playing && r.pos === 0 && cur.playing ? cur.zero + 1 : 0; Object.assign(cur, { playing: r.playing, dur: r.dur || cur.dur, at: t, seen: t, posOk: r.posOk && cur.zero < 2, album: r.album, device: r.device, spotifyId: r.spotifyId || null }); }
+    else cur = { key, source: r.source, app: r.app, title: r.title, artist: r.artist, album: r.album, device: r.device, dur: r.dur, pos: r.pos, playing: r.playing, at: t, seen: t, zero: 0, posOk: r.posOk, spotifyId: r.spotifyId || null };
   }
 
   /** Ask the players once (about once a second from start()). */
@@ -359,7 +376,7 @@ export function createNowPlaying(o = {}) {
   function track(at = now()) {
     if (!cur || at - cur.seen > 6000) return null;
     let pos = cur.pos + (cur.playing ? (at - cur.at) / 1000 : 0); if (cur.dur > 0) pos = Math.min(pos, cur.dur); pos = Math.max(0, pos);
-    return { source: cur.source, via: VIA[cur.source], app: cur.app, device: cur.device || null, title: cur.title, artist: cur.artist, album: cur.album, dur: cur.dur, pos, playing: cur.playing, posKnown: cur.posOk };
+    return { source: cur.source, via: VIA[cur.source], app: cur.app, device: cur.device || null, title: cur.title, artist: cur.artist, album: cur.album, dur: cur.dur, pos, playing: cur.playing, posKnown: cur.posOk, ...(cur.spotifyId ? { spotifyId: cur.spotifyId } : {}) };
   }
   /** The remembered song this track is (cached until the track or the song list changes). */
   function match() {

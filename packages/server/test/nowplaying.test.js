@@ -34,13 +34,13 @@ test("now playing: reads the real output of osascript, playerctl, dbus-send, Pow
   const pc = parsePlayerctl(fx("playerctl.txt"));
   assert.equal(pc.length, 2); assert.deepEqual(pc[0], { app: "Spotify", title: "One More Time", artist: "Daft Punk", album: "Discovery", dur: 320.357, pos: 42.123, playing: true, posOk: true });
   assert.equal(pc[1].app, "Firefox"); assert.equal(pc[1].playing, false); assert.equal(pc[1].dur, 0);
-  assert.equal(PLAYERCTL_FORMAT.split(SEP).length, 7);
+  assert.equal(PLAYERCTL_FORMAT.split(SEP).length, 8, "the 8th field is the track ID (Spotify: spotify:track:…)");
 
   const names = parseDbusReply(fx("dbus-listnames.txt")); // captured from dbus-send against a real session bus with two MPRIS players
   assert.deepEqual(names.filter(n => n.startsWith("org.mpris.")), ["org.mpris.MediaPlayer2.spotify", "org.mpris.MediaPlayer2.vlc"]);
   const sp = parseDbusReply(fx("dbus-getall-spotify.txt"));
   assert.equal(sp.PlaybackStatus, "Playing"); assert.equal(sp.Position, 42123000); assert.deepEqual(sp.Metadata["xesam:artist"], ["Daft Punk"]); assert.equal(sp.Metadata["mpris:trackid"], "/com/spotify/track/0DiWol3AO6WpXZgp0goxAV");
-  assert.deepEqual(mprisTrack("org.mpris.MediaPlayer2.spotify", sp), { app: "Spotify", title: "One More Time", artist: "Daft Punk", album: "Discovery", dur: 320.357, pos: 42.123, playing: true, posOk: true });
+  assert.deepEqual(mprisTrack("org.mpris.MediaPlayer2.spotify", sp), { app: "Spotify", title: "One More Time", artist: "Daft Punk", album: "Discovery", dur: 320.357, pos: 42.123, playing: true, posOk: true, spotifyId: "0DiWol3AO6WpXZgp0goxAV" });
   const vlc = mprisTrack("org.mpris.MediaPlayer2.vlc", parseDbusReply(fx("dbus-getall-vlc.txt")));
   assert.equal(vlc.title, 'Say "Hello" – Café', "dbus-send doesn't escape quotes: the string runs to the end of the line"); assert.equal(vlc.artist, "A, B"); assert.equal(vlc.app, "VLC"); assert.equal(vlc.playing, false);
 

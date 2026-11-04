@@ -6,7 +6,7 @@ const SHELL = ["/", "/index.html", "/style.css", "/app.js", "/audio.js", "/previ
   "/homestrip.js", "/latency.js", "/setup.css"];
 // the pages and parts app.js loads only when they are first shown: kept too, so every page opens offline, not just the
 // ones visited before going offline (fetched after the first visit has loaded, in the background)
-const LATER = ["/room.js", "/mapper.js", "/mapping.js", "/timeline.js", "/timeline.css", "/homesleep.js", "/dmx.js", "/midiclock.js", "/wizard.js", "/nowplaying.js", "/homekit.js",
+const LATER = ["/room.js", "/mapper.js", "/mapping.js", "/timeline.js", "/timeline.css", "/homesleep.js", "/dmx.js", "/midiclock.js", "/wizard.js", "/nowplaying.js", "/homekit.js", "/spotify.js",
   "/qr.js", "/calibrate.js", "/screen.js", "/engine/layout.js", "/engine/presets.js",
   "/engine/analysis.js", "/engine/tonal.js"];
 

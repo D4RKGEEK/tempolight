@@ -47,6 +47,9 @@ await step("play the demo song: analysed, tempo found, lights follow it", async 
   await until(async () => (await text("#sb-source")).includes("demo"), 30000, "song never started");
   await until(async () => /\d/.test(await text("#m-bpm")), 5000, "no tempo"); ok(Math.abs(Number(await text("#m-bpm")) - 128) <= 2, "tempo " + await text("#m-bpm"));
 });
+await step("Sync with Spotify explains that it needs Tempolight installed", async () => {
+  await go("music"); await page.waitForSelector("#sp-demo"); ok(/install Tempolight/.test(await text("#sp-demo")), "no explanation in the demo"); ok(!(await page.$("#sp-on")), "a Spotify switch in the demo");
+});
 await step("live pads: blackout and back", async () => {
   await go("live"); await page.click('[data-pad="blackout"]'); await until(async () => (await page.getAttribute('[data-pad="blackout"]', "aria-pressed")) === "true", 3000, "blackout not on");
   await page.click('[data-pad="blackout"]'); await until(async () => (await page.getAttribute('[data-pad="blackout"]', "aria-pressed")) === "false", 3000, "blackout not off");

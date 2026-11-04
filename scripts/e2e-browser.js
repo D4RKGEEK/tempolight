@@ -98,6 +98,26 @@ await step("music: the song is remembered in song memory", async () => {
   await until(() => page.textContent("#m-songs").then(t => /BPM/.test(t)), 6000, "song not in the memory list");
   ok(app.store.data.songs.length === 1, "not stored");
 });
+await step("music: Sync with Spotify panel: status, modes, settings, learned-song badge", async () => {
+  await go("music"); await page.waitForSelector("#sp-panel #sp-mode"); ok(await page.isChecked("#sp-on"), "Sync with Spotify isn't on by default");
+  await until(() => page.textContent("#sp-mode").then(t => t === "Nothing playing"), 4000, "no idle mode shown");
+  ok(/Spotify/.test(await page.textContent("#sp-why")), "no explanation");
+  await page.click("#sp-help summary"); ok(/\/api\/nowplaying\/spotify\/callback$/.test(await page.textContent("#sp-redir")), "no redirect URI in the set-up help");
+  await page.uncheck("#sp-learn"); await until(() => app.store.data.settings.spotify.learn === false, 3000, "learning not turned off"); await page.check("#sp-learn"); await until(() => app.store.data.settings.spotify.learn === true, 3000, "learning not back on");
+  const rt = app.runtime.rt, orig = rt.spotify.info, track = { id: "0DiWol3AO6WpXZgp0goxAV", title: "Test song", artist: "Someone", dur: 200, pos: 50, playing: true, volume: 50, art: null, device: "Phone" };
+  try {
+    rt.spotify.info = () => ({ ...orig(), on: true, connected: true, via: "web", mode: "learning", modeName: "Learning", track, learn: { state: "learning", pct: 42 } });
+    await until(() => page.textContent("#sp-mode").then(t => t === "Learning this song… 42%"), 4000, "learning not shown");
+    ok(/Learning this song… 42%/.test(await page.textContent("#sp-why")) && /Test song/.test(await page.textContent("#sp-title")), "learning text");
+    rt.spotify.info = () => ({ ...orig(), on: true, connected: true, via: "web", mode: "exact", modeName: "Exact (learned)", track, map: { id: "x", name: "Someone - Test song", src: "learned", cover: 100 }, learn: { state: "learned", pct: 100 } });
+    await until(() => page.textContent("#sp-mode").then(t => t === "Learned ✓"), 4000, "learned not shown");
+    rt.spotify.info = () => ({ ...orig(), on: true, connected: true, via: "web", mode: "analysis", modeName: "Spotify analysis", track, map: { id: "x", name: "Someone - Test song", src: "spotify-analysis", cover: 100 }, learn: null });
+    await until(() => page.textContent("#sp-mode").then(t => t === "Spotify analysis"), 4000, "Spotify analysis mode not shown");
+  } finally { rt.spotify.info = orig; }
+  const e = app.store.data.songs[0]; Object.assign(e, { spotifyId: "0DiWol3AO6WpXZgp0goxAV", src: "learned", cov: [[0, e.dur * 0.6]] });
+  await go("home"); await go("music"); await until(() => page.textContent("#m-songs").then(t => /Spotify · learned · 60%/.test(t)), 4000, "no Spotify badge in the song list");
+  delete e.spotifyId; delete e.src; delete e.cov; await shot("04b-spotify");
+});
 await step("music: the song has a show timeline; a block can be changed", async () => {
   await until(() => page.$$("#m-show .blk").then(b => b.length >= 2), 6000, "no show blocks");
   await page.click("#m-show .blk"); await page.waitForSelector("#m-blkfx"); await page.selectOption("#m-blkfx", "fireworks");

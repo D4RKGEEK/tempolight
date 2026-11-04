@@ -129,6 +129,20 @@ tokens are kept in `spotify-token.json` next to the settings and never sent to b
 `GET /api/status` has `nowPlaying: {source: "macos"|"mpris"|"windows"|"spotify", app, device, title, artist, album,
 dur, pos, playing, posKnown, remembered: {id, name} | null, following}` or `null`.
 
+## Sync with Spotify
+
+The lights follow the Spotify track that plays (here, or anywhere with your account connected) with its beat map,
+learned by listening the first time, shared by other installs (optional) or from Spotify's own analysis (older Spotify
+apps). Details, set-up and the shared beat-map service: [spotify.md](spotify.md).
+
+| Call | Body |
+| --- | --- |
+| `GET /api/spotify` | settings, mode (`exact`, `shared`, `analysis`, `learning`, `live`, `paused`, `idle`, `off`), track, map, learning progress |
+| `PATCH /api/spotify` | admin: any of `{sync, learn, analysis, coverColours, pauseFade, muteDim, cloud: {url, use, share}}` |
+| `POST /api/spotify/colors` | effects area: `{art, colors: ["#rrggbb", ...]}`, the album cover's colours (the browser works them out) |
+
+`GET /api/status` has `spotify: {on, mode, modeName, via, track, map, learn, ...}` or `null` (online demo).
+
 ## Guest song requests
 
 Guests open `/request` on their phone (QR code on the Music page). These calls are open to everyone, even when locked.
