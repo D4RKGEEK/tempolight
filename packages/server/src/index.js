@@ -3,9 +3,9 @@
 //   tempolight [--port 8080] [--host 0.0.0.0] [--data ~/.tempolight] [--open] [--no-discover] [--audio <source|file>]
 import os from "node:os";
 import path from "node:path";
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import { spawn } from "node:child_process";
-import { createApp, ROOT } from "./app.js";
+import { createApp, VERSION } from "./app.js";
 import { localIPv4 } from "../../outputs/src/index.js";
 import { listSources, fileSource } from "./capture.js";
 
@@ -53,7 +53,7 @@ catch (e) {
 }
 delete process.env.TEMPOLIGHT_RESTART_WAIT; // only for this start: a copy started later by hand shouldn't wait for a busy port
 const lan = localIPv4().map(a => `http://${a.address}:${bound}`);
-console.log(`\n  Tempolight ${JSON.parse(readFileSync(path.join(ROOT, "package.json"), "utf8")).version} is running\n`);
+console.log(`\n  Tempolight ${VERSION} is running\n`);
 console.log(`  On this computer:  http://localhost:${bound}`);
 for (const u of lan) console.log(`  On your phone:     ${u}`);
 console.log(`  Settings are saved in ${dataDir}\n`);

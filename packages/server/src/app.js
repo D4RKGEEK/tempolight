@@ -20,7 +20,12 @@ import { startLink } from "./ableton-link.js";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(here, "../../..");
-const pkg = JSON.parse(await readFile(path.join(ROOT, "package.json"), "utf8"));
+// the one-file app (scripts/bundle.js, build-sea.js) carries the web app's files inside the executable
+const embedded = globalThis.__tempolightAssets;
+const readStatic = embedded ? async f => embedded.read(f) : f => readFile(f);
+const statStatic = embedded ? async f => embedded.stat(f) : f => stat(f);
+const pkg = JSON.parse(String(await readStatic(path.join(ROOT, "package.json"))));
+export const VERSION = pkg.version;
 const MIME = { ".html": "text/html; charset=utf-8", ".js": "text/javascript; charset=utf-8", ".css": "text/css; charset=utf-8", ".mp3": "audio/mpeg", ".json": "application/json", ".svg": "image/svg+xml", ".png": "image/png", ".ico": "image/x-icon", ".webmanifest": "application/manifest+json" };
 
 async function readBody(req) {
@@ -57,8 +62,8 @@ export async function createApp(opts) {
       const rel = decodeURIComponent(pathname.slice(prefix.length)) || "index.html", f = path.resolve(dir, rel);
       if (!f.startsWith(dir + path.sep) && f !== dir) return false; file = f; break; }
     if (!file) return false;
-    try { const st = await stat(file); if (st.isDirectory()) file = path.join(file, "index.html"); } catch { if (!path.extname(pathname)) file = path.join(ROOT, "apps/web/index.html"); else return false; }
-    try { const buf = await readFile(file); res.writeHead(200, { "content-type": MIME[path.extname(file)] || "application/octet-stream", "cache-control": "no-cache" }); res.end(buf); return true; } catch { return false; }
+    try { const st = await statStatic(file); if (st.isDirectory()) file = path.join(file, "index.html"); } catch { if (!path.extname(pathname)) file = path.join(ROOT, "apps/web/index.html"); else return false; }
+    try { const buf = await readStatic(file); res.writeHead(200, { "content-type": MIME[path.extname(file)] || "application/octet-stream", "cache-control": "no-cache" }); res.end(buf); return true; } catch { return false; }
   }
 
   const server = http.createServer(async (req, res) => {

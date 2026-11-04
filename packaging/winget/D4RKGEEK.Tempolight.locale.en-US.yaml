@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.defaultLocale.1.6.0.schema.json
+PackageIdentifier: D4RKGEEK.Tempolight
+PackageVersion: {{version}}
+PackageLocale: en-US
+Publisher: D4RKGEEK
+PublisherUrl: https://github.com/D4RKGEEK
+PublisherSupportUrl: https://github.com/D4RKGEEK/tempolight/issues
+PackageName: Tempolight
+PackageUrl: https://github.com/D4RKGEEK/tempolight
+License: MIT
+LicenseUrl: https://github.com/D4RKGEEK/tempolight/blob/main/LICENSE
+ShortDescription: Music-reactive lighting for WLED that understands the song.
+Description: Tempolight drives WLED and other LED lights from music, following beats, build-ups, drops and mood. Run tempolight --open and use the web app on your computer or phone.
+Moniker: tempolight
+Tags:
+  - wled
+  - led
+  - lighting
+  - music
+  - beat-detection
+ReleaseNotesUrl: https://github.com/D4RKGEEK/tempolight/releases/tag/v{{version}}
+ManifestType: defaultLocale
+ManifestVersion: 1.6.0

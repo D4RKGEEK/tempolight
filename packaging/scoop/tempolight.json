@@ -1,0 +1,37 @@
+{
+    "##": "Template: scripts/release-manifests.js fills in the {{...}} placeholders from a release. The release workflow copies the result to bucket/tempolight.json in D4RKGEEK/homebrew-tempolight (see docs/install.md).",
+    "version": "{{version}}",
+    "description": "Music-reactive lighting for WLED that understands the song: beats, build-ups, drops and mood.",
+    "homepage": "https://github.com/D4RKGEEK/tempolight",
+    "license": "MIT",
+    "architecture": {
+        "64bit": {
+            "url": "https://github.com/D4RKGEEK/tempolight/releases/download/v{{version}}/tempolight-windows-x64.exe#/tempolight.exe",
+            "hash": "{{sha256:tempolight-windows-x64.exe}}"
+        }
+    },
+    "bin": "tempolight.exe",
+    "shortcuts": [
+        [
+            "tempolight.exe",
+            "Tempolight",
+            "--open"
+        ]
+    ],
+    "notes": [
+        "Start it with:  tempolight --open   (or the Tempolight shortcut in the Start menu).",
+        "When Windows asks, allow it on private networks so your lights and phone can reach it.",
+        "Settings are saved in %USERPROFILE%\\.tempolight"
+    ],
+    "checkver": "github",
+    "autoupdate": {
+        "architecture": {
+            "64bit": {
+                "url": "https://github.com/D4RKGEEK/tempolight/releases/download/v$version/tempolight-windows-x64.exe#/tempolight.exe"
+            }
+        },
+        "hash": {
+            "url": "$baseurl/SHA256SUMS.txt"
+        }
+    }
+}

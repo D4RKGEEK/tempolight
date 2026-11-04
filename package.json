@@ -4,7 +4,23 @@
   "description": "Music-reactive lighting for WLED that understands the song: beats, build-ups, drops and mood.",
   "license": "MIT",
   "type": "module",
-  "private": true,
+  "homepage": "https://github.com/D4RKGEEK/tempolight",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/D4RKGEEK/tempolight.git"
+  },
+  "bugs": "https://github.com/D4RKGEEK/tempolight/issues",
+  "keywords": [
+    "wled",
+    "led",
+    "music",
+    "beat-detection",
+    "lighting",
+    "ddp",
+    "e131",
+    "hue",
+    "dmx"
+  ],
   "engines": {
     "node": ">=20"
   },
@@ -15,10 +31,13 @@
     "packages/*"
   ],
   "files": [
-    "packages",
+    "packages/*/package.json",
+    "packages/engine/src",
+    "packages/outputs/src",
+    "packages/server/src",
     "apps",
-    "scripts",
-    "docs",
+    "scripts/fake-wled.js",
+    "!**/*.test.js",
     "README.md",
     "LICENSE"
   ],
@@ -31,6 +50,9 @@
     "docs": "node scripts/gen-docs.js",
     "test:browser": "node scripts/e2e-browser.js",
     "site": "node scripts/build-site.js",
-    "test:demo": "node scripts/e2e-demo.js"
+    "test:demo": "node scripts/e2e-demo.js",
+    "bundle": "node scripts/bundle.js",
+    "build:sea": "node scripts/build-sea.js --smoke",
+    "smoke": "node scripts/smoke.js node packages/server/src/index.js"
   }
 }

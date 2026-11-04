@@ -102,6 +102,20 @@ network: Windows, macOS, Linux or a Raspberry Pi 3/4/5.
 > **Note:** the one-line installers download from this repository, so they work once it is public. Until then, use
 > [From source](#from-source).
 
+Every way to install, with details for each: **[docs/install.md](docs/install.md)**.
+
+### One-file app
+
+Download the file for your computer from the [latest release](https://github.com/D4RKGEEK/tempolight/releases/latest)
+(Windows `.exe`, macOS arm64/x64 `.zip`, Linux x64/arm64 `.tar.gz`) and double-click it: it starts and opens your
+browser. Node.js is inside; nothing else to install. Or with a package manager:
+
+```bash
+brew install d4rkgeek/tempolight/tempolight      # macOS, Linux
+winget install D4RKGEEK.Tempolight               # Windows
+npx tempolight --open                            # anywhere with Node.js 20+
+```
+
 ### Linux, Raspberry Pi, macOS
 
 ```bash
@@ -127,6 +141,12 @@ It installs Node.js if needed and adds Tempolight to the Start menu and desktop.
 private networks so your lights and phone can reach it.
 
 ### Docker
+
+```bash
+docker run -d --name tempolight --network host -v tempolight:/data --restart unless-stopped ghcr.io/d4rkgeek/tempolight
+```
+
+Or with Docker Compose:
 
 ```bash
 git clone https://github.com/D4RKGEEK/tempolight.git && cd tempolight

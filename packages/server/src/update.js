@@ -20,12 +20,14 @@ function explain(msg) {
 }
 
 export function createUpdater(root, { exit = code => process.exit(code), restart = defaultRestart } = {}) {
-  const method = () => existsSync(path.join(root, ".git")) ? "git" : existsSync("/.dockerenv") ? "docker" : "manual";
+  const method = () => globalThis.__tempolightAssets?.sea ? "binary" : existsSync(path.join(root, ".git")) ? "git" : existsSync("/.dockerenv") ? "docker" : root.split(/[\\/]/).includes("node_modules") ? "npm" : "manual";
   let checking = null, applying = false;
   function check() { return checking ||= doCheck().finally(() => { checking = null; }); } // one fetch at a time, however many tabs ask
   async function doCheck() {
     const m = method();
     if (m === "docker") return { method: m, canUpdate: false, message: "Running in Docker: update with  docker compose pull && docker compose up -d  (or rebuild the image)." };
+    if (m === "binary") return { method: m, canUpdate: false, message: "This is the one-file app: download the new version from https://github.com/D4RKGEEK/tempolight/releases (or run brew upgrade tempolight, winget upgrade D4RKGEEK.Tempolight or scoop update tempolight, whichever you installed it with)." };
+    if (m === "npm") return { method: m, canUpdate: false, message: "Installed with npm: update with  npm install -g tempolight@latest  (npx tempolight always runs the latest)." };
     if (m === "manual") return { method: m, canUpdate: false, message: "This copy wasn't installed with git. Run the installer again to update it." };
     try {
       const current = await git(root, ["rev-parse", "--short", "HEAD"]);

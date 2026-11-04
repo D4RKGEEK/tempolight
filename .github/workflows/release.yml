@@ -1,0 +1,216 @@
+# Releases. Push a tag that matches package.json's version (git tag v0.3.0 && git push origin v0.3.0) and this:
+#   1. builds the one-file app on each platform (scripts/build-sea.js) and smoke-tests it,
+#   2. makes a GitHub Release with the executables, SHA256SUMS.txt and the filled package manager manifests,
+#   3. pushes the multi-arch Docker image to ghcr.io/d4rkgeek/tempolight,
+#   4. if the secrets are set: publishes to npm (NPM_TOKEN), updates the Homebrew tap and Scoop bucket
+#      (HOMEBREW_TAP_TOKEN) and sends the new version to winget (WINGET_TOKEN). See docs/install.md.
+# Run it by hand (Actions -> Release -> Run workflow) to build and test everything without publishing anything.
+name: Release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: 24 # the Node inside the executables
+  IS_TAG: ${{ startsWith(github.ref, 'refs/tags/v') }}
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - id: v
+        name: Version
+        run: |
+          VER=$(node -p 'require("./package.json").version')
+          if [ "$IS_TAG" = "true" ] && [ "${GITHUB_REF_NAME#v}" != "$VER" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME doesn't match package.json version $VER"; exit 1
+          fi
+          echo "version=$VER" >> "$GITHUB_OUTPUT"
+          case "$VER" in *-*) echo "prerelease=true" >> "$GITHUB_OUTPUT";; *) echo "prerelease=false" >> "$GITHUB_OUTPUT";; esac
+      - run: npm test
+        env:
+          CI: "true"
+
+  binaries:
+    needs: check
+    name: ${{ matrix.platform }}-${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, platform: linux, arch: x64 }
+          - { os: ubuntu-24.04-arm, platform: linux, arch: arm64 }
+          - { os: macos-latest, platform: macos, arch: arm64 }
+          - { os: macos-15-intel, platform: macos, arch: x64 }
+          - { os: windows-latest, platform: windows, arch: x64 }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - name: Build and smoke-test the executable
+        run: node scripts/build-sea.js --smoke
+      - name: Package
+        shell: bash
+        run: |
+          set -eu
+          name="tempolight-${{ matrix.platform }}-${{ matrix.arch }}"
+          mkdir -p out pkg
+          case "${{ matrix.platform }}" in
+            windows) cp "dist/$name.exe" out/ ;;
+            macos) cp "dist/$name" pkg/tempolight && (cd pkg && zip -q -9 "../out/$name.zip" tempolight) ;;
+            linux) cp "dist/$name" pkg/tempolight && tar -C pkg -czf "out/$name.tar.gz" tempolight ;;
+          esac
+          ls -l out
+      - name: The packaged copy starts too
+        shell: bash
+        run: |
+          set -eu
+          mkdir -p unpacked
+          case "${{ matrix.platform }}" in
+            windows) cp out/*.exe unpacked/tempolight.exe ;;
+            macos) unzip -q out/*.zip -d unpacked ;;
+            linux) tar -C unpacked -xzf out/*.tar.gz ;;
+          esac
+          node scripts/smoke.js "unpacked/tempolight$( [ "${{ matrix.platform }}" = windows ] && echo .exe || true )"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: bin-${{ matrix.platform }}-${{ matrix.arch }}
+          path: out/*
+          if-no-files-found: error
+
+  release:
+    needs: [check, binaries]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VER: ${{ needs.check.outputs.version }}
+      PRERELEASE: ${{ needs.check.outputs.prerelease }}
+      HOMEBREW_TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: bin-*
+          merge-multiple: true
+          path: release
+      - name: Checksums and manifests
+        run: |
+          set -eu
+          (cd release && sha256sum * > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          node scripts/release-manifests.js --sums release/SHA256SUMS.txt --version "$VER" --out dist/packaging
+          (cd dist/packaging && zip -qr "../../release/tempolight-$VER-manifests.zip" .)
+      - name: GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -eu
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" release/* --clobber
+          else
+            flags=""; [ "$PRERELEASE" = "true" ] && flags="--prerelease"
+            gh release create "$GITHUB_REF_NAME" release/* --verify-tag --title "Tempolight $VER" --generate-notes $flags
+          fi
+      - name: Homebrew tap and Scoop bucket
+        if: env.HOMEBREW_TAP_TOKEN != '' && env.PRERELEASE != 'true'
+        run: |
+          set -eu
+          git clone -q "https://x-access-token:${HOMEBREW_TAP_TOKEN}@github.com/${GITHUB_REPOSITORY_OWNER}/homebrew-tempolight.git" tap
+          cp -R dist/packaging/homebrew-tempolight/. tap/
+          cd tap
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet && { echo "Tap already up to date"; exit 0; }
+          git commit -q -m "Tempolight $VER"
+          git push -q
+
+  winget:
+    needs: [check, release]
+    if: startsWith(github.ref, 'refs/tags/v') && needs.check.outputs.prerelease != 'true'
+    runs-on: windows-latest
+    env:
+      VER: ${{ needs.check.outputs.version }}
+      WINGET_TOKEN: ${{ secrets.WINGET_TOKEN }}
+    steps:
+      # Only for versions after the first: the first goes to microsoft/winget-pkgs by hand (docs/install.md).
+      - name: Send the new version to winget-pkgs
+        if: env.WINGET_TOKEN != ''
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://aka.ms/wingetcreate/latest -OutFile wingetcreate.exe
+          .\wingetcreate.exe update D4RKGEEK.Tempolight --version $env:VER `
+            --urls "https://github.com/${env:GITHUB_REPOSITORY}/releases/download/v$env:VER/tempolight-windows-x64.exe" `
+            --submit --token $env:WINGET_TOKEN
+
+  npm:
+    needs: [check, release]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+      PRERELEASE: ${{ needs.check.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          registry-url: https://registry.npmjs.org
+      - name: Publish to npm (npx tempolight)
+        if: env.NPM_TOKEN != ''
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance --access public $( [ "$PRERELEASE" = "true" ] && echo "--tag next" )
+
+  docker:
+    needs: check
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: startsWith(github.ref, 'refs/tags/v')
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository_owner }}/tempolight
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: ${{ startsWith(github.ref, 'refs/tags/v') }}
+          tags: ${{ steps.meta.outputs.tags || 'tempolight:test' }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

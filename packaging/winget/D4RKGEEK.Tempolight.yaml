@@ -1,0 +1,8 @@
+#~ Template (lines starting with #~ are dropped): scripts/release-manifests.js fills in the {{...}} placeholders.
+#~ Submit the filled set to microsoft/winget-pkgs under manifests/d/D4RKGEEK/Tempolight/<version>/ (docs/install.md).
+# yaml-language-server: $schema=https://aka.ms/winget-manifest.version.1.6.0.schema.json
+PackageIdentifier: D4RKGEEK.Tempolight
+PackageVersion: {{version}}
+DefaultLocale: en-US
+ManifestType: version
+ManifestVersion: 1.6.0
