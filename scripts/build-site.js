@@ -18,8 +18,20 @@ const copy = (from, to) => cpSync(path.join(root, from), path.join(out, to), { r
 copy("apps/web", "");                                   // the app
 copy("packages/engine/src", "engine");                  // /engine/... (what the app imports)
 copy("packages/engine/src", "packages/engine/src");     // /packages/... (what the server core imports)
-mkdirSync(path.join(out, "packages/server/src"), { recursive: true });
-for (const f of ["core.js", "runtime.js", "scheduler.js", "defaults.js", "sun.js", "home.js"]) copy(`packages/server/src/${f}`, `packages/server/src/${f}`); // browser-safe parts only
+// the server's browser-safe parts: core.js and runtime.js and everything they import (followed automatically, so a new
+// module can't be forgotten); a Node-only import (node:dgram, node:net...) in that set stops the build with a clear error
+const seen = new Set();
+function follow(rel) {
+  if (seen.has(rel)) return; seen.add(rel);
+  const src = readFileSync(path.join(root, rel), "utf8");
+  for (const m of src.matchAll(/^\s*import\s[^'"]*?["']([^"']+)["']/gm)) {
+    const spec = m[1]; if (spec.startsWith("node:") || !spec.startsWith(".")) throw new Error(`${rel} imports ${spec}, which can't run in the browser demo`);
+    const dep = path.posix.normalize(path.posix.join(path.posix.dirname(rel), spec)); if (!dep.startsWith("packages/engine/")) follow(dep);
+  }
+  if (!rel.startsWith("packages/engine/")) { mkdirSync(path.join(out, path.dirname(rel)), { recursive: true }); copy(rel, rel); }
+}
+follow("packages/server/src/core.js"); follow("packages/server/src/runtime.js");
+
 copy("apps/playground/demo.mp3", "demo.mp3");
 mkdirSync(path.join(out, "playground"), { recursive: true }); copy("apps/playground/index.html", "playground/index.html");
 mkdirSync(path.join(out, "about"), { recursive: true }); copy("docs/index.html", "about/index.html"); copy("docs/images", "about/images");
