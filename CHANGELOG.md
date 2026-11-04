@@ -5,6 +5,14 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Easier to install, lighter to run
+- One-file app: a single download for Windows, macOS and Linux (no Node.js or git needed), built and smoke-tested by a new release workflow that also publishes multi-arch Docker images to ghcr.io; Homebrew, Scoop and winget manifests and `npx tempolight`. Every way to install is in docs/install.md.
+- Raspberry Pi image: flash it, and Tempolight is at http://tempolight.local. With no network it opens a "Tempolight-Setup" hotspot so you can pick the Wi-Fi from your phone (docs/raspberry-pi.md).
+- Home Assistant add-on: add this repository in Home Assistant; it connects to the Mosquitto broker by itself.
+- Low-power mode: picked automatically on a Pi Zero/3 or slow computers (30 fps, lighter analysis, fewer messages). Song recognition no longer runs inside a frame, so it can't cause stutters (worst frame 52 ms → 19 ms with 40 remembered songs).
+- Smaller downloads: the server compresses the app (brotli/gzip, ETags) and heavy pages load only when opened: the home page went from 342 KB to about 60 KB.
+- Tempolight Lite (beta): a WLED usermod for an ESP32 with a microphone, with beat, build-up and drop detection and 9 Tempolight effects without a computer (firmware/, docs/tempolight-lite.md, browser installer in docs/flash). Its algorithm is tested on the host; the ESP32 build runs in CI.
+
 ### New
 - Setup wizard: five steps on first start (find the lights, pick a room, fix the timing, play a test song, done), big buttons and no reading needed; run it again from Settings.
 - Live latency meter: the delay from sound to light per device, with warnings for weak Wi-Fi, a slow network, a WLED that drops frames or isn't showing the stream, and the power limiter.
