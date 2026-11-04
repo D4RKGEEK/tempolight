@@ -13,6 +13,7 @@ export const DEFAULTS = () => ({
     night: { enabled: false, from: "23:00", to: "07:00", maxBrightness: 0.3, warm: true }, // calmer light at night
     text: { source: "song", custom: "TEMPOLIGHT" }, // what Text Scroller shows on matrix panels: song, bpm, clock or custom
     mqtt: { enabled: false, url: "", username: "", password: "", prefix: "homeassistant", base: "tempolight" }, // Home Assistant
+    homekit: { enabled: false }, // Apple Home: a HomeKit bridge (server only, see homekit/index.js; its keys and pairings are in homekit.json)
     djlink: { enabled: false, port: 50001 }, // Pioneer Pro DJ Link: take the beat from CDJs/XDJs
     link: { enabled: false, port: 20808 }, // Ableton Link: follow a Link session's tempo and beat (listens only)
     // DMX fixtures (devices of kind "dmx"): a master switch; lasers and fog stay off until turned on here (see fixtures.js)

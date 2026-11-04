@@ -23,7 +23,7 @@ async function until(fn, ms = 8000, msg = "timed out") { const t = Date.now(); w
 
 const A = await startFakeWled({ name: "Living room", leds: 300 }), B = await startFakeWled({ name: "Desk", leds: 144 });
 const dataDir = mkdtempSync(path.join(os.tmpdir(), "tempolight-e2e-"));
-const app = await createApp({ dataDir, discover: false, logger: null });
+const app = await createApp({ dataDir, discover: false, logger: null, homekit: { mdns: false, host: "127.0.0.1" } }); // Apple Home: no mDNS from tests
 const port = await app.listen(0, "127.0.0.1"), base = `http://127.0.0.1:${port}`;
 const status = () => app.runtime.status();
 const lum = d => { let s = 0; for (const v of d.lastFrame) s += v; return s / d.lastFrame.length; };
@@ -231,6 +231,14 @@ await step("settings: location, night mode, backup; a sunset schedule", async ()
   await go("settings"); await page.uncheck("#n-on"); await sleep(300);
   await go("scenes"); await page.selectOption("#t-kind", "sunset"); await page.fill("#t-off", "-15"); await page.selectOption("#t-act", "on"); await page.click("#t-add");
   await until(() => app.store.data.schedules.some(x => x.time === "sunset-15"), 3000, "sunset schedule not added"); await shot("08b-settings");
+});
+await step("settings: Apple Home on, setup code and QR code, reset pairing, off", async () => {
+  await go("settings"); await page.waitForSelector("#hk-on"); await page.check("#hk-on");
+  await until(() => app.store.data.settings.homekit.enabled && app.homekit.hap, 5000, "Apple Home not turned on");
+  const code = await until(async () => { const t = await page.textContent("#hk-code"); return /^\d{3}-\d{2}-\d{3}$/.test(t || "") && await page.isVisible("#hk-code") ? t : null; }, 5000, "no setup code shown");
+  ok(await page.$("#hk-qr svg"), "no QR code"); ok(code === (await app.core.handle("GET", "/api/homekit")).setupCode, "shown code isn't the bridge's");
+  await page.click("#hk-reset"); await until(async () => { const t = await page.textContent("#hk-code"); return t && t !== code; }, 5000, "reset didn't show a new code"); await shot("08c-apple-home");
+  await page.uncheck("#hk-on"); await until(() => !app.store.data.settings.homekit.enabled && !app.homekit.hap, 5000, "Apple Home not turned off");
 });
 await step("listen live with a microphone", async () => {
   await go("music"); await page.click("#m-stopsong"); await sleep(300); await page.click("#m-mic");

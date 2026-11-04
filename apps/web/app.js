@@ -717,6 +717,7 @@ function settingsPage(el) {
       <span class="help">In Home Assistant, add the Mosquitto broker add-on and the MQTT integration, then use the same broker here. Tempolight appears as a light with effects, a scene picker, tempo and song-part sensors, and Flash, Drop and Next buttons.</span>
       <div class="row"><button class="btn sm" id="m-save" type="button">Save</button></div>
     </div>`, "span-6")}
+    ${DEMO || !admin ? "" : '<div id="s-hk"></div>'}
     ${DEMO || !admin ? "" : panel("Wi-Fi", "", "", `<div class="pb stack" id="s-wifi"><p class="muted" id="s-wifistate">Checking…</p>
       <p class="faint" style="font-size:12.5px">Moving to another network? Start setup: this Pi leaves the current Wi-Fi and opens the <b>Tempolight-Setup</b> hotspot. Join it from your phone and pick the new network.</p>
       <div class="row"><button class="btn" id="s-wifigo" type="button">Set up Wi-Fi again</button></div></div>`, "span-6")}
@@ -779,8 +780,9 @@ function settingsPage(el) {
     const t0 = Date.now(), wait = async () => { await new Promise(x => setTimeout(x, 1500)); try { await api("GET", "/api/health"); if (Date.now() - t0 > 4000) return location.reload(); } catch {} if (Date.now() - t0 < 90000) wait(); }; wait(); };
   if ($("#s-quit")) $("#s-quit").onclick = () => { if (confirm("Quit Tempolight? The lights stop until you open the app again.")) act(() => api("POST", "/api/quit"), "Tempolight is quitting. Open the app again to start it.").catch(() => {}); };
   $("#s-reset").onclick = async () => { if (confirm("Reset all devices, the room, scenes, schedules and settings?")) { await act(() => api("POST", "/api/reset"), "Reset").catch(() => {}); await refreshState(); await loadLayout(); route(); } };
+  let HK = null; if ($("#s-hk")) import("/homekit.js").then(m => { HK = m.mount($("#s-hk")); }).catch(() => {}); // Apple Home (server only)
   const perfLabel = p => p ? `Now: ${p.mode === "lite" ? "low power" : "full"}${p.why && p.why !== "auto" ? ` (${p.why.replace(/^auto: /, "")})` : ""}${p.fps ? ` · ${p.fps} fps, ${p.frameMs} ms a frame` : ""}${p.cpu != null ? ` · CPU ${p.cpu}%` : ""}` : "";
-  return { onChanged(w) { if (w.has("lock")) route(); }, onStatus(m) { const e = $("#m-state"); if (e) e.textContent = mqttLabel(m.mqtt); const pf = $("#s-perf-st"); if (pf && m.perf) pf.textContent = perfLabel(m.perf); } };
+  return { onChanged(w) { if (w.has("lock")) route(); else if (w.has("homekit") || w.has("scenes")) HK?.load(); }, onStatus(m) { const e = $("#m-state"); if (e) e.textContent = mqttLabel(m.mqtt); const pf = $("#s-perf-st"); if (pf && m.perf) pf.textContent = perfLabel(m.perf); } };
 }
 
 // ---------------------------------------------------------------- router and boot

@@ -14,6 +14,7 @@ import { attachWebSocket, foreignOrigin } from "./ws.js";
 import { startOsc } from "./osc.js";
 import * as io from "./node-io.js";
 import { startHomeAssistant } from "./homeassistant.js";
+import { startHomeKit } from "./homekit/index.js";
 import { createUpdater } from "./update.js";
 import { startProLink } from "./prolink.js";
 import { startNowPlaying } from "./nowplaying.js";
@@ -88,6 +89,7 @@ export async function createApp(opts) {
     quit: embedded?.sea ? async () => { try { await closeApp(); } catch {} process.exit(0); } : null, // the one-file app has no terminal to stop it from
     lan: () => Object.values(os.networkInterfaces()).flat().filter(a => a && a.family === "IPv4" && !a.internal).map(a => a.address) } });
   const ha = startHomeAssistant({ core, store, runtime, version: pkg.version });
+  const hk = startHomeKit({ core, store, runtime, version: pkg.version, dataDir: opts.dataDir, ...opts.homekit }); // Apple Home; opts.homekit: {mdns, host, port} (tests)
   const np = startNowPlaying({ core, store, runtime, dataDir: opts.dataDir, port: () => server.address()?.port || 8080, ...opts.nowPlaying }); // opts.nowPlaying: test runner/platform
 
   // ---------------------------------------------------------------- static files
@@ -137,9 +139,9 @@ export async function createApp(opts) {
 
   closeApp = () => api.close();
   const api = {
-    server, runtime, store, core, discovery: core.discovery, nowPlaying: np,
+    server, runtime, store, core, discovery: core.discovery, nowPlaying: np, homekit: hk,
     listen(port, host) { return new Promise((res, rej) => { server.once("error", rej); server.listen(port, host, () => res(server.address().port)); }); },
-    async close() { ha.close(); np.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
+    async close() { ha.close(); np.close(); await hk.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
   };
   return api;
 }

@@ -247,3 +247,29 @@ rest_command:
     payload: '{"on": {{ on }}}'
     content_type: "application/json"
 ```
+
+## Apple Home (HomeKit)
+
+Tempolight can be a HomeKit bridge (HAP over IP, written into Tempolight: no Homebridge needed). Turn it on in
+Settings → Apple Home, then in the Home app tap **+** → **Add Accessory** and scan the QR code or type the setup code.
+The Home app warns that Tempolight isn't certified; choose **Add Anyway**. The iPhone must be on the same network
+(mDNS, UDP 5353), and the computer's firewall must let it reach the bridge's TCP port (`port` below).
+
+| Accessory | What it does |
+| --- | --- |
+| Light "Tempolight" | On, brightness; a colour picked in the Home app holds that colour (the `hold` pad) |
+| Switch "Music reactive" | On: automatic mode (and lets go of a held colour); off: keep the current effect |
+| One switch per scene ("Party mode", …) | On applies the scene ("Hey Siri, turn on Party mode") and reads on while the show still matches it; off turns the lights off |
+
+Changes made anywhere in Tempolight are pushed to the Home app as they happen. New, renamed and deleted scenes show up
+by themselves (the bridge's configuration number goes up); a scene keeps its accessory, so rooms and automations stay.
+
+| Call | Area | What it does |
+| --- | --- | --- |
+| `GET /api/homekit` | admin | `{enabled, state: "off"\|"starting"\|"ready"\|"error", error, mdnsError, port, name, deviceId, paired, setupCode, setupUri ("X-HM://…", for the QR code), pairings: [{id, admin}], accessories}` |
+| `PATCH /api/homekit` | admin | `{enabled: true}` |
+| `POST /api/homekit/reset` | admin | Forget every paired controller and make a new identity and setup code (then remove the old Tempolight from the Home app) |
+| `DELETE /api/homekit/pairings/:id` | admin | Forget one controller |
+
+The bridge's identity, setup code and pairings are in `homekit.json` in the data folder, not in `tempolight.json`, so
+backups never carry them.
