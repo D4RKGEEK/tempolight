@@ -1,0 +1,210 @@
+# Director and effects
+
+The director ([`director.js`](../../packages/engine/src/director.js)) decides what the room shows each frame; the
+effects ([`effects.js`](../../packages/engine/src/effects.js)) draw it. Both are pure: they read a layout, a view of the
+music and settings, and write linear RGB into a `Float32Array`. The runtime makes them in `rebuild()` and
+`rebuildEffects()` and pushes settings into `director.settings` in `syncDirector()`.
+
+```js
+const L = buildLayout(shapes);                       // per-LED coordinates
+const fx = createEffects(L, { custom: customEffects }); // {render(id, S, out), list, pools, styles, palettes}
+const D = createDirector(L, fx);                     // {frame(V, t, extra, wall), settings, state, flash, identify, next}
+const col = D.frame(V, t, extra, wall);              // Float32Array(L.N * 3), linear RGB
+```
+
+## The layout every effect reads
+
+`buildLayout(shapes)` ([`layout.js`](../../packages/engine/src/layout.js)) places every shape's LEDs on a 16 x 9 wall
+view (x right, y down) and gives each LED coordinates. Effects only use these, which is why every effect works on any
+layout:
+
+| Array | Meaning |
+| --- | --- |
+| `N` | number of LEDs (all shapes, in shape order) |
+| `LX`, `LY` | position on the 16 x 9 wall view |
+| `PX`, `PY` | room position: `PX` 0 to 1.78 left to right, `PY` 0 at the floor to 1 at the ceiling |
+| `LU`, `LH` | `LX / 16` and `1 - LY / 9` |
+| `LR` | distance from the room's centre, about 0-1 |
+| `LS` | position along its own shape, 0-1 (loops: 0 to just under 1) |
+| `LA` | angle around the shape's centre, 0-1 (loops and matrices; `LS` for open shapes) |
+| `LD` | distance from the shape's centre, 0-1 |
+| `LG` | position along the whole wiring chain, 0-1 |
+| `LF` | index of the shape the LED belongs to |
+| `LL` | 1 for loop shapes (circle, rect, hex, tri) |
+| `shapes`, `chainStart` | the shapes, and the first LED index of each |
+
+Shape types: `line`, `pole`, `free` (polylines through `pts`), `circle`, `rect`, `hex`, `tri` (closed outlines from
+`cx, cy, size`, `w, h`, `rot`), `matrix` (`cols x rows`, serpentine wiring) and `points` (one LED exactly at each point:
+camera mapping, Nanoleaf panels, smart bulbs, DMX fixtures). `start` rotates where a loop begins, `rev` reverses it.
+
+## The signals object `S`
+
+`buildSignals(V, t, opts)` ([`signals.js`](../../packages/engine/src/signals.js)) makes `S` from a view; the director
+adds `text` and `screen`. With nothing playing, `idleSignals(t, pal, fixed)` gives the same fields for a slow made-up
+beat (1.2 s, punch 0.2, loudness 0.35, no hits).
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `t` | number | music time in seconds (multiplied by the effect's speed setting) |
+| `g` | object | beat grid: `{has, P, phase, idx, beatInBar, env, barPhase, beatT}` (see [engine analysis](engine-analysis.md#reading-it-back-with-songview)) |
+| `pal` | `[[r,g,b],[r,g,b]]` | the two palette colours, 0-1 |
+| `fixed` | boolean | the user picked a palette (or a colour block is active): effects with colours of their own should use `pal` instead |
+| `punch` | number | how hard hits land for the style: party 1, poprock 0.85, hiphop 1, chill 0.35, emotional 0.1 |
+| `loud` | number | loudness, 0-1 |
+| `pulseT`, `pulses`, `pulseN` | number, number[], number | the last kick (or the grid beat when no kick for 1.6 s), the kicks of the last second, a running kick count |
+| `pulse` | number | `exp(-(t - pulseT) / 0.2) * punch`: the main beat envelope |
+| `kickE`, `snareE`, `hatE` | number | envelopes of the last kick (τ 0.25 s), snare (0.15 s), hi-hat (0.12 s), times punch |
+| `snare`, `snares`, `hat` | number, number[], number | time of the last snare, snares of the last 0.7 s, last hi-hat (-9 = none) |
+| `bassL` | number | bass level 0-1 (live); 0.9 in drops, 0.3 otherwise for songs |
+| `bands` | `Float32Array(24)` | live spectrum, 40 Hz to 10 kHz (zeros for songs without a live stream) |
+| `wave` | `Float32Array(256)` or null | the last live samples |
+| `vocal` | number or null | live vocal estimate, null when there is none |
+| `buildP` | number | build-up progress 0-1 in a build; otherwise a slow 16-bar ramp |
+| `dropIn`, `sinceDrop` | number | seconds to the next known drop and since the last one; 99 = none |
+| `text` | string | what Text Scroller shows (`settings.text`: song name, BPM, clock or custom) |
+| `screen` | object or null | the shared screen picture `{w, h, px}` for Screen Sync |
+
+## The effect contract
+
+An effect is an object in one of the `FX` arrays inside `createEffects()`:
+
+```js
+{ id: "halfpulse", name: "Half Pulse", tag: "drop", run(S) {
+    const [a, b] = S.pal;
+    for (let i = 0; i < N; i++) add(i, LS[i] < 0.5 ? a : b, S.pulse * (0.3 + 0.7 * LH[i]));
+} }
+```
+
+- `run(S)` **adds** light into the closure's `COL` (`render()` zeroes it first and points it at the caller's buffer).
+  Use `add(i, [r, g, b], k)`; values are linear, about 0-2 (more saturates softly in `toRGB8`).
+- Time comes from `S.t` and `S.g` only, never from `Date` or `performance.now()`: the clock can jump (seeks, a song
+  being recognised), run faster (the effect's speed) or be any clock when idle.
+- State that must persist between frames goes in `st(S, id, init)`, which resets when the effect starts again or the
+  clock jumps (more than 0.6 s forward or back), and gives `o.dt` (≤ 50 ms) for simulations.
+- Helpers in scope: `hex()`, `rainbow(x)`, `G(x, w)` (a Gaussian), `wrapd`, `hash(n)`, `splat(px, py, r, c, k)` (a
+  soft light at a room position), `lerp3`, `RW` (room width in `PX` units), the bounding box `BB` and `CORNERS`.
+- `tag`: `calm`, `build`, `drop`, `home` (everyday looks), `LedFx-like` or `any`; it labels the effect in the UI and in
+  [effects.md](../effects.md). It doesn't put the effect in a pool by itself (custom effects excepted).
+- It must stay finite on every LED for any layout (one LED, a matrix, thousands of LEDs) and fast: the engine tests
+  render every effect on 1,000 LEDs in under 4 ms.
+
+### Writing a new built-in effect
+
+1. Add the object to `FX`, `FX2`, `FX3` or `FX4` in `packages/engine/src/effects.js` (ids are unique; the list order is
+   the UI order).
+2. To have automatic mode use it, add its id to `POOLS` (`calm`, `build`, `drop`, used by `party`) and/or to the
+   `low`/`mid`/`peak` pools of the other styles in `STYLES`.
+3. Run `npm run docs` to regenerate [docs/effects.md](../effects.md).
+4. Run `node --test packages/engine/test/engine.test.js`: *every effect renders finite colours* and *performance
+   budget* pick up the new one automatically.
+
+The per-effect settings (`PATCH /api/effects/:id {params}`) work on any effect without its help: the director
+renders it with `t * speed`, then applies a hue rotation and saturation as one 3 x 3 matrix, an intensity gain, and
+an optional left-right mirror (each LED takes its mirror image's colour).
+
+## Pools and styles
+
+A **style** says how the director listens and which effects it picks:
+
+| Style | Mode | Pools | Crossfade | `every` | Brightness floor |
+| --- | --- | --- | --- | --- | --- |
+| `party` (Party / EDM) | `sections`: by song part | `calm`, `build`, `drop` | 0.3 s | 1 | 0.06 |
+| `poprock` (Pop / Rock) | `levels`: by loudness | `low`, `mid`, `peak` | 0.4 s | 1 | 0.07 |
+| `hiphop` (Hip-hop / Trap) | `levels` | `low`, `mid`, `peak` | 0.3 s | 1 | 0.07 |
+| `chill` (Chill / Lo-fi) | `levels` | `low`, `mid`, `peak` | 1.2 s | 2 | 0.1 |
+| `emotional` (Emotional / Ballad) | `levels` | `low`, `mid`, `peak` | 2.0 s | 2 | 0.12 |
+
+The style is the view's (from the analysis or the live estimate) unless `show.style` fixes one. `choose()` each frame:
+
+1. Manual mode: the chosen effect (`show.effect`).
+2. A show timeline for this song: the block at `t` (an effect banned since is skipped).
+3. Otherwise the pool for the current part (`sections`: `V.state`; `levels`: `V.level`). Banned effects
+   (`settings.effectPrefs[id] === -1`) are left out, liked ones (`1`) appear twice; if everything is banned the whole
+   pool is used. The effect changes when it isn't in the pool for this part, or on beat 1 of a bar once
+   `show.everyBeats` (default 8) x `every` beats have passed (twice that outside drops and peaks). Each change crossfades, and moves
+   to the next pair of the automatic palette.
+
+After rendering: in a silence the room dims (the planned pause right before a drop, or the first 1.5 s of quiet) or
+fades to the ambient effect; otherwise `keepAlive()` mixes the ambient effect in when the room falls under the
+style's floor, so quiet music never goes dark. In `sections` styles the first 0.7 s of a drop gets a white flash
+(`settings.dropFlash`). Then the accent **layer** (`show.layer: {effect, amount}`) is added on top, and **zones**
+apply: each zone (`room.zones`, shapes join with `shape.zone`) follows the show, shows its own effect or the ambient
+effect, gets its own brightness, or is off.
+
+## Custom effects
+
+Made on the Effects page without code, stored in `customEffects` (at most 100) and compiled by `customEffect(d)`:
+
+```js
+{ id: "u-1a2b3c4d", name: "My effect", tag: "calm"|"build"|"drop"|"home",
+  pattern: "wave"|"chase"|"pulse"|"sparkle"|"fill"|"breathe"|"gradient",
+  axis: "along"|"x"|"y"|"around"|"centre",   // LS, PX/1.78, PY, LA, LD
+  drive: "beat"|"kick"|"bass"|"loud"|"time", // S.pulse, S.kickE, S.bassL, S.loud, constant 1
+  colors: "palette" | ["#rrggbb", "#rrggbb"],
+  speed: 0.1-8 (1), width: 0.01-1 (0.15), bg: 0-0.5 (0.05), cycles: 0.25-8 (1) }
+```
+
+The server validates them (`cleanCustom` in `core.js`) and the engine clamps them again (saved files and backups can
+hold anything). A custom id can't replace a built-in one. Custom effects join the automatic pools by tag: `calm`,
+`build` and `drop` into the party pools and `low`, `mid`, `peak` into the other styles (`home` joins none). Deleting
+one removes every reference to it (`forgetEffect`: the shown effect, layer, ambient, zones, scenes, likes, song shows).
+
+## Shows and timelines
+
+A remembered song can carry a **show**: a timeline the director plays instead of choosing on the fly (with
+`settings.shows` on and automatic mode).
+
+`planShow(pre, fx, {seed, prefs, barsPer})` ([`show.js`](../../packages/engine/src/show.js)) makes one from the
+analysis: runs of bars of the same part (at most 8 bars, 4 in drops) get an effect from the style's pool, chosen
+by a seed hashed from the song name, so the same song always gets the same show; repeats are merged. The first block
+starts at 0 and the last ends at the song's end.
+
+[`timeline.js`](../../packages/engine/src/timeline.js) adds what the show editor makes, all in seconds on the song's
+clock, kept to the millisecond:
+
+```js
+show:   [{t0, t1, part, effect}]                                  // effect blocks, sorted, no overlaps
+colors: [{t0, t1, palette: "<id>"} | {t0, t1, colors: ["#rrggbb", "#rrggbb"]}] // override the palette
+cues:   [{t, type: "flash"|"strobe"|"blackout"|"build"|"drop", color?: "#rrggbb" /* flash only */, beats?: 0.25-128}]
+bright: [{t, v: 0..1}]                                            // straight lines between keyframes
+```
+
+`cleanTimeline()` validates them for `PUT /api/songs/:id/show` (at most 500 of each; unknown effects or palettes,
+overlaps and times past the end are 400 errors). Cues last `beats` (default strobe 4, blackout 2, build 16, drop 16;
+a flash is a single hit). In the director: build and drop cues change `V.state` (and `buildP`, `dropT`); a colour
+block becomes `S.pal` with `fixed` true; flash cues fire once each as the clock passes them (`createCueFirer`: within
+250 ms, so a seek forward skips them, a seek back re-arms them); strobe flashes at sixteenth notes; blackout and the
+brightness curve multiply the result. The editor's unsaved version plays for two minutes through
+`runtime.setDraft()`.
+
+## Palettes and mood colours
+
+`fx.palettes` maps an id to two linear RGB colours: `neon`, `sunset`, `ocean`, `fire`, `ice`, `forest`, `mono`, `mood`,
+and `auto`, a list of five pairs (pink/orange, cyan/blue, violet/red, green/blue, yellow/red) that the director steps
+through with every effect change (`state.palIdx`).
+
+With `show.palette` `auto` and `settings.moodColours` on (or palette `mood`, for every effect), the palette follows the
+music's mood: `moodPalette(valence, energy, variant)` ([`tonal.js`](../../packages/engine/src/tonal.js)) blends four
+corners by smoothstepped valence and energy (happy and energetic: warm oranges and pinks; calm and major: teal and
+green; calm and minor: deep blues and violets; tense: reds and magentas), two variants per corner so effect changes
+still bring new colours, rescaled so blends stay as bright as the corners. The director eases towards it with a 2.5 s
+time constant and drops it 5 s after the mood is gone. Night mode with `warm` on forces `sunset`.
+
+## Overlays, pads and safe mode
+
+`director.state.overlay` holds the live pads, applied after everything else (`runtime.action()` sets them):
+`hold` (one colour everywhere), `flash` (decays over 0.6 s, white or a colour), `strobe` (12 Hz), `boost` (gain
+0-2), `blackout`, `freeze` (repeat the last frame), and `identify` (one shape lit white with a chase for 4 s, the
+rest dimmed). The `post` hook runs before them, so the sunrise alarm, the sleep fade and the integrations' layer sit
+on top of the show but under the pads.
+
+**Safe mode** (`settings.safe`, also forced on in night mode) adds the photosensitivity limiter (WCAG 2.3.1): the mean
+brightness may jump (to more than 1.8 x the recent level + 0.12) at most 3 times a second; further jumps are scaled
+down. Night mode also turns the drop flash off, and DMX strobes and lasers never run in either.
+
+## Tests
+
+`packages/engine/test/engine.test.js` (every effect finite, the time budget, custom effects, Text Scroller, Screen Sync),
+`live.test.js` (quiet music never goes dark, blackout/flash/limiter, banned effects, zones, settings),
+`timeline.test.js` (validation, lookups, the cue firer, cues in the director, a clock that jumps back) and
+`tonal.test.js` (mood colours). See [testing](testing.md).

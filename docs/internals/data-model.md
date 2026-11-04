@@ -1,0 +1,174 @@
+# Data model
+
+Everything Tempolight remembers lives in **one JSON file**, `tempolight.json` in the data folder (`--data`, else
+`$TEMPOLIGHT_DATA`, else `~/.tempolight`). [`store.js`](../../packages/server/src/store.js) loads it merged over the
+defaults from [`defaults.js`](../../packages/server/src/defaults.js) (`merge(DEFAULTS(), saved)`: objects merge key by
+key, arrays and values replace), so a file from an older version gets the new keys. A file that can't be parsed is
+renamed to `tempolight.json.broken-<ms>` and Tempolight starts fresh.
+
+Writes are debounced (`store.save()` writes 250 ms after the first change) and atomic (write `tempolight.json.tmp`,
+then rename), so a power cut can't corrupt the file. `store.flush()` writes now (on shutdown); `store.reset()` writes
+the defaults. The online demo keeps the same object in `localStorage` under `tempolight.demo.v1` (`apps/web/demo.js`).
+
+Code reads and writes `store.data` directly and calls `changed(what)` in the core (save, plus a `{type: "changed",
+what}` broadcast). Modules that own a section fill in its defaults the first time they see it (`home`, `integrations`,
+`settings.spotify`, `settings.homekit`, `settings.nowPlaying`), so a backup from an older version or a hand-edited file
+works too.
+
+## Top-level keys
+
+| Key | Type | Default | Owner | What |
+| --- | --- | --- | --- | --- |
+| `version` | number | `2` | defaults.js | format version |
+| `settings` | object | see [below](#settings) | core.js `applySettings`, pro-api.js, spotify.js, nowplaying.js, homekit | all settings |
+| `show` | object | see [show](#show) | core.js `applyShow` | what the lights do now |
+| `devices` | array | `[]` | core.js, lights.js, pro-api.js | controllers and lights, see [devices](#devices) |
+| `room` | object | `{name: "My room", shapes: [], zones: []}` | core.js | the layout, see [room](#room) |
+| `scenes` | array | five built-in scenes (Party mode, Chill mode, Movie mode, Focus mode, Relax) | core.js | saved looks |
+| `schedules` | array | `[]` | core.js, scheduler.js | timed actions |
+| `songs` | array | `[]` | runtime.js, spotify.js | song memory, see [song memory](song-memory.md#what-is-stored) |
+| `customEffects` | array | `[]` | core.js | your own effects (at most 100), see [custom effects](director-and-effects.md#custom-effects) |
+| `requests` | array | `[]` | core.js | guest song requests (at most 200 kept) |
+| `lock` | object or null | `null` | core.js | the PIN lock: `{salt, hash}` (scrypt, 32 bytes, hex) |
+| `home` | object | `HOME_DEFAULTS()` (home.js) | home.js | wake-up, sleep timer, ambient plan, see [home](#home) |
+| `integrations` | object | `INTEGRATION_DEFAULTS()` (integrations/index.js) | integrations/ | OBS, games, Twitch, Discord (Node server only), see [integrations](#integrations) |
+
+The demo adds `__demoRoom: true` once it has laid out its pretend controllers.
+
+## settings
+
+Changed with `PATCH /api/settings` (admin) unless noted; out-of-range numbers are clamped, unknown values are 400 errors.
+
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `brightness` | number 0-1 | `0.8` | also `POST /api/brightness` |
+| `fps` | integer 10-120 | `60` | frame rate; restarts the loop |
+| `performance` | `"auto"` \| `"full"` \| `"lite"` | `"auto"` | see [performance modes](runtime-and-outputs.md#performance-modes) |
+| `safe` | boolean | `false` | photosensitivity limiter, no DMX strobes or lasers |
+| `syncOffsetMs` | integer -500..500 | `0` | light timing offset; positive shows light earlier |
+| `predict` | boolean | `true` | live: kicks on the beat grid, offset applied to live audio too |
+| `ambient` | effect id or `"off"` | `"northern"` | what plays when nothing does |
+| `idleBrightness` | number 0-1 | `0.5` | brightness factor while idle in automatic mode |
+| `idleAfterSec` | number 1-600 | `8` | seconds of live silence before going idle |
+| `dropFlash` | boolean | `true` | white flash at drops |
+| `audioSync` | boolean | `false` | send WLED audio sync packets |
+| `osc` | `{enabled, port}` | `{enabled: false, port: 9000}` | OSC over UDP (port 1024-65535) |
+| `autoDiscover` | boolean | `true` | look for WLED controllers on a first start |
+| `capture` | `{enabled, source, command}` | `{enabled: false, source: "auto", command: ""}` | sound card capture: `source` is `"auto"` or an id from `GET /api/audio/sources`; `command` a custom one that writes s16le mono 22,050 Hz |
+| `metronome` | `{enabled, bpm}` | `{enabled: false, bpm: 120}` | bpm 40-220; tapping sets it too |
+| `guest` | `{effects, scenes, pads, brightness}` booleans | all `true` | what guests may do while a PIN lock is set |
+| `effectPrefs` | `{[effectId]: 1 \| -1}` | `{}` | liked / banned in automatic mode; set with `PATCH /api/effects/:id {pref}` |
+| `location` | `{lat, lon, name}` or null | `null` | for sunrise/sunset times (rounded to 4 decimals) |
+| `night` | `{enabled, from, to, maxBrightness, warm}` | `{enabled: false, from: "23:00", to: "07:00", maxBrightness: 0.3, warm: true}` | times `HH:MM`, `sunset`, `sunrise-30`; maxBrightness 0.02-1 |
+| `text` | `{source, custom}` | `{source: "song", custom: "TEMPOLIGHT"}` | Text Scroller: `song`, `bpm`, `clock` or `custom` (≤ 80 characters) |
+| `mqtt` | `{enabled, url, username, password, prefix, base}` | `{enabled: false, url: "", username: "", password: "", prefix: "homeassistant", base: "tempolight"}` | Home Assistant; `password` is never sent back (`hasPassword`), `clearPassword: true` removes it; `TEMPOLIGHT_MQTT_*` variables override at every start (`env-settings.js`) |
+| `homekit` | `{enabled}` | `{enabled: false}` | changed with `PATCH /api/homekit`; keys and pairings are in `homekit.json` |
+| `djlink` | `{enabled, port}` | `{enabled: false, port: 50001}` | Pioneer Pro DJ Link |
+| `link` | `{enabled, port}` | `{enabled: false, port: 20808}` | Ableton Link (listen only) |
+| `dmx` | object | `{enabled: true, lasers: false, fog: false, fogWhen: "before", fogLead: 4, fogBurst: 3, fogCooldown: 60, fogMaxDuty: 0.1, fogLevel: 1, laserMaxSec: 60}` | `fogWhen` `before` or `drop`; ranges: fogLead 0.5-30, fogBurst 0.5-10, fogCooldown 10-900, fogMaxDuty 0.01-0.5, fogLevel 0.1-1, laserMaxSec 5-300 |
+| `requests` | boolean | `true` | guest song requests on `/request` |
+| `shows` | boolean | `true` | remembered songs play their show timeline |
+| `setupDone` | boolean | `false` | the setup wizard was finished or skipped |
+| `songMemory` | boolean | `true` | remember analysed songs and recognise them live |
+| `nowPlaying` | `{enabled, spotifyClientId}` | `{enabled: true, spotifyClientId: ""}` | changed with `PATCH /api/nowplaying`; the client ID is 32 hex digits |
+| `moodColours` | boolean | `true` | the automatic palette follows the mood |
+| `spotify` | object | added by spotify.js: `{sync: true, learn: true, analysis: true, coverColours: false, pauseFade: true, muteDim: true, cloud: {url: "", use: false, share: false}}` | changed with `PATCH /api/spotify`; `analysisBlocked` (a client ID) remembers that Spotify refused its audio analysis |
+
+`GET /api/state` returns `settings` with `mqtt.password` blanked and `mqtt.hasPassword` added.
+
+## show
+
+| Key | Type | Default | Notes |
+| --- | --- | --- | --- |
+| `power` | boolean | `true` | `POST /api/power` |
+| `mode` | `"auto"` \| `"manual"` | `"auto"` | setting `effect` alone switches to manual |
+| `effect` | effect id | `"shock"` | the manual effect |
+| `style` | `"auto"` or a style id | `"auto"` | `party`, `poprock`, `hiphop`, `chill`, `emotional` |
+| `palette` | palette id | `"auto"` | `auto`, `mood`, `neon`, `sunset`, `ocean`, `fire`, `ice`, `forest`, `mono` |
+| `everyBeats` | integer 1-64 | `8` | beats between automatic effect changes |
+| `speed` | number 0.1-4 | `1` | ambient and idle speed |
+| `params` | `{[effectId]: {speed 0.1-4, intensity 0-3, hue -180..180, saturation 0-2, mirror}}` | `{}` | per-effect settings; defaults are removed |
+| `layer` | `{effect, amount 0-1.5}` or null | `null` | accent effect on top |
+
+A scene's `show` has the same keys (all optional): applying it is `Object.assign(show, scene.show)`.
+
+## devices
+
+Common: `id` (`d` + 8 hex), `name` (≤ 60), `host` (IP or `ip:port`), `ddpPort` (the port for its protocol), `leds`,
+`enabled`, optional `kind`, `maxAmps` (0-500) and `mAperLed` (5-200, default 60). By kind (see
+[device kinds](runtime-and-outputs.md#device-kinds-and-their-senders)):
+
+| Kind | Extra fields |
+| --- | --- |
+| WLED (no `kind`) | `protocol?: "ddp"\|"e131"\|"artnet"`, `universe?` |
+| virtual | `virtual: true`, `host: "virtual"` |
+| `govee` | `goveeMode: "color"\|"segments"`, `goveeSegments?` (1-60) |
+| `openrgb` | `orgbIndex` |
+| `nanoleaf` | `nanoleaf: {token, panels: [ids]}` |
+| `hue` | `hue: {user, clientkey, lights: [ids], names, color: [bool], ent?: {on, id, name, channels: [{id, led}]}, areas?, clipPort?, streamPort?}` |
+| `lifx`, `wiz`, `kasa`, `yeelight`, `twinkly` | `light: {...}` what the probe found plus options (`mac`, `zones`, `extended`, `strip`, `perZone`, `music`, `rgbw`, `rtPort`, ...) |
+| `dmx` | `protocol: "artnet"\|"e131"`, `universe` (Art-Net from 0, sACN from 1), `fixtures: [{id, profile, name, address 1-512, channels? (custom), pattern?, target?, home?, cycle?, size?, phase?, panRange?, tiltRange?, wheel?, gobos?, patterns?, shutter?}]` (at most 128) |
+
+Nanoleaf tokens and Hue user names and client keys are removed from every API answer (`safeDev` in `core.js`).
+
+## room
+
+`{name, shapes: [Shape], zones: [Zone]}`.
+
+- **Shape**: `{type, name, dev (device id), count (1-8192), from (first LED on the controller, or null: after the
+  previous shape), rot, start, rev, zone (zone id or null)}` plus geometry: `pts: [[x, y], ...]` for `line`, `pole`,
+  `free`, `points`; `cx, cy, size` (and `w, h` for `rect`) for `circle`, `rect`, `hex`, `tri`; `cols, rows (1-256),
+  w, h, cx, cy` for `matrix` (count = cols x rows). Positions are on the 16 x 9 wall view, y = 0 at the top.
+- **Zone**: `{id, name, mode: "follow"|"effect"|"ambient"|"off", effect, brightness 0-1}`, at most 32
+  (`PUT /api/zones`).
+
+## scenes, schedules, requests
+
+- **Scene**: `{id, name (≤ 60), show: {...}, brightness}`. `POST /api/scenes {name}` saves the current show.
+- **Schedule**: `{id (t + 8 hex), name, time ("18:30" | "sunset" | "sunrise-15"), days: [0-6, Sunday = 0], action:
+  {type: "scene", scene} | {type: "on"} | {type: "off"} | {type: "brightness", value}, enabled}`. `GET /api/schedules`
+  adds `next` (ISO time).
+- **Request**: `{id, title (≤ 120), by (≤ 40), votes, at (ms), done}`.
+
+## home
+
+```js
+{ wake: { enabled: false, source: "times", days: ["", "07:00", "07:00", "07:00", "07:00", "07:00", ""], // Sunday first
+          duration: 30, target: "all", endColor: "#ffd2a1", endBrightness: 1, holdMin: 30, snoozeMin: 9, key: "<link key>" },
+  sleep: { minutes: 30 },
+  plan: { enabled: false, fade: 90, rows: [{name, from, to, look: "white"|"night"|<effect id>, palette, kelvin, brightness}] },
+  state: { wake: null, next: null, sleep: null, done: [] } }   // the sunrise running, the next one asked for, the sleep timer, alarms handled
+```
+
+`wake.key` (the link key for phone automations) is made on first use and only returned to unlocked callers. Changed
+with `PUT /api/home`; see [wake-up.md](../wake-up.md).
+
+## integrations
+
+Kept outside `settings` so `GET /api/state` never shows them; every route that reads or changes them is admin-only, and
+`GET /api/integrations` returns `hasPassword`-style flags instead of secrets.
+
+```js
+{ obs: { enabled, url: "ws://127.0.0.1:4455", password, sceneMap: [{obs, scene}], onStreamStart, onStreamStop, onRecordStart,
+         tally: { enabled: true, when: "recording", target: "all", color: "#ff0000" } },
+  games: { cs2: { enabled, token, intensity: 0.8, mode: "blend", healthTarget, effectsTarget, kills, flashbang, bomb, rounds },
+           dota2: { enabled, token, intensity, mode, healthTarget, manaTarget, ambientTarget, effectsTarget, kills, roshan, daynight } },
+  twitch: { chat: { enabled, channel, prefix: "!", who: "everyone", cooldownSec: 10, userCooldownSec: 30, commands: {...}, scenes, effects, strobeSec, colorSec },
+            clientId, eventsOn: true, target: "all", auth: null | { access, refresh, expiresAt, login, userId, scopes },
+            events: { follow, subscribe, resub, gift, raid, cheer } },
+  discord: { webhook: "", nowPlaying: true, scenes: true, games: false, twitch: false, username: "Tempolight" } }
+```
+
+## Files next to tempolight.json
+
+Secrets and identities that must never reach a browser or a backup are kept in their own files in the data folder,
+written atomically with mode `0600`:
+
+| File | Owner | What |
+| --- | --- | --- |
+| `spotify-token.json` | nowplaying.js | the Spotify Web API tokens: `{access_token, refresh_token, expires_at, clientId}`; deleted on disconnect |
+| `homekit.json` | homekit/index.js | the HomeKit bridge's identity (device ID, Ed25519 seed and public key), setup code and ID, paired controllers, accessory ids, configuration number, port; deleted by `POST /api/homekit/reset` |
+| `beatmaps-install-id` | spotify.js | an anonymous random ID for the optional shared beat-map service |
+| `tempolight.json.tmp` | store.js | only during a write |
+
+What is and isn't in a backup is listed in [security](security.md#secrets).
