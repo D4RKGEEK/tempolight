@@ -101,6 +101,15 @@ await step("home & sleep: a sunrise and the sleep timer run in the browser", asy
   await page.click("#hs-go"); await until(async () => /Sleep timer/.test(await text("#hs-now")), 4000, "sleep timer not shown");
   await page.click("#hs-cancel"); await page.check("#p-on"); await sleep(400); await go("home"); await page.waitForSelector("#hs-strip");
 });
+await step("setup wizard in the demo: run it again from Settings", async () => {
+  await page.setViewportSize({ width: 390, height: 844 }); await page.goto(base + "/#/settings"); await page.waitForSelector("#s-wizard"); await page.click("#s-wizard"); await page.waitForSelector("#wizard");
+  await until(async () => /Found 3/.test(await text("#wz-scanmsg")), 6000, "the pretend controllers weren't found"); ok(/3 lights ready/.test(await text("#wz-have")), "added lights not shown");
+  await page.click("#wz-next"); await page.waitForSelector("[data-wzp] canvas"); await page.click('[data-wzp="club"]'); await sleep(400);
+  await page.click("#wz-skip"); await page.click("#wz-skip"); await page.click("#wz-next");
+  ok(await page.evaluate(() => document.documentElement.scrollWidth) <= 391, "wizard scrolls sideways"); await page.click("#wz-next");
+  await until(async () => !(await page.$("#wizard")), 3000, "wizard didn't close"); await page.reload(); await page.waitForSelector("#page .panel"); await sleep(400); ok(!(await page.$("#wizard")), "wizard came back");
+  await page.setViewportSize({ width: 1300, height: 900 });
+});
 await step("no errors in the console", async () => ok(!errors.length, errors.slice(0, 4).join(" | ")));
 await browser.close(); server.close();
 console.log(results.join("\n")); console.log(failed ? `\n${failed} failed` : "\nall passed"); process.exit(failed ? 1 : 0);

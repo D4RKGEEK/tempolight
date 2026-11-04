@@ -17,13 +17,13 @@ export const FAKE_WLED = {
 for (const d of Object.values(FAKE_WLED)) Object.assign(d, { frames: 0, segments: [], on: true });
 const ipOf = host => String(host).replace(/:\d+$/, "");
 const sleep = ms => new Promise(r => setTimeout(r, ms));
-const lookup = async host => { await sleep(120 + Math.random() * 200); const d = FAKE_WLED[ipOf(host)]; if (!d) throw new Error("no answer (this demo only has pretend controllers: " + Object.keys(FAKE_WLED).join(", ") + ")"); return d; };
+const lookup = async (host, ms = 120 + Math.random() * 200) => { await sleep(ms); const d = FAKE_WLED[ipOf(host)]; if (!d) throw new Error("no answer (this demo only has pretend controllers: " + Object.keys(FAKE_WLED).join(", ") + ")"); return d; };
 const io = {
   RATE: 22050,
   DDPSender: class { constructor(ip) { this.ip = ip; this.sent = 0; } send() { this.sent++; const d = FAKE_WLED[this.ip]; if (d) d.frames++; } close() {} },
   AudioSyncSender: class { send() {} close() {} },
   ipOf,
-  async getInfo(host) { const d = await lookup(host); return { name: d.name, leds: d.leds, version: "0.15.0", arch: "esp32", rssi: -52, signal: 88, fps: 60, live: true }; },
+  async getInfo(host) { const d = await lookup(host, 6 + Math.random() * 10); /* a quick answer, like WLED on good Wi-Fi (the latency meter shows it) */ return { name: d.name, leds: d.leds, version: "0.15.0", arch: "esp32", rssi: -52, signal: 88, fps: 60, live: true }; },
   async setState(host, st) { const d = await lookup(host); if (st.on !== undefined) d.on = !!st.on; return { success: true }; },
   async setSegments(host, segs) { const d = await lookup(host); d.segments = segs; return { success: true }; },
   async discoverWled() { await sleep(900); return Object.entries(FAKE_WLED).map(([ip, d]) => ({ ip, host: ip, name: d.name, leds: d.leds, version: "0.15.0", via: "mdns" })); },

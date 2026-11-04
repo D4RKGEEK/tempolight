@@ -8,6 +8,8 @@ import { timelinePage } from "/timeline.js";
 import { homeSleepPage, homeStrip, bindHomeStrip, updateHomeStrip } from "/homesleep.js";
 import { dmxPanels, mountDmx } from "/dmx.js";
 import { createClockFollower } from "/midiclock.js";
+import { openWizard, wantsWizard, wizardStatus } from "/wizard.js";
+import { latencyChip, warnIcons, homeBadge, latencyPanel } from "/latency.js";
 
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -51,7 +53,7 @@ function connect() {
     else if (m.type === "screen-refused") app.screen?.stop(m.error); // locked, or another browser already shares
   };
 }
-function resendAudio() { const a = app.audio.state; ws.send({ type: "audio-start", rate: 22050, label: a.mode === "song" ? `Song: ${a.label}` : a.label }); }
+function resendAudio() { const a = app.audio.state; ws.send({ type: "audio-start", rate: 22050, label: a.mode === "song" ? `Song: ${a.label}` : a.label, latencyMs: app.audio.latencyMs?.() }); }
 function setConn(t, cls) { $("#conn").textContent = t; $("#conn-dot").className = "dot " + cls; }
 
 let refreshTimer = null, refreshWhat = new Set();
@@ -68,7 +70,7 @@ function onStatus(m) {
   $("#power").setAttribute("aria-checked", m.power);
   const bri = $("#bri"); if (document.activeElement !== bri) { bri.value = Math.round(m.brightness * 100); $("#bri-out").textContent = bri.value + "%"; }
   const off = m.devices.filter(d => d.online === false).length; const cd = $("#c-devices"); cd.textContent = off ? `${off} offline` : (m.devices.length || ""); cd.className = "count" + (off ? " warn" : "");
-  app.page?.onStatus?.(m);
+  app.page?.onStatus?.(m); wizardStatus(m);
 }
 function chrome() {
   const st = app.state; $("#ver").textContent = "v" + st.version; $("#c-effects").textContent = st.effects.length;
@@ -124,7 +126,7 @@ async function recordClip(canvas, btn, seconds = 15) {
 function homePage(el) {
   const st = app.state, noDevices = !st.devices.length;
   el.innerHTML = `
-    ${noDevices ? panel("Welcome to Tempolight", "Let's light up your room", "", `<div class="pb stack"><p class="muted">Tempolight streams music-reactive effects to WLED controllers on your network. Pick how to start:</p>
+    ${noDevices ? panel("Welcome to Tempolight", "Let's light up your room", `<button class="btn primary" id="s-wizard-home" type="button">Step-by-step setup</button>`, `<div class="pb stack"><p class="muted">Tempolight streams music-reactive effects to WLED controllers on your network. Pick how to start:</p>
       <div class="setup">
         <div class="opt"><h3>Find my WLED lights</h3><p>Looks for WLED controllers on your Wi-Fi and adds them, each as a strip in the room.</p><button class="btn primary" id="s-scan" type="button">Scan the network</button></div>
         <div class="opt"><h3>Add by IP address</h3><p>Type the address shown in the WLED app (for example 192.168.1.42).</p><div class="row" style="width:100%"><input id="s-ip" placeholder="192.168.1.42" style="flex:1"><button class="btn" id="s-add" type="button">Add</button></div></div>
@@ -146,7 +148,7 @@ function homePage(el) {
       <div class="field"><label for="h-pal">Colours</label><select id="h-pal">${st.palettes.map(p => opt(p, p === "auto" ? "Automatic (changes with the song)" : p[0].toUpperCase() + p.slice(1), p === st.show.palette)).join("")}</select></div>
     </div>`, "span-8")}
     ${panel("Scenes", "", `<a class="btn" href="#/scenes">Manage</a>`, `<div class="pb chips" id="h-scenes">${st.scenes.map(s => `<button class="chip" data-scene="${s.id}" type="button">${esc(s.name)}</button>`).join("") || '<span class="faint">No scenes yet</span>'}</div><div class="pb" style="padding-top:0">${homeStrip()}</div>`, "span-4")}
-    ${panel("Devices", `${st.devices.length} controller${st.devices.length === 1 ? "" : "s"}`, `<a class="btn" href="#/devices">Manage</a>`, `<div class="tablewrap"><table><thead><tr><th>Name</th><th>Address</th><th class="num">LEDs</th><th>Status</th></tr></thead><tbody id="h-devs"></tbody></table></div>`, "span-6")}
+    ${panel("Devices", `${st.devices.length} controller${st.devices.length === 1 ? "" : "s"}`, `<span id="h-lat"></span><a class="btn" href="#/devices">Manage</a>`, `<div class="tablewrap"><table><thead><tr><th>Name</th><th>Address</th><th class="num">LEDs</th><th>Status</th><th class="num">Delay</th></tr></thead><tbody id="h-devs"></tbody></table></div>`, "span-6")}
     ${panel("Activity", "", `<button class="btn sm" id="h-clear" type="button">Clear</button>`, `<div class="log" id="h-log"></div>`, "span-6")}`;
 
   let prev = null;
@@ -158,6 +160,7 @@ function homePage(el) {
       for (const f of fresh) await act(() => api("POST", "/api/devices", { host: f.host, name: f.name, leds: f.leds, force: true })); toast(`Added ${fresh.length} controller${fresh.length > 1 ? "s" : ""}`); };
     $("#s-add").onclick = () => act(() => api("POST", "/api/devices", { host: $("#s-ip").value }), "Controller added").catch(() => {});
     $("#s-virtual").onclick = () => act(() => api("POST", "/api/devices", { virtual: true, name: "Virtual room" }), "Virtual room added").catch(() => {});
+    $("#s-wizard-home").onclick = () => openWizard();
   }
   const show = b => act(() => api("PATCH", "/api/show", b)).catch(() => {});
   $("#h-mode").onchange = e => show({ mode: e.target.value });
@@ -190,7 +193,8 @@ function homePage(el) {
       if (a.song) { const d = A.duration, p = A.pos(); $("#h-fill").style.width = (p / d * 100) + "%"; $("#h-pos").textContent = fmtTime(p); $("#h-dur").textContent = fmtTime(d); $("#h-play").textContent = a.song.playing ? "Pause" : "Play"; }
       $("#h-black").setAttribute("aria-pressed", m.overlay.blackout); updateHomeStrip(m);
       $("#h-devs").innerHTML = app.state.devices.map(d => { const h = m.devices.find(x => x.id === d.id) || {};
-        return `<tr><td>${esc(d.name)}</td><td class="mono">${esc(d.virtual ? "virtual" : d.host)}</td><td class="num">${d.leds || "?"}</td><td>${!d.enabled ? '<span class="badge">Off</span>' : h.online ? '<span class="badge live"><i></i>Online</span>' : h.online === false ? '<span class="badge err"><i></i>Offline</span>' : '<span class="badge">Checking</span>'}</td></tr>`; }).join("") || '<tr><td colspan="4" class="faint">No devices</td></tr>';
+        return `<tr><td>${esc(d.name)}</td><td class="mono">${esc(d.virtual ? "virtual" : d.host)}</td><td class="num">${d.leds || "?"}</td><td>${!d.enabled ? '<span class="badge">Off</span>' : h.online ? '<span class="badge live"><i></i>Online</span>' : h.online === false ? '<span class="badge err"><i></i>Offline</span>' : '<span class="badge">Checking</span>'}${warnIcons(h)}</td><td class="num">${d.enabled ? latencyChip(h) : ""}</td></tr>`; }).join("") || '<tr><td colspan="5" class="faint">No devices</td></tr>';
+      $("#h-lat").innerHTML = homeBadge(m, app.state.devices);
     },
     onLog(e) { const l = $("#h-log"); if (l) l.insertAdjacentHTML("afterbegin", logRow(e)); },
     onChanged(w) {
@@ -610,7 +614,8 @@ function scenesPage(el) {
 function devicesPage(el) {
   if (!unlocked()) return lockScreen(el, "Device setup");
   const st = app.state;
-  el.innerHTML = `${panel("Devices", "WLED controllers and other lights that receive the show", `<button class="btn" id="d-scan" type="button">Scan network</button><button class="btn" id="d-virtual" type="button">Add virtual device</button>`, `<div class="tablewrap"><table><thead><tr><th>On</th><th>Name</th><th>Address</th><th class="num">LEDs</th><th class="num">Used</th><th>Protocol</th><th class="num">Port / universe</th><th class="num" title="Power supply limit in amps. Brightness is capped so the strip never draws more.">Power limit (A)</th><th class="num">Drawing now</th><th>Status</th><th>Firmware</th><th class="num">Frames sent</th><th></th></tr></thead><tbody id="d-rows"></tbody></table></div>`, "span-12")}
+  el.innerHTML = `${panel("Devices", "WLED controllers and other lights that receive the show", `<button class="btn" id="d-scan" type="button">Scan network</button><button class="btn" id="d-virtual" type="button">Add virtual device</button>`, `<div class="tablewrap"><table><thead><tr><th>On</th><th>Name</th><th>Address</th><th class="num">LEDs</th><th class="num">Used</th><th>Protocol</th><th class="num">Port / universe</th><th class="num" title="Power supply limit in amps. Brightness is capped so the strip never draws more.">Power limit (A)</th><th class="num">Drawing now</th><th>Status</th><th>Firmware</th><th class="num">Frames sent</th><th class="num" title="From a sound to its light">Delay</th><th></th></tr></thead><tbody id="d-rows"></tbody></table></div>`, "span-12")}
+    ${panel("Sound to light", "How long after a beat each light shows it", "", `<div class="pb" id="d-lat"></div>`, "span-12")}
     ${panel("Add a controller", "", "", `<div class="pb"><div class="row"><input id="d-ip" placeholder="IP address, e.g. 192.168.1.42 (or host:port)" style="max-width:340px"><input id="d-name" placeholder="Name (optional)" style="max-width:220px"><select id="d-kind" aria-label="Kind of light" style="max-width:190px">${opt("wled", "WLED", true)}${opt("govee", "Govee (LAN, beta)")}${opt("openrgb", "OpenRGB (PC lighting)")}${opt("nanoleaf", "Nanoleaf panels")}${opt("hue", "Philips Hue bridge (calm effects)")}</select><button class="btn primary" id="d-add" type="button">Add</button></div>
       ${DEMO ? `<p class="callout" style="margin-top:8px">This demo has pretend controllers at ${Object.keys(demo.FAKE_WLED).join(", ")}. Press “Scan network” to find them.</p>` : ""}
       <p class="faint" style="margin-top:8px;font-size:12.5px">Power limit: enter your power supply's amps (for example 10 for a 5 V 10 A supply) and Tempolight keeps the strip under it, estimating about 60 mA per LED at full white. Find the address in the WLED app or your router. Tempolight sends light with DDP on UDP port 4048; in WLED, keep “Receive UDP realtime” on (Sync settings).
@@ -629,9 +634,9 @@ function devicesPage(el) {
         <td class="num"><input type="number" min="0" max="500" step="0.5" placeholder="none" value="${d.maxAmps || ""}" data-amps="${d.id}" aria-label="Power limit in amps"></td>
         <td class="num">${h.amps != null ? `${h.amps.toFixed(1)} A${h.limited ? ' <span class="badge warn" title="Brightness is being held back to stay under the limit">capped</span>' : ""}` : "–"}</td>
         <td>${!d.enabled ? '<span class="badge">Off</span>' : h.online ? `<span class="badge live"><i></i>Online</span> ${sig}` : h.online === false ? `<span class="badge err" title="${esc(h.error)}"><i></i>Offline</span>` : '<span class="badge">Checking</span>'}</td>
-        <td class="mono faint">${esc(h.version || "")}</td><td class="num">${h.sent ?? 0}</td>
+        <td class="mono faint">${esc(h.version || "")}</td><td class="num">${h.sent ?? 0}</td><td class="num">${d.enabled ? latencyChip(h) : ""}${warnIcons(h)}</td>
         <td><button class="btn sm" data-id="${d.id}" type="button">Identify</button> ${d.virtual || d.kind ? "" : `<button class="btn sm" data-seg="${d.id}" type="button" title="Write this room's segments into WLED">Send segments</button> <button class="btn sm" data-chk="${d.id}" type="button">Check</button>`} <button class="btn sm danger" data-del="${d.id}" type="button">Remove</button></td></tr>`; }).join("")
-      || '<tr><td colspan="13" class="faint">No devices yet. Scan the network or add one by address.</td></tr>';
+      || '<tr><td colspan="14" class="faint">No devices yet. Scan the network or add one by address.</td></tr>';
     const patch = (id, b) => act(() => api("PATCH", `/api/devices/${id}`, b), "Saved").catch(() => {});
     $$("[data-en]").forEach(x => x.onchange = () => patch(x.dataset.en, { enabled: x.checked }));
     $$("[data-name]").forEach(x => x.onchange = () => patch(x.dataset.name, { name: x.value }));
@@ -661,7 +666,8 @@ function devicesPage(el) {
       $$("[data-f]").forEach(b => b.onclick = () => { const f = found[Number(b.dataset.f)]; act(() => api("POST", "/api/devices", f.kind === "govee" ? { host: f.host, name: f.name, kind: "govee" } : f.kind === "openrgb" ? { host: f.host, name: f.name, kind: "openrgb", index: f.index, leds: f.leds } : { host: f.host, name: f.name, leds: f.leds, force: true }), "Device added").then(() => b.replaceWith("added")).catch(() => {}); });
     } catch {} finally { $("#d-scan").disabled = false; }
   };
-  return { onStatus(m) { if (!el.contains(document.activeElement) || document.activeElement === document.body) rows(m); }, onChanged(w) { if (w.has("devices")) route(); }, destroy() { dmx.destroy(); } };
+  const lat = m => { const box = $("#d-lat"); if (box) box.innerHTML = latencyPanel(m || app.status, st.devices); }; lat();
+  return { onStatus(m) { lat(m); if (!el.contains(document.activeElement) || document.activeElement === document.body) rows(m); }, onChanged(w) { if (w.has("devices")) route(); }, destroy() { dmx.destroy(); } };
 }
 
 // ---------------------------------------------------------------- Settings
@@ -715,7 +721,7 @@ function settingsPage(el) {
     </div>`, "span-6")}
     ${panel("About", "", "", `<div class="pb stack"><p>Tempolight ${esc(st.version)}, MIT licence. <a href="https://github.com/D4RKGEEK/tempolight" target="_blank" rel="noopener">Source and docs</a>.</p>
       <p class="muted">The old single-page playground is at <a href="/playground">/playground</a>.</p>
-      <div class="row"><button class="btn" id="s-upd" type="button">${DEMO ? "Always up to date" : "Check for updates"}</button><button class="btn primary" id="s-updgo" type="button" hidden>Update now</button><button class="btn danger" id="s-reset" type="button">Reset everything</button></div>
+      <div class="row"><button class="btn" id="s-upd" type="button">${DEMO ? "Always up to date" : "Check for updates"}</button><button class="btn primary" id="s-updgo" type="button" hidden>Update now</button><button class="btn" id="s-wizard" type="button">Run setup again</button><button class="btn danger" id="s-reset" type="button">Reset everything</button></div>
       <div id="s-updmsg" class="faint" style="font-size:13px" aria-live="polite"></div></div>`, "span-6")}`;
   if (!admin) {
     $$("#page input:not(#u-pin), #page select, #page button:not(#u-go)").forEach(x => x.disabled = true);
@@ -752,6 +758,7 @@ function settingsPage(el) {
   if ($("#s-unlockset")) $("#s-unlockset").onclick = async () => { await act(() => api("DELETE", "/api/lock"), "PIN removed").catch(() => {}); await refreshState(); route(); };
   if ($("#s-relock")) $("#s-relock").onclick = () => { app.token = null; store.set("token", null); ws.sock?.close(); refreshState().then(route); };
   if (DEMO) $("#s-upd").disabled = true;
+  $("#s-wizard").onclick = () => openWizard();
   $("#s-upd").onclick = async () => { const m = $("#s-updmsg"); m.textContent = "Checking…"; const r = await act(() => api("GET", "/api/update")).catch(() => null); if (!r) { m.textContent = ""; return; }
     m.innerHTML = esc(r.message) + (r.changes?.length ? `<ul style="margin:6px 0 0 18px">${r.changes.map(c => `<li>${esc(c)}</li>`).join("")}</ul>` : ""); $("#s-updgo").hidden = !r.canUpdate; };
   $("#s-updgo").onclick = async () => { const r = await act(() => api("POST", "/api/update")).catch(() => null); if (!r) return; $("#s-updmsg").textContent = r.message; $("#s-updgo").hidden = true;
@@ -790,6 +797,7 @@ async function boot() {
   app.audio = createAudio({ ws, api, onChange: () => app.page?.onAudio?.() });
   try { app.log = await api("GET", "/api/log"); } catch {}
   connect(); route(); addEventListener("hashchange", route);
+  if (wantsWizard(app.state)) openWizard(); // first start: the setup wizard (finished or skipped once, it stays away)
   // the brand lamp pulses with the beat
   setInterval(() => { const m = app.status; if (!m) return; $("#lamp").style.opacity = m.beat == null ? 1 : (m.beat === 0 ? 1 : 0.55); }, 120);
 }

@@ -18,6 +18,7 @@ export const DEFAULTS = () => ({
     dmx: { enabled: true, lasers: false, fog: false, fogWhen: "before", fogLead: 4, fogBurst: 3, fogCooldown: 60, fogMaxDuty: 0.1, fogLevel: 1, laserMaxSec: 60 },
     requests: true, // guests can request songs from their phones (/request)
     shows: true, // remembered songs play their show timeline (auto-generated, editable) in automatic mode
+    setupDone: false, // the setup wizard was finished or skipped (it opens by itself on a first start with no lights)
     songMemory: true, // remember analysed songs and recognise them when they play again while listening live
     nowPlaying: { enabled: true, spotifyClientId: "" }, // read the track music apps on this computer play (server only, see nowplaying.js)
   },

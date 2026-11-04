@@ -50,7 +50,9 @@
 - **app.js**: HTTP routes, static files, WebSocket, PIN lock, OSC and scheduler wiring, first-run discovery.
 - **runtime.js**: chooses the source (song > a remembered song playing in a music app here > live audio > metronome > idle), runs the director at the frame rate,
   maps each shape's LEDs into its controller's buffer and streams them; device health checks every 10 seconds, and a
-  controller that changes address is found again by name.
+  controller that changes address is found again by name. **latency.js**: the latency meter (sound-to-light delay per
+  device from the audio path, half WLED's HTTP round trip, the frame time and the timing offset; Wi-Fi, dropped-frame,
+  realtime and power warnings).
 - **store.js**: one JSON settings file, written atomically. **ws.js**: a minimal RFC 6455 WebSocket server.
   **nowplaying.js**: the track music apps on this computer play (osascript, MPRIS, Windows media controls, optionally
   the Spotify Web API); a remembered song is followed with its beat map at the app's position. **capture.js**: sound capture commands. **scheduler.js**: day/time schedules. **osc.js**: OSC over UDP.

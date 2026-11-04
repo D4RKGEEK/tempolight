@@ -7,7 +7,8 @@ import dgram from "node:dgram";
 import { fileURLToPath } from "node:url";
 
 export async function startFakeWled({ name = "Fake WLED", leds = 300, httpPort = 0, ddpPort = 0, quiet = true } = {}) {
-  const dev = { name, leds, frames: 0, badPackets: 0, lastFrame: new Uint8Array(leds * 3), maxPixel: 0, state: { on: true, bri: 128, seg: [{ id: 0, start: 0, stop: leds, n: "Main" }] }, posts: [] };
+  const dev = { name, leds, frames: 0, badPackets: 0, lastFrame: new Uint8Array(leds * 3), maxPixel: 0, state: { on: true, bri: 128, seg: [{ id: 0, start: 0, stop: leds, n: "Main" }] }, posts: [], frameTimes: [],
+    override: {} }; // tests set override.wifi {rssi, signal}, override.leds {fps, pwr, maxpwr} or override.live to pretend trouble
   const pending = new Uint8Array(leds * 3);
   const udp = dgram.createSocket("udp4");
   udp.on("message", msg => {
@@ -16,12 +17,13 @@ export async function startFakeWled({ name = "Fake WLED", leds = 300, httpPort =
     if (msg.length !== 10 + len) { dev.badPackets++; return; }
     pending.set(msg.subarray(10, 10 + Math.max(0, Math.min(len, pending.length - off))), off);
     dev.maxPixel = Math.max(dev.maxPixel, (off + len) / 3);
-    if (msg[0] & 0x01) { dev.frames++; dev.lastFrame.set(pending); dev.lastFrameAt = Date.now(); }
+    if (msg[0] & 0x01) { dev.frames++; dev.lastFrame.set(pending); dev.lastFrameAt = Date.now(); dev.frameTimes.push(dev.lastFrameAt); if (dev.frameTimes.length > 400) dev.frameTimes.splice(0, 200); }
   });
   await new Promise(r => udp.bind(ddpPort, "127.0.0.1", r));
   dev.ddpPort = udp.address().port;
-  const info = () => ({ ver: "0.15.0", vid: 2412100, name: dev.name, arch: "esp32", mac: "aabbccddeeff", udpport: 21324, live: Date.now() - (dev.lastFrameAt || 0) < 2500,
-    leds: { count: dev.leds, fps: 0, pwr: 400, maxpwr: 850, rgbw: false }, wifi: { bssid: "x", rssi: -55, signal: 90, channel: 6 } });
+  const fps = () => { const now = Date.now(); return dev.frameTimes.filter(t => now - t < 1000).length; }; // frames shown in the last second, as WLED reports it
+  const info = () => { const o = dev.override; return { ver: "0.15.0", vid: 2412100, name: dev.name, arch: "esp32", mac: "aabbccddeeff", udpport: 21324, live: o.live ?? Date.now() - (dev.lastFrameAt || 0) < 2500,
+    leds: { count: dev.leds, fps: fps(), pwr: 400, maxpwr: 850, rgbw: false, ...o.leds }, wifi: { bssid: "x", rssi: -55, signal: 90, channel: 6, ...o.wifi } }; };
   const srv = http.createServer(async (req, res) => {
     let body = ""; for await (const c of req) body += c;
     const send = j => { res.writeHead(200, { "content-type": "application/json" }); res.end(JSON.stringify(j)); };
