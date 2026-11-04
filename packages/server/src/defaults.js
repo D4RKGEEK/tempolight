@@ -13,6 +13,9 @@ export const DEFAULTS = () => ({
     text: { source: "song", custom: "TEMPOLIGHT" }, // what Text Scroller shows on matrix panels: song, bpm, clock or custom
     mqtt: { enabled: false, url: "", username: "", password: "", prefix: "homeassistant", base: "tempolight" }, // Home Assistant
     djlink: { enabled: false, port: 50001 }, // Pioneer Pro DJ Link: take the beat from CDJs/XDJs
+    link: { enabled: false, port: 20808 }, // Ableton Link: follow a Link session's tempo and beat (listens only)
+    // DMX fixtures (devices of kind "dmx"): a master switch; lasers and fog stay off until turned on here (see fixtures.js)
+    dmx: { enabled: true, lasers: false, fog: false, fogWhen: "before", fogLead: 4, fogBurst: 3, fogCooldown: 60, fogMaxDuty: 0.1, fogLevel: 1, laserMaxSec: 60 },
     requests: true, // guests can request songs from their phones (/request)
     shows: true, // remembered songs play their show timeline (auto-generated, editable) in automatic mode
     songMemory: true, // remember analysed songs and recognise them when they play again while listening live

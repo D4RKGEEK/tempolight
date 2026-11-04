@@ -24,14 +24,15 @@
 | Home | Home Assistant through MQTT discovery, night mode, sunrise/sunset schedules, backup and restore, one-click updates, text on matrix panels |
 | Parties | Phones as extra lights (QR code), clip recording, guest song requests with votes |
 | More lights | E1.31 and Art-Net, Govee (LAN, beta), OpenRGB, Nanoleaf (real panel layout), Philips Hue (basic), screen colour sync, power limit per controller |
-| DJs and pros | Pioneer Pro DJ Link (beat grid from CDJs, listen-only), MIDI controllers for the pads |
+| DJs and pros | Pioneer Pro DJ Link (beat grid from CDJs, listen-only), Ableton Link (tempo and beat, listen-only), MIDI clock (Web MIDI), MIDI controllers for the pads, DMX fixtures over Art-Net/sACN (pars, moving heads, strobes, lasers, fog) |
 | Setup | Camera LED mapping: the strip's real shape from a phone or laptop camera |
 
 ## Still to do
 
 | Idea | Why it isn't done yet |
 | --- | --- |
-| Ableton Link | Following Link's beat phase needs its clock-measurement exchange with peers; worth doing properly with real Link apps to test against |
+| Ableton Link: check against real apps | Written from the open protocol and tested against a pretend peer; needs a session with Ableton Live to confirm the wire format and the clock measurement |
+| DMX: check on a real node and fixtures | Packets and channel values are tested; moving-head aiming and colour-wheel/gobo values differ per fixture (use a custom profile) |
 | Philips Hue Entertainment (fast streaming) | Needs DTLS, which Node.js doesn't include; would need a dependency. Hue works now in basic mode (about 10 updates a second) |
 | Effect gallery online | Share codes work today; a public gallery needs a small hosted service |
 | Multi-room | Several rooms, each with its own music and show. Zones cover part of this today |

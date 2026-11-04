@@ -8,3 +8,4 @@ export { GoveeSender, discoverGovee, goveeRazerPacket, goveeRazerOn, GOVEE_CMD_P
 export { OpenRGBSender, listOpenRGB, parseController, orgbPacket, closeOpenRGB, OPENRGB_PORT } from "./openrgb.js";
 export { NanoleafSender, nanoleafPair, nanoleafInfo, nanoleafStream, nanoleafPower, nanoleafFrame, panelPoints, NANOLEAF_PORT, NANOLEAF_STREAM_PORT } from "./nanoleaf.js";
 export { HueSender, huePair, hueLights, rgbToXy } from "./hue.js";
+export { DMX_PROFILES, CHANNEL_TYPES, DMX_CHANNELS, fixtureProfile, channelCount, writeFixture, normChannel, kindOf, overlaps } from "./dmx.js";

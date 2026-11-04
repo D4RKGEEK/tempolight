@@ -4,6 +4,8 @@ import { createAudio } from "/audio.js";
 import { roomPage } from "/room.js";
 import { mapPage } from "/mapper.js";
 import { createRenderer } from "/preview.js";
+import { dmxPanels, mountDmx } from "/dmx.js";
+import { createClockFollower } from "/midiclock.js";
 
 export const $ = (s, r = document) => r.querySelector(s);
 export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
@@ -471,16 +473,18 @@ const PADS = [
   { id: "boost", name: "Boost", desc: "Brighter while held", key: "X", hold: true },
   { id: "tap", name: "Tap tempo", desc: "Tap 4 times", key: "T" },
   { id: "cancel", name: "Clear all", desc: "Undo everything", key: "Esc" },
+  { id: "fog", name: "Fog", desc: "While held (DMX fog)", key: "G", hold: true, dmx: true },
 ];
 const COLORS = ["#ff2bd6", "#16e0ff", "#ffd23f", "#ff3d3d", "#20ffa8", "#7a3cff", "#ffffff"];
 function livePage(el) {
-  el.innerHTML = `${panel("Live pads", "Play the lights like an instrument. Keyboard shortcuts work on this page.", "", `<div class="pb stack"><div class="pads" id="pads">${PADS.map(p => `<button class="pad" data-pad="${p.id}" type="button"><b>${p.name}</b><span>${p.desc}</span><kbd>${p.key}</kbd></button>`).join("")}</div>
+  el.innerHTML = `${panel("Live pads", "Play the lights like an instrument. Keyboard shortcuts work on this page.", "", `<div class="pb stack"><div class="pads" id="pads">${PADS.filter(p => !p.dmx || app.state.devices.some(d => d.kind === "dmx")).map(p => `<button class="pad" data-pad="${p.id}" type="button"><b>${p.name}</b><span>${p.desc}</span><kbd>${p.key}</kbd></button>`).join("")}</div>
       <div class="field"><span class="lbl">Colour hold (tap again to release)</span><div class="swatches" id="holds">${COLORS.map(c => `<button class="swatch" style="background:${c}" data-c="${c}" aria-label="Hold ${c}" type="button"></button>`).join("")}</div></div>
       <div class="field"><span class="lbl">Flash colour</span><div class="swatches" id="flashc">${COLORS.map((c, i) => `<button class="swatch" style="background:${c}" data-c="${c}" aria-pressed="${i === 6}" aria-label="Flash ${c}" type="button"></button>`).join("")}</div></div></div>`, "span-7")}
     ${panel("Preview", `<span id="l-now"></span>`, "", `<div class="stage" id="l-stage"></div>`, "span-5")}
     ${panel("Scenes", "", "", `<div class="pb chips">${app.state.scenes.map(s => `<button class="chip" data-scene="${s.id}" type="button">${esc(s.name)}</button>`).join("")}</div>`, "span-5")}
     ${panel("MIDI controller", `<span id="midi-st">${navigator.requestMIDIAccess ? "Not connected" : "This browser has no MIDI (try Chrome or Edge on a computer)"}</span>`, navigator.requestMIDIAccess ? `<button class="btn" id="midi-on" type="button">Connect</button><button class="btn" id="midi-learn" type="button" aria-pressed="false">Learn</button>` : "",
-      `<div class="pb"><p class="faint" style="font-size:12.5px">Pads play from notes 36 to 45 (the bottom pads on most controllers). To change one, press Learn, tap a pad here, then hit the key or pad on your controller.</p></div>`, "span-5")}
+      `<div class="pb stack"><p class="faint" style="font-size:12.5px">Pads play from notes 36 to 45 (the bottom pads on most controllers). To change one, press Learn, tap a pad here, then hit the key or pad on your controller.</p>
+      ${navigator.requestMIDIAccess ? `<div class="row"><label class="check"><input type="checkbox" id="mc-on" disabled> Follow MIDI clock from</label><select id="mc-in" aria-label="MIDI clock input" disabled style="max-width:200px"><option>Connect first</option></select></div><p class="faint" style="font-size:12.5px" id="mc-st">The beat comes from DJ software or a drum machine sending MIDI clock (24 per beat) on that input; Start and Song Position set the bar.</p>` : ""}</div>`, "span-5")}
     ${panel("Phones as lights", `<span id="ph-n">No phones yet</span>`, "", `<div class="pb phones"><div class="qr" id="ph-qr" aria-live="polite"></div><div class="stack">
       <p>Guests scan this code, tap Start, and their screen becomes another light that moves with the room. Works best with a crowd holding phones up at the drop.</p>
       <p class="faint" style="font-size:12.5px" id="ph-url"></p>
@@ -492,7 +496,7 @@ function livePage(el) {
   const send = a => { if (ws.open) ws.send({ type: "action", action: a }); else api("POST", "/api/action", a).catch(e => toast(e.message, true)); };
   const press = (id, down) => {
     const p = PADS.find(x => x.id === id); if (!p) return; const b = $(`[data-pad="${id}"]`); b && b.classList.toggle("down", down);
-    if (p.hold) { if (id === "strobe") send({ type: "strobe", on: down }); if (id === "boost") send({ type: "boost", value: down ? 1.8 : 1 }); return; }
+    if (p.hold) { if (id === "strobe") send({ type: "strobe", on: down }); if (id === "boost") send({ type: "boost", value: down ? 1.8 : 1 }); if (id === "fog") send({ type: "fog", on: down }); return; }
     if (!down) return;
     if (id === "flash") send({ type: "flash", color: flashColor }); else send({ type: id });
   };
@@ -505,7 +509,7 @@ function livePage(el) {
   $$("#holds .swatch").forEach(b => b.onclick = () => { holdColor = holdColor === b.dataset.c ? null : b.dataset.c; $$("#holds .swatch").forEach(x => x.setAttribute("aria-pressed", x.dataset.c === holdColor)); send({ type: "hold", color: holdColor }); });
   $$("#flashc .swatch").forEach(b => b.onclick = () => { flashColor = b.dataset.c; $$("#flashc .swatch").forEach(x => x.setAttribute("aria-pressed", x === b)); });
   $$("[data-scene]").forEach(b => b.onclick = () => act(() => api("POST", `/api/scenes/${b.dataset.scene}/apply`), `Scene: ${b.textContent}`).catch(() => {}));
-  const keymap = { " ": "flash", s: "strobe", b: "blackout", f: "freeze", u: "build", d: "drop", n: "next", x: "boost", t: "tap", escape: "cancel" };
+  const keymap = { " ": "flash", s: "strobe", b: "blackout", f: "freeze", u: "build", d: "drop", n: "next", x: "boost", t: "tap", escape: "cancel", g: "fog" };
   const kd = e => { if (e.target.closest("input,select,textarea,.pad")) return; const id = keymap[e.key.toLowerCase()]; if (!id) return; e.preventDefault(); if (!e.repeat) press(id, true); };
   const ku = e => { if (e.target.closest("input,select,textarea,.pad")) return; const id = keymap[e.key.toLowerCase()]; if (id) press(id, false); };
   addEventListener("keydown", kd); addEventListener("keyup", ku);
@@ -519,16 +523,24 @@ function livePage(el) {
     const id = map[note]; if (id) press(id, down); };
   if ($("#midi-on")) {
     $("#midi-on").onclick = async () => { try { midi = await navigator.requestMIDIAccess(); const hook = () => { const ins = [...midi.inputs.values()]; ins.forEach(i => i.onmidimessage = onMidi);
-        $("#midi-st").textContent = ins.length ? `Connected: ${ins.map(i => i.name).join(", ")}` : "No MIDI controller found. Plug one in."; }; hook(); midi.onstatechange = hook; }
+        $("#midi-st").textContent = ins.length ? `Connected: ${ins.map(i => i.name).join(", ")}` : "No MIDI controller found. Plug one in."; clockInputs(ins); }; hook(); midi.onstatechange = hook; }
       catch (e) { $("#midi-st").textContent = "MIDI permission was refused"; } };
     $("#midi-learn").onclick = () => { learning = !learning; $("#midi-learn").setAttribute("aria-pressed", learning); $("#midi-st").textContent = learning ? "Learn: tap a pad here, then hit a key on the controller" : "Learn off"; };
     $$(".pad").forEach(b => b.addEventListener("pointerdown", () => { if (learning) learnPad = b.dataset.pad; }, true));
   }
+  // MIDI clock: the selected input's clock becomes the beat grid on the server
+  const clock = createClockFollower(m => ws.send(m)), clockKey = "tl.midiclock";
+  function clockInputs(ins) { const sel = $("#mc-in"), on = $("#mc-on"); if (!sel) return; let want = null; try { want = localStorage.getItem(clockKey); } catch {}
+    sel.innerHTML = ins.map(i => opt(i.id, i.name, i.id === (clock.input?.id || want))).join("") || "<option>No MIDI inputs</option>"; sel.disabled = on.disabled = !ins.length;
+    const pick = () => ins.find(i => i.id === sel.value);
+    on.onchange = () => { if (on.checked && pick()) { clock.follow(pick()); try { localStorage.setItem(clockKey, pick().id); } catch {} } else clock.stop(); };
+    sel.onchange = () => { if (on.checked && pick()) clock.follow(pick()); };
+    if (clock.input && !ins.some(i => i.id === clock.input.id)) { clock.stop(); on.checked = false; } }
   return { preview: true,
-    onStatus(m) { $("#l-now").textContent = m.effectName; const o = m.overlay; $("#ph-n").textContent = m.phones ? `${m.phones} phone${m.phones > 1 ? "s" : ""} joined` : "No phones yet";
+    onStatus(m) { $("#l-now").textContent = m.effectName; const o = m.overlay; if ($("#mc-st") && clock.input) $("#mc-st").textContent = m.midiClock ? (m.midiClock.running ? `Following ${m.midiClock.input}: ${m.midiClock.bpm} BPM${m.midiClock.barKnown ? "" : " (no Start yet: the bar is a guess)"}` : m.midiClock.stopped ? "Stopped: waiting for Start or Continue" : "Waiting for clock…") : "Waiting for clock…"; $("#ph-n").textContent = m.phones ? `${m.phones} phone${m.phones > 1 ? "s" : ""} joined` : "No phones yet";
       $('[data-pad="blackout"]').setAttribute("aria-pressed", o.blackout); $('[data-pad="freeze"]').setAttribute("aria-pressed", o.freeze);
       $('[data-pad="strobe"]').setAttribute("aria-pressed", o.strobe); $('[data-pad="build"]').classList.toggle("hot", o.forced === "build"); $('[data-pad="drop"]').classList.toggle("hot", o.forced === "drop"); },
-    destroy() { prev.destroy(); removeEventListener("keydown", kd); removeEventListener("keyup", ku); if (midi) [...midi.inputs.values()].forEach(i => i.onmidimessage = null); } };
+    destroy() { prev.destroy(); removeEventListener("keydown", kd); removeEventListener("keyup", ku); if (midi) [...midi.inputs.values()].forEach(i => i.onmidimessage = null); clock.stop(); } };
 }
 
 /** A link a guest's phone can open: a phone can't reach "localhost", so use this computer's network address. */
@@ -594,14 +606,16 @@ function devicesPage(el) {
       ${DEMO ? `<p class="callout" style="margin-top:8px">This demo has pretend controllers at ${Object.keys(demo.FAKE_WLED).join(", ")}. Press “Scan network” to find them.</p>` : ""}
       <p class="faint" style="margin-top:8px;font-size:12.5px">Power limit: enter your power supply's amps (for example 10 for a 5 V 10 A supply) and Tempolight keeps the strip under it, estimating about 60 mA per LED at full white. Find the address in the WLED app or your router. Tempolight sends light with DDP on UDP port 4048; in WLED, keep “Receive UDP realtime” on (Sync settings).
       OpenRGB (RAM, fans, keyboards, motherboards): start OpenRGB's SDK server, then Scan network. Nanoleaf: hold the controller's power button for 5–7 seconds until the lights flash, then add its address; the panels appear in the room where they really are. Philips Hue: press the bridge's link button, then add the bridge's address; Hue changes colour slowly, so it suits calm effects. Govee lights (beta): turn on “LAN Control” for the light in the Govee Home app. One colour works on all LAN models; segments mode uses Govee's DreamView streaming and only some models support it.</p></div>`, "span-6")}
-    ${panel("Found on the network", `<span id="d-scanmsg">Press “Scan network” to look</span>`, "", `<div class="tablewrap"><table><tbody id="d-found"></tbody></table></div>`, "span-6")}`;
+    ${panel("Found on the network", `<span id="d-scanmsg">Press “Scan network” to look</span>`, "", `<div class="tablewrap"><table><tbody id="d-found"></tbody></table></div>`, "span-6")}
+    ${dmxPanels()}`;
+  const dmx = mountDmx(el);
   function rows(m) {
     const s = m || app.status || { devices: [] };
     $("#d-rows").innerHTML = st.devices.map(d => { const h = s.devices.find(x => x.id === d.id) || {};
       const sig = h.signal != null ? `<span class="sig" title="Wi-Fi ${h.signal}%">${[25, 50, 75, 100].map((v, i) => `<i style="height:${4 + i * 3}px" class="${h.signal >= v - 12 ? "on" : ""}"></i>`).join("")}</span>` : "";
       return `<tr><td><input type="checkbox" data-en="${d.id}" ${d.enabled ? "checked" : ""} aria-label="Send to this device"></td><td><input value="${esc(d.name)}" data-name="${d.id}" style="width:150px"></td>
         <td>${d.virtual ? '<span class="faint">virtual</span>' : `<input class="mono" value="${esc(d.host)}" data-host="${d.id}" style="width:150px">`}</td>
-        <td class="num"><input type="number" min="1" value="${d.leds || ""}" data-leds="${d.id}"></td><td class="num">${h.used ?? 0}</td><td>${d.virtual ? "–" : d.kind === "hue" ? "Hue (about 10 updates/s)" : d.kind === "nanoleaf" ? "Nanoleaf stream" : d.kind === "openrgb" ? `OpenRGB #${d.orgbIndex || 0}` : d.kind === "govee" ? `<select data-gmode="${d.id}" aria-label="Govee mode">${opt("color", "Govee: one colour", d.goveeMode !== "segments")}${opt("segments", "Govee: segments (beta)", d.goveeMode === "segments")}</select>` : `<select data-proto="${d.id}" aria-label="Protocol">${opt("ddp", "DDP", !d.protocol || d.protocol === "ddp")}${opt("e131", "E1.31 (sACN)", d.protocol === "e131")}${opt("artnet", "Art-Net", d.protocol === "artnet")}</select>`}</td>
+        <td class="num"><input type="number" min="1" value="${d.leds || ""}" data-leds="${d.id}"></td><td class="num">${h.used ?? 0}</td><td>${d.virtual ? "–" : d.kind === "hue" ? "Hue (about 10 updates/s)" : d.kind === "nanoleaf" ? "Nanoleaf stream" : d.kind === "openrgb" ? `OpenRGB #${d.orgbIndex || 0}` : d.kind === "govee" ? `<select data-gmode="${d.id}" aria-label="Govee mode">${opt("color", "Govee: one colour", d.goveeMode !== "segments")}${opt("segments", "Govee: segments (beta)", d.goveeMode === "segments")}</select>` : `<select data-proto="${d.id}" aria-label="Protocol">${d.kind === "dmx" ? "" : opt("ddp", "DDP", !d.protocol || d.protocol === "ddp")}${opt("e131", "E1.31 (sACN)", d.protocol === "e131")}${opt("artnet", "Art-Net", d.protocol === "artnet")}</select>`}</td>
         <td class="num">${d.virtual ? "–" : d.kind === "govee" ? (d.goveeMode === "segments" ? `<input type="number" min="1" max="60" title="Segments on the light" placeholder="segments" value="${d.goveeSegments || ""}" data-gseg="${d.id}" aria-label="Segments">` : "–") : (!d.protocol || d.protocol === "ddp") ? `<input type="number" min="1" max="65535" value="${d.ddpPort || 4048}" data-port="${d.id}">` : `<input type="number" min="0" max="63999" title="First universe" value="${d.universe ?? (d.protocol === "artnet" ? 0 : 1)}" data-univ="${d.id}" aria-label="First universe">`}</td>
         <td class="num"><input type="number" min="0" max="500" step="0.5" placeholder="none" value="${d.maxAmps || ""}" data-amps="${d.id}" aria-label="Power limit in amps"></td>
         <td class="num">${h.amps != null ? `${h.amps.toFixed(1)} A${h.limited ? ' <span class="badge warn" title="Brightness is being held back to stay under the limit">capped</span>' : ""}` : "–"}</td>
@@ -638,7 +652,7 @@ function devicesPage(el) {
       $$("[data-f]").forEach(b => b.onclick = () => { const f = found[Number(b.dataset.f)]; act(() => api("POST", "/api/devices", f.kind === "govee" ? { host: f.host, name: f.name, kind: "govee" } : f.kind === "openrgb" ? { host: f.host, name: f.name, kind: "openrgb", index: f.index, leds: f.leds } : { host: f.host, name: f.name, leds: f.leds, force: true }), "Device added").then(() => b.replaceWith("added")).catch(() => {}); });
     } catch {} finally { $("#d-scan").disabled = false; }
   };
-  return { onStatus(m) { if (!el.contains(document.activeElement) || document.activeElement === document.body) rows(m); }, onChanged(w) { if (w.has("devices")) route(); } };
+  return { onStatus(m) { if (!el.contains(document.activeElement) || document.activeElement === document.body) rows(m); }, onChanged(w) { if (w.has("devices")) route(); }, destroy() { dmx.destroy(); } };
 }
 
 // ---------------------------------------------------------------- Settings
@@ -658,6 +672,7 @@ function settingsPage(el) {
       <label class="check"><input type="checkbox" id="s-sync" ${s.audioSync ? "checked" : ""}> Send WLED audio sync (lets WLED's own sound effects react too)</label>
       <div class="field"><label class="check"><input type="checkbox" id="s-osc" ${s.osc.enabled ? "checked" : ""}> OSC control on UDP port</label><input type="number" id="s-oscport" value="${s.osc.port}" style="width:110px"><span class="help">/tempolight/effect laser, /scene Party, /flash, /blackout 1, /brightness 0.5 …</span></div>
       <label class="check"><input type="checkbox" id="s-dj" ${s.djlink?.enabled ? "checked" : ""} ${DEMO ? "disabled" : ""}> Pioneer Pro DJ Link: take the beat from CDJs and XDJs on this network (listens only)</label>
+      <label class="check"><input type="checkbox" id="s-link" ${s.link?.enabled ? "checked" : ""} ${DEMO ? "disabled" : ""}> Ableton Link: follow the tempo and beat of a Link session (Live, Traktor, Bitwig, phone apps; listens only, never changes the tempo)</label>
       <label class="check"><input type="checkbox" id="s-disc" ${s.autoDiscover ? "checked" : ""}> Look for WLED controllers on first start</label>
       <div class="field"><span class="lbl">HTTP API</span><span class="help">Home Assistant, Stream Deck and scripts can call the JSON API, e.g. <span class="mono">POST /api/scenes/&lt;id&gt;/apply</span>. See docs/api.md.</span></div>
     </div>`, "span-12")}
@@ -705,7 +720,7 @@ function settingsPage(el) {
   range("s-idleb", "idleBrightness", v => Math.round(v * 100) + "%"); range("s-idlea", "idleAfterSec", v => v + " s"); range("s-fps", "fps", v => v + " fps");
   $("#s-safe").onchange = e => setS({ safe: e.target.checked }); $("#s-dropf").onchange = e => setS({ dropFlash: e.target.checked });
   $("#s-sync").onchange = e => setS({ audioSync: e.target.checked }); $("#s-disc").onchange = e => setS({ autoDiscover: e.target.checked });
-  $("#s-dj").onchange = e => setS({ djlink: { enabled: e.target.checked } });
+  $("#s-dj").onchange = e => setS({ djlink: { enabled: e.target.checked } }); $("#s-link").onchange = e => setS({ link: { enabled: e.target.checked } });
   $("#s-osc").onchange = e => setS({ osc: { enabled: e.target.checked } }); $("#s-oscport").onchange = e => setS({ osc: { port: Number(e.target.value) } });
   $$("[data-guest]").forEach(x => x.onchange = () => setS({ guest: { [x.dataset.guest]: x.checked } }));
   const night = () => setS({ night: { enabled: $("#n-on").checked, from: $("#n-from").value.trim(), to: $("#n-to").value.trim(), maxBrightness: Number($("#n-max").value), warm: $("#n-warm").checked } });

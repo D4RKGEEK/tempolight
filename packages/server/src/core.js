@@ -4,6 +4,7 @@ import { startScheduler, nextRun } from "./scheduler.js";
 import { resolveTime } from "./sun.js";
 import { DEFAULTS, merge } from "./defaults.js";
 import { ROOM_PRESETS, buildPreset } from "../../engine/src/index.js";
+import { createPro } from "./pro-api.js";
 
 const SHAPE_TYPES = new Set(["line", "pole", "free", "circle", "rect", "hex", "tri", "matrix", "points"]);
 export class HttpError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
@@ -69,6 +70,7 @@ export function createCore({ store, runtime, env }) {
     }
     host = String(host || "").trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
     if (!host) throw new HttpError(400, "Enter the controller's IP address, for example 192.168.1.42");
+    if (kind === "dmx") return pro.addDmx(arguments[0], host); // a DMX universe on an Art-Net / sACN node (pro-api.js)
     if (kind === "hue") { // Philips Hue bridge: pair with the link button, then each colour light is one LED
       if (!env.huePair) throw new HttpError(400, "Hue needs Tempolight running on your network");
       if (data().devices.find(d => d.kind === "hue" && d.host === host)) throw new HttpError(400, "That Hue bridge is already added");
@@ -159,6 +161,7 @@ export function createCore({ store, runtime, env }) {
     if (JSON.stringify(prev.cap) !== JSON.stringify(s.capture)) { if (s.capture.enabled) runtime.startCaptureSource(); else runtime.stopCaptureSource(); }
     if (JSON.stringify(prev.osc) !== JSON.stringify(s.osc)) restartOsc();
     if (JSON.stringify(prev.djlink) !== JSON.stringify(s.djlink)) restartDjLink();
+    pro.applySettings(b); // dmx, link
     runtime.syncDirector(); changed("settings"); void after;
   }
   function applyShow(b) {
@@ -192,6 +195,7 @@ export function createCore({ store, runtime, env }) {
   const routes = [];
   const route = (method, pattern, area, fn) => routes.push({ method, re: new RegExp("^" + pattern.replace(/:(\w+)/g, "(?<$1>[^/]+)") + "$"), area, fn });
   // area: null = open to everyone, "admin" = needs unlock when a PIN is set, or a guest area name (effects, scenes, pads, brightness)
+  const pro = createPro({ store, runtime, env, route, HttpError, changed }); // DMX fixtures, Ableton Link, MIDI clock
 
   route("GET", "/api/state", null, () => pub());
   route("GET", "/api/status", null, () => runtime.status());
@@ -301,7 +305,7 @@ export function createCore({ store, runtime, env }) {
     const d = data().devices.find(x => x.id === p.id); if (!d) throw new HttpError(404, "No such device"); const b = ctx.body;
     if (b.name !== undefined) d.name = String(b.name).slice(0, 60); if (b.host !== undefined) d.host = String(b.host).trim(); if (b.ddpPort !== undefined) d.ddpPort = Number(b.ddpPort) || ({ govee: 4003, openrgb: 6742, nanoleaf: 60222, hue: 80 })[d.kind] || 4048;
     if (b.leds !== undefined) d.leds = Math.max(0, Math.round(Number(b.leds))); if (b.enabled !== undefined) d.enabled = !!b.enabled;
-    if (b.protocol !== undefined) { if (!["ddp", "e131", "artnet"].includes(b.protocol)) throw new HttpError(400, "Protocol is ddp, e131 or artnet"); d.protocol = b.protocol; }
+    if (b.protocol !== undefined) { if (!["ddp", "e131", "artnet"].includes(b.protocol)) throw new HttpError(400, "Protocol is ddp, e131 or artnet"); if (d.kind === "dmx" && b.protocol === "ddp") throw new HttpError(400, "A DMX device sends Art-Net or E1.31 (sACN)"); d.protocol = b.protocol; }
     if (b.universe !== undefined) d.universe = b.universe === null || b.universe === "" ? undefined : Math.max(0, Math.min(63999, Math.round(Number(b.universe))));
     if (b.goveeMode !== undefined && d.kind === "govee") d.goveeMode = b.goveeMode === "segments" ? "segments" : "color";
     if (b.goveeSegments !== undefined && d.kind === "govee") d.goveeSegments = b.goveeSegments ? Math.max(1, Math.min(60, Math.round(Number(b.goveeSegments)))) : undefined;
@@ -415,8 +419,9 @@ export function createCore({ store, runtime, env }) {
         else if (m.type === "audio-stop") { c.data.audio = null; runtime.stopLive(c.data.id); }
         else if (m.type === "clock") runtime.songClock(m, null);
         else if (m.type === "action" && m.action) { if (c.data.auth("pads")) { try { runtime.action(m.action); } catch {} } }
+        else pro.wsMessage(m, c); // midi-clock
       },
-      close() { clients.delete(c); runtime.previewClients.delete(c); runtime.phones.delete(c); runtime.stopLive(c.data.id); runtime.clearSong(c.data.id); runtime.clearScreen(c.data.id); runtime.endMap(c.data.id); },
+      close() { clients.delete(c); runtime.previewClients.delete(c); runtime.phones.delete(c); runtime.stopLive(c.data.id); runtime.clearSong(c.data.id); runtime.clearScreen(c.data.id); runtime.endMap(c.data.id); pro.clientClosed(c.data.id); },
     };
   }
   function broadcast(o) { const s = JSON.stringify(o); for (const c of clients) if (c.open && !c.busy) c.send(s); }
@@ -447,5 +452,5 @@ export function createCore({ store, runtime, env }) {
   }
 
   return { handle, connect, broadcast, discovery, onChange: f => changeListeners.add(f), applyScene, applyShow, applySettings, addDevice, pub,
-    close() { clearInterval(statusTimer); sched.stop(); osc && osc.close(); djlink && djlink.close(); for (const c of clients) c.close?.(); } };
+    close() { clearInterval(statusTimer); sched.stop(); osc && osc.close(); djlink && djlink.close(); pro.close(); for (const c of clients) c.close?.(); } };
 }
