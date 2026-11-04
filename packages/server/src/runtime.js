@@ -188,7 +188,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   function remember(name, pre) {
     const list = data().songs, old = list.findIndex(e => e.name === name && Math.abs(e.dur - pre.dur) < 1.5);
     const e = memoryEntry(name, pre, old >= 0 ? list[old].id : "m" + Math.random().toString(36).slice(2, 10));
-    e.show = old >= 0 && list[old].showEdited ? list[old].show : planShow(pre, fx, { seed: name, prefs: data().settings.effectPrefs }); e.showEdited = old >= 0 && !!list[old].showEdited; // a show of its own; hand edits are kept
+    e.show = old >= 0 && list[old].showEdited ? list[old].show : planShow(pre, fx, { prefs: data().settings.effectPrefs, everyBeats: data().show.everyBeats }); e.showEdited = old >= 0 && !!list[old].showEdited; e.showV = SHOW_V; // a show of its own; hand edits are kept
     if (old >= 0) for (const k of ["colors", "cues", "bright"]) if (list[old][k]) e[k] = list[old][k]; // and the timeline editor's colours, cues and brightness
     const size = JSON.stringify(e).length; if (size > MEM_ONE) { note(`“${name}” is too long to remember (a mix?): it won't be recognised later`); return old >= 0 ? list[old] : null; }
     if (old >= 0) list.splice(old, 1); else note(`Remembered “${name}”: Tempolight will recognise it when it plays again`);
@@ -197,13 +197,14 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     while (list.length > 60 || (total > MEM_ALL && list.length > 1)) total -= JSON.stringify(list.shift()).length;
     store.save(); return e;
   }
-  const planFor = (e, seed = e.name + ":" + Date.now()) => planShow(memoryAnalysis(e), fx, { seed, prefs: data().settings.effectPrefs }); // a fresh one: a new seed
+  const SHOW_V = 2; // shows made by an older planner (one effect per 8 bars, flat in drops) are made again, unless edited by hand
+  const planFor = (e, seed = e.name + ":" + Date.now()) => planShow(memoryAnalysis(e), fx, { seed, prefs: data().settings.effectPrefs, everyBeats: data().show.everyBeats }); // "New show": a new seed
   /** The show timeline for the song playing now (played or recognised), when shows are on. */
   function currentPlan() {
     if (data().settings.shows === false) return null;
     const id = rt.source === "song" ? rt.song?.memId : rt.source === "nowplaying" ? rt.nowPlaying?.memId : rt.mem.lock && liveFresh() ? rt.mem.lock.id : null; if (!id) return null;
     const dr = rt.draft; if (dr && dr.id === id && performance.now() < dr.until) return dr; // the timeline editor's unsaved version, while it previews
-    const e = data().songs.find(x => x.id === id); if (!e) return null; if (!e.show) { e.show = planFor(e, e.name); store.save(); } return e;
+    const e = data().songs.find(x => x.id === id); if (!e) return null; if (!e.show || (!e.showEdited && e.showV !== SHOW_V)) { e.show = planFor(e, ""); e.showV = SHOW_V; store.save(); } return e;
   }
   /** The timeline editor previews its unsaved changes on the lights: {id, show, colors, cues, bright} for a while, or null. */
   function setDraft(d) { rt.draft = d ? { ...d, until: performance.now() + 120000 } : null; }

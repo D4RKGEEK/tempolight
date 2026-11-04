@@ -233,7 +233,7 @@ export function createCore({ store, runtime, env }) {
   // a song's show: effect blocks (`show`, as before) plus the timeline editor's colour blocks, cues and brightness keyframes
   const hex2 = c => "#" + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0")).join("");
   const showOf = e => ({ id: e.id, name: e.name, dur: e.dur, edited: !!e.showEdited, show: e.show || [], colors: e.colors || [], cues: e.cues || [], bright: e.bright || [] });
-  route("GET", "/api/songs/:id/show", null, (ctx, p) => { const e = songById(p.id); if (!e.show) { e.show = runtime.planFor(e, e.name); store.save(); }
+  route("GET", "/api/songs/:id/show", null, (ctx, p) => { const e = songById(p.id); if (!e.show || (!e.showEdited && e.showV !== 2)) { e.show = runtime.planFor(e, ""); e.showV = 2; store.save(); }
     // what the editor draws: the beat grid, bars, drops, loudness (10 a second, base64 bytes) and the palettes' colours
     return { ...showOf(e), bpm: e.bpm, P: e.P, off: e.off, barOff: e.barOff, style: e.style, drops: e.drops, bars: e.bars, env: e.env,
       palettes: Object.fromEntries(Object.entries(runtime.effects.palettes).filter(([k]) => k !== "auto").map(([k, v]) => [k, v.map(hex2)])) }; });
@@ -241,7 +241,7 @@ export function createCore({ store, runtime, env }) {
   route("PUT", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id), c = cleanShow(e, ctx.body);
     if (!c.show) throw new HttpError(400, "show is a list of {t0, t1, effect}");
     Object.assign(e, c); e.showEdited = true; runtime.setDraft(null); changed("songs"); return { ok: true, ...showOf(e) }; });
-  route("DELETE", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id); e.show = runtime.planFor(e); e.showEdited = false; delete e.colors; delete e.cues; delete e.bright; runtime.setDraft(null); changed("songs"); return { ok: true, ...showOf(e) }; });
+  route("DELETE", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id); e.show = runtime.planFor(e); e.showV = 2; e.showEdited = false; delete e.colors; delete e.cues; delete e.bright; runtime.setDraft(null); changed("songs"); return { ok: true, ...showOf(e) }; });
   // the editor's unsaved version plays on the lights for two minutes (it sends it again while it's open), without being saved
   route("PUT", "/api/songs/:id/show/draft", "effects", (ctx, p) => { const e = songById(p.id), c = cleanShow(e, ctx.body);
     runtime.setDraft({ id: e.id, show: c.show || e.show || [], colors: c.colors ?? e.colors ?? [], cues: c.cues ?? e.cues ?? [], bright: c.bright ?? e.bright ?? [] }); return { ok: true }; });
