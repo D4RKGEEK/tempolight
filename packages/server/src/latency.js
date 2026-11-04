@@ -10,8 +10,16 @@
 // Songs played in the browser are driven by their play clock, which already allows for the speakers' delay the
 // browser knows about, so only the network, the frame and the offset count for them. Speaker delays the browser
 // can't see (Bluetooth, the air) are what the one-tap timing fix measures.
+//
+// Light timing (lookahead): when the beat is known ahead (a song, a beat map, predicted live beats, a metronome or a
+// beat clock), the runtime renders each frame for a moment a little in the future, as far ahead as the slowest light
+// is late (at most LOOKAHEAD_CAP_MS), and holds each faster light's frames back by the difference. So every light
+// shows the same musical moment at the same time, on the beat. Each light's own delay ("light" = network + frame) is
+// estimated here, or set by hand on the device (lightLatencyMs).
 
 export const ANALYSIS_MS = 23; // LiveAnalyser: a 256-sample hop at 22,050 Hz (11.6 ms) plus onset smoothing
+export const LOOKAHEAD_CAP_MS = 250; // render at most this far ahead (a light slower than this is late by the rest)
+export const DEFAULT_NETWORK_MS = 5; // one way on a home network, for a light whose round trip wasn't measured
 const FRAME_MS = { hue: 100, hueFast: 20, nanoleaf: 33, govee: 33, lifx: 50, wiz: 100, kasa: 100, yeelight: 50, twinkly: 40 }; // devices that update more slowly than our frame rate
 
 /** Remember a new HTTP round trip for a device; the network delay uses the best of the recent ones (no WLED busy time). */
@@ -29,7 +37,38 @@ export function noteRtt(h, ms) {
 export function audioDelay({ source, live }) {
   if (source === "song" || !live || (source !== "browser" && source !== "capture")) return { audioMs: 0, analysisMs: 0 };
   const inMs = live.kind === "browser" ? (live.inMs || 0) : (live.chunkMs || 0); // the browser sends its own estimate (it includes its chunk)
-  return { audioMs: Math.round(inMs), analysisMs: ANALYSIS_MS };
+  return { audioMs: Math.round(inMs), analysisMs: newestSampleClock(live.an) != null ? 0 : ANALYSIS_MS }; // an analyser with a newest-sample clock isn't behind
+}
+
+/** The live analyser's newest-sample time (s), when it has one (an.sampleT, a number or a function); else null. */
+export function newestSampleClock(an) {
+  if (!an) return null; const v = typeof an.sampleT === "function" ? an.sampleT() : an.sampleT;
+  return Number.isFinite(v) ? v : null;
+}
+
+/**
+ * One light's own delay: from the moment we send a frame to the moment the light shows it (network one way + how
+ * often it updates). A device's lightLatencyMs (0-500), when set, is used instead of the estimate.
+ * @returns {{ms:number, auto:boolean, networkMs:number|null, frameMs:number}}
+ */
+export function lightLatency(dev, health = {}, fps = 60) {
+  const networkMs = dev.virtual ? 0 : health.rttMs != null ? Math.round(health.rttMs / 2) : null;
+  const frameMs = Math.round(FRAME_MS[dev.kind === "hue" && dev.hue?.ent?.on ? "hueFast" : dev.kind] || 1000 / Math.max(1, fps || 60));
+  const own = Number(dev.lightLatencyMs), manual = dev.lightLatencyMs != null && dev.lightLatencyMs !== "" && Number.isFinite(own);
+  return { ms: manual ? Math.max(0, Math.min(500, Math.round(own))) : (networkMs ?? DEFAULT_NETWORK_MS) + frameMs, auto: !manual, networkMs, frameMs };
+}
+
+/**
+ * The lookahead and how long to hold each light back. ahead: the beat is known ahead (else nothing is held and the
+ * lights react as fast as they can). devices: the lights that show something now, [{id, ms}].
+ * @returns {{lookaheadMs:number, holds:Map<string, number>, slowest:string|null}}
+ */
+export function timingPlan({ devices, ahead = true, capMs = LOOKAHEAD_CAP_MS }) {
+  const holds = new Map(); let L = 0, slowest = null;
+  if (ahead) for (const d of devices) if (d.ms > L) { L = d.ms; slowest = d.id; }
+  L = Math.min(capMs, L);
+  for (const d of devices) holds.set(d.id, ahead ? Math.max(0, L - d.ms) : 0);
+  return { lookaheadMs: L, holds, slowest };
 }
 
 /**
@@ -47,10 +86,9 @@ export function audioDelay({ source, live }) {
 export function deviceLatency({ dev, health = {}, out = {}, fps = 60, offsetMs = 0, audio = { audioMs: 0, analysisMs: 0 }, streaming = true, streamingFor = 0 }) {
   const warnings = [], warn = (kind, text) => warnings.push({ kind, text });
   const ourFps = Math.max(1, fps || 60);
-  const networkMs = dev.virtual ? 0 : health.rttMs != null ? Math.round(health.rttMs / 2) : null;
-  const frameMs = Math.round(FRAME_MS[dev.kind === "hue" && dev.hue?.ent?.on ? "hueFast" : dev.kind] || 1000 / ourFps);
+  const light = lightLatency(dev, health, ourFps), { networkMs, frameMs } = light;
   const latencyMs = dev.enabled === false || health.online === false ? null
-    : Math.round(audio.audioMs + audio.analysisMs + (networkMs || 0) + frameMs - (offsetMs || 0));
+    : Math.round(audio.audioMs + audio.analysisMs + light.ms - (offsetMs || 0));
 
   if (dev.enabled !== false && health.online === false) warn("offline", `Not answering${health.error ? ` (${health.error})` : ""}. Check it has power and is on the same Wi-Fi.`);
   if (health.online && !dev.virtual) {
@@ -65,7 +103,7 @@ export function deviceLatency({ dev, health = {}, out = {}, fps = 60, offsetMs =
     if (health.maxPower > 0 && health.power >= health.maxPower * 0.95) warn("power", `WLED's own power limit is holding brightness back (${health.power} of ${health.maxPower} mA).`);
   }
   if (out.limited) warn("power", "The power limit is holding brightness back right now.");
-  return { latencyMs, latency: { audioMs: audio.audioMs, analysisMs: audio.analysisMs, networkMs, frameMs, offsetMs: offsetMs || 0 }, latencyLevel: level(latencyMs), warnings };
+  return { latencyMs, latency: { audioMs: audio.audioMs, analysisMs: audio.analysisMs, networkMs, frameMs, offsetMs: offsetMs || 0, lightMs: light.ms, lightAuto: light.auto }, latencyLevel: level(latencyMs), warnings };
 }
 
 /** good under 40 ms (hard to notice), ok under 80 ms, slow above; early (negative) is judged the same way. */

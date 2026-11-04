@@ -83,22 +83,25 @@ environment-free.
 
 ## The frame loop
 
-`runtime.startLoop()` runs `frame()` on a `setInterval` at `settings.fps` (default 60, at most 30 in low-power mode,
-see [perf](internals/runtime-and-outputs.md#performance-modes)). One frame:
+`runtime.startLoop()` runs `frame()` at `settings.fps` (default 60, at most 30 in low-power mode, see
+[perf](internals/runtime-and-outputs.md#performance-modes)). The loop is a chain of timeouts against deadlines, not a
+`setInterval`: each frame is due one frame time after the last one was due, so a late wake-up doesn't push the next
+frames back. Each frame is drawn for the moment it will be seen, and faster lights are held back so all of them show
+it together ([light timing](internals/runtime-and-outputs.md#light-timing)). One frame:
 
 ```mermaid
 flowchart TD
-  A["frame(): now = performance.now()"] --> B["currentView(now): pick the music source, get a view V and its clock t"]
+  A["frame(now): updateTiming(now), lead = leadMs()"] --> B["currentView(now, lead): pick the music source, get a view V and its clock t (ahead by lead)"]
   B --> C["currentPlan(): the remembered song's show and timeline, if any"]
   C --> D["forced build/drop pads: applyForced(V)"]
   D --> E["brightness: slider x idle or ambient-plan brightness x night cap x Spotify dim"]
   E --> F["director.frame(V, t, extra, wall): linear RGB for every LED"]
   F --> G["toRGB8(col, col8, bri): soft roll-off to 8-bit"]
   G --> H["fixtures.begin(): DMX state for this frame"]
-  H --> I["per device: copy each shape's LEDs into its buffer, power limiter, sender.send(buf)"]
+  H --> I["per device: copy each shape's LEDs into its buffer, power limiter, queueOut(): send now, or held back by holdMs"]
   I --> J["WLED audio sync packet, at most every 20 ms, when on"]
-  J --> K["preview frames to browsers, 30 fps or 15 in lite"]
-  K --> L["phones as lights, 30 a second or 15 in lite"]
+  J --> K["preview frames to browsers, 30 fps or 15 in lite (held back like a light)"]
+  K --> L["phones as lights, 30 a second or 15 in lite (with the preview)"]
   L --> M["fps count, perf.frame(): may step down to lite and restart the loop"]
 ```
 

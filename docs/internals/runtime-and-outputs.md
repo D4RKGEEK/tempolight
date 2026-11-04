@@ -66,14 +66,14 @@ The **latency meter** ([`latency.js`](../../packages/server/src/latency.js)) is 
 `status.devices[]`:
 
 ```
-latencyMs = audioMs + analysisMs + networkMs + frameMs - offsetMs
+latencyMs = audioMs + analysisMs + lightMs - offsetMs      lightMs = networkMs + frameMs, or the device's lightLatencyMs
 ```
 
 | Part | Value |
 | --- | --- |
 | `audioMs` | live from a browser: the browser's own estimate (input latency + its 512-sample chunk + half the WebSocket round trip); from the sound card: the chunk length; songs: 0 (their clock already allows for the speakers) |
-| `analysisMs` | 23 for live audio (one 11.6 ms hop plus onset smoothing), else 0 |
-| `networkMs` | half the best HTTP round trip (UDP needs no answer) |
+| `analysisMs` | 23 for live audio (the analyser's clock is the middle of its last 1024-sample frame), else 0; 0 when the analyser gives its newest sample's time (`an.sampleT`) |
+| `networkMs` | half the best HTTP round trip (UDP needs no answer); 5 when not measured yet (DMX, Govee, a new device) |
 | `frameMs` | the device's own update time (Hue 100, Hue fast 20, Nanoleaf 33, Govee 33, LIFX 50, WiZ 100, Kasa 100, Yeelight 50, Twinkly 40), else one frame at our rate |
 | `offsetMs` | `settings.syncOffsetMs` |
 
@@ -81,6 +81,42 @@ latencyMs = audioMs + analysisMs + networkMs + frameMs - offsetMs
 `wifi` (signal under 45% or -72 dBm; very weak under 25% or -82 dBm), `slow` (over 60 ms each way), `notlive` (WLED
 isn't showing the stream after 4 s: "Receive UDP realtime" is off), `frames` (WLED shows fewer than 60% of the frames
 we send), `power` (WLED's limit, or ours, is holding brightness back).
+
+## Light timing
+
+Lights are late by different amounts: WLED about 20 ms, LIFX 55, Hue basic and WiZ about 105. Without help a kick
+shows on WLED and on Hue 80 ms apart. When the beat is known ahead, the runtime lines them up:
+
+1. **Lookahead.** Each frame is drawn once, for `now + L`, where `L` is the largest `lightMs` among the lights that
+   show something now (enabled, not virtual, not offline), at most `LOOKAHEAD_CAP_MS` (250). A slower light is late
+   by the rest. Live, the sound's way in (`audioMs + analysisMs`) is added too. So is half a frame (a light shows a
+   frame for one frame time; its middle counts) and the render time.
+2. **Hold.** Each light's frame is held back by `L - lightMs` in a short queue (`queueOut`, `flushOutputs`: one
+   timer sends whatever is due). The slowest light gets its frame at once. So every light shows the same moment of
+   the music at the same time.
+3. **Trim.** `settings.syncOffsetMs` (and `syncOffsets` per sound output) stays what it was: a trim on top, for the
+   speakers' own delay. It is added to the music clock as before.
+
+Drawing once matters: effects keep state from frame to frame and start again when the time jumps back
+(`effects.js` `st()`). So the plan is worked out 4 times a second and `L` moves at most 1 ms a frame; it only jumps
+when the source changes (a new clock anyway). The preview and phones are held back like a light 40 ms late.
+
+"Known ahead" means a song, a remembered song (beat map), live audio with **Predict beats** on, DJ Link, MIDI clock,
+Ableton Link, the metronome, and the ambient look. Live audio with prediction off is **reactive**: nothing is drawn
+ahead or held back, and each light shows what was heard as fast as it can. Pads (flash, strobe) and camera mapping
+aren't drawn ahead; pads are held back with the lights, mapping goes out at once.
+
+A light's own delay is estimated (`lightLatency()`), or set by hand: `PATCH /api/devices/:id {lightLatencyMs: 0-500}`
+(`null` goes back to the estimate). `status.timing` has the mode, `lookaheadMs`, `leadMs` and the frame loop's
+interval and jitter; each `status.devices[].timing` has `lightMs`, `auto`, `holdMs` and `shownMs` (the delay left,
+what the meter shows: about 0 when lined up, the trim aside).
+
+The frame loop is a chain of timeouts against deadlines (`frameTick`): the next frame is due one frame time after the
+last was due, and the timeout asks for what is left. A loop more than a frame behind starts again from now. With a
+busy event loop the frame interval's standard deviation went from 6.5 ms (setInterval) to 4.4 ms, and the worst late
+frame from 109 ms to 17 ms; idle, from 1.8 ms to 0.8 ms.
+
+DDP and the smart-light protocols carry no timestamps, so this can't be done on the controllers: the waiting is ours.
 
 ## Power limiter
 
@@ -177,5 +213,7 @@ The wire formats are in [protocols.md](../protocols.md).
 
 `packages/outputs/test/` checks the packets byte by byte against pretend devices (`fake-lights.js`: LIFX, WiZ, Kasa,
 Yeelight, Twinkly; `dtls-server.js`: a separately written DTLS server for Hue fast mode; `scripts/fake-wled.js`).
-`packages/server/test/lights.test.js`, `latency.test.js`, `perf.test.js` and `pro.test.js` cover the runtime's side.
+`packages/server/test/lights.test.js`, `latency.test.js`, `perf.test.js` and `pro.test.js` cover the runtime's side;
+`timing.test.js` checks that a kick lands within ±10 ms of the beat on pretend lights 10, 50 and 120 ms slow, at the
+same moment.
 See [testing](testing.md).

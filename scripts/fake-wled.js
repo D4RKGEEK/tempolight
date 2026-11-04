@@ -8,7 +8,8 @@ import { fileURLToPath } from "node:url";
 
 export async function startFakeWled({ name = "Fake WLED", leds = 300, httpPort = 0, ddpPort = 0, quiet = true } = {}) {
   const dev = { name, leds, frames: 0, badPackets: 0, lastFrame: new Uint8Array(leds * 3), maxPixel: 0, state: { on: true, bri: 128, seg: [{ id: 0, start: 0, stop: leds, n: "Main" }] }, posts: [], frameTimes: [],
-    override: {} }; // tests set override.wifi {rssi, signal}, override.leds {fps, pwr, maxpwr} or override.live to pretend trouble
+    override: {}, onFrame: null }; // tests set override.wifi {rssi, signal}, override.leds {fps, pwr, maxpwr} or override.live to pretend trouble;
+                                   // onFrame(rgb, performance.now()) is called with each whole frame as it arrives (timing tests)
   const pending = new Uint8Array(leds * 3);
   const udp = dgram.createSocket("udp4");
   udp.on("message", msg => {
@@ -17,7 +18,7 @@ export async function startFakeWled({ name = "Fake WLED", leds = 300, httpPort =
     if (msg.length !== 10 + len) { dev.badPackets++; return; }
     pending.set(msg.subarray(10, 10 + Math.max(0, Math.min(len, pending.length - off))), off);
     dev.maxPixel = Math.max(dev.maxPixel, (off + len) / 3);
-    if (msg[0] & 0x01) { dev.frames++; dev.lastFrame.set(pending); dev.lastFrameAt = Date.now(); dev.frameTimes.push(dev.lastFrameAt); if (dev.frameTimes.length > 400) dev.frameTimes.splice(0, 200); }
+    if (msg[0] & 0x01) { dev.frames++; dev.lastFrame.set(pending); dev.lastFrameAt = Date.now(); dev.frameTimes.push(dev.lastFrameAt); if (dev.frameTimes.length > 400) dev.frameTimes.splice(0, 200);  if (dev.onFrame) dev.onFrame(dev.lastFrame, performance.now()); }
   });
   await new Promise(r => udp.bind(ddpPort, "127.0.0.1", r));
   dev.ddpPort = udp.address().port;

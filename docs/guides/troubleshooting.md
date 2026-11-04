@@ -24,7 +24,8 @@ flowchart TD
 ![Sound to light](../images/guides/latency.png)
 
 **Devices → Sound to light** shows, for each light, roughly how long after a sound it shows it, and what may be
-wrong. The same delay is in the **Delay** column of the Devices table, and Home shows a badge with the slowest light
+wrong. When the beat is known ahead, slow lights are made up for by themselves (see below): the meter then shows
+what is left, usually 0 ms. The same delay is in the **Delay** column of the Devices table, and Home shows a badge with the slowest light
 (*Delay 34 ms · 1 warning*). Hover a bar (or read the line under it) to see what the delay is made of:
 
 | Part | What it is |
@@ -38,6 +39,25 @@ wrong. The same delay is in the **Delay** column of the Devices table, and Home 
 **Green** is under 40 ms, which nobody notices; **orange** under 80 ms; **red** above. Songs played in the app don't
 have the first two parts: their beat map is known ahead. What the meter can't see is your speakers' own delay
 (Bluetooth adds a lot): that's what **Fix the timing automatically** measures.
+
+### Slow and fast lights together
+
+Some lights are slower than others. Hue and WiZ show a colour about 100 ms after it is sent; WLED about 20 ms.
+Tempolight makes up for it by itself:
+
+- It draws each frame a little ahead, as far as the slowest light is late.
+- It holds the faster lights back by the difference.
+- So a kick flashes on all of them at the same moment, on the beat.
+
+This works when the beat is known ahead: songs in the app, remembered songs, live listening with **Predict beats**
+on, DJ Link, MIDI clock, Ableton Link and the metronome. With **Predict beats** off, each light shows what it heard as
+fast as it can, so slow lights stay late.
+
+It goes at most 250 ms ahead. The pads (flash, strobe) wait with the lights, so they all flash together.
+
+If one light is still early or late, set its delay by hand: `PATCH /api/devices/<id>` with `{"lightLatencyMs": 150}`
+(`null` goes back to automatic). **Light timing** on the Music page is still there: it moves all lights at once, for
+your speakers' delay.
 
 The warnings it shows:
 

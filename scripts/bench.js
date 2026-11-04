@@ -17,8 +17,8 @@ const SECONDS = Number(arg("seconds", 20)), LEDS = Number(arg("leds", 700)), SON
 const now = () => performance.now();
 
 // ---------------------------------------------------------------- timers: the frame loop and the status broadcast
-// The runtime's frame loop is a setInterval of 1000/fps ms; the status broadcast one of 250 ms. They are timed from
-// outside, so this script measures any version of Tempolight the same way.
+// The runtime's frame loop (a setInterval of 1000/fps ms in older versions, a chain of timeouts now); the status broadcast is a
+// setInterval of 250 ms. They are timed from outside, so this script measures any version of Tempolight the same way.
 const T = { frame: [], status: 0, statusN: 0 };
 const realSetInterval = globalThis.setInterval;
 globalThis.setInterval = (fn, ms, ...a) => {
@@ -26,6 +26,9 @@ globalThis.setInterval = (fn, ms, ...a) => {
   if (ms === 250) return realSetInterval(() => { const t0 = now(); try { fn(...a); } finally { T.status += now() - t0; T.statusN++; } }, ms);
   return realSetInterval(fn, ms, ...a);
 };
+// (newer versions run the frame loop as a chain of timeouts, each against its deadline: the callback is "frameTick")
+const realSetTimeout = globalThis.setTimeout;
+globalThis.setTimeout = (fn, ms, ...a) => fn && fn.name === "frameTick" ? realSetTimeout(() => { const t0 = now(); try { fn(...a); } finally { T.frame.push(now() - t0); } }, ms) : realSetTimeout(fn, ms, ...a);
 
 const { createApp } = await import(path.join(root, "packages/server/src/app.js"));
 const engine = await import(path.join(root, "packages/engine/src/index.js"));
