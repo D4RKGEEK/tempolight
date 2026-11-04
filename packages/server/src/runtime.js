@@ -12,7 +12,7 @@ import { buildLayout, createEffects, createDirector, segmentRanges, songView, me
  *   discoverWled, startCapture, listSources, splitCommand, RATE
  */
 export function createRuntime(store, { io, logger = console } = {}) {
-  const { DDPSender, E131Sender, GoveeSender, AudioSyncSender, getInfo, setState, setSegments, ipOf, discoverWled, startCapture, listSources, splitCommand, RATE } = io;
+  const { DDPSender, E131Sender, GoveeSender, OpenRGBSender, AudioSyncSender, getInfo, setState, setSegments, ipOf, discoverWled, startCapture, listSources, splitCommand, RATE } = io;
   const data = () => store.data;
   const log = [], listeners = new Set();
   function note(msg, level = "info") { const e = { t: Date.now(), level, msg }; log.push(e); if (log.length > 200) log.shift(); for (const f of listeners) f(e); if (logger) logger.log(`[tempolight] ${msg}`); }
@@ -40,9 +40,9 @@ export function createRuntime(store, { io, logger = console } = {}) {
       const used = Math.max(0, ...ranges.filter(r => r.dev === d.id).map(r => r.end + 1));
       const size = Math.max(used, 1), ip = ipOf(d.host), port = d.ddpPort || 4048;
       let o = outs.get(d.id);
-      const proto = d.kind === "govee" && GoveeSender ? "govee" : d.protocol && d.protocol !== "ddp" && E131Sender ? d.protocol : "ddp", key = `${ip}|${port}|${proto}|${d.universe ?? ""}|${d.goveeMode || ""}|${d.leds}`;
+      const proto = d.kind === "govee" && GoveeSender ? "govee" : d.kind === "openrgb" && OpenRGBSender ? "openrgb" : d.protocol && d.protocol !== "ddp" && E131Sender ? d.protocol : "ddp", key = `${ip}|${port}|${proto}|${d.universe ?? ""}|${d.goveeMode || ""}|${d.leds}|${d.orgbIndex ?? ""}`;
       if (!o || o.key !== key) { if (o) o.sender.close();
-        o = { sender: proto === "ddp" ? new DDPSender(ip, port) : proto === "govee" ? new GoveeSender(ip, { mode: d.goveeMode, segments: d.goveeSegments || d.leds, port }) : new E131Sender(ip, { protocol: proto, universe: d.universe }), ip, port, key }; outs.set(d.id, o); }
+        o = { sender: proto === "ddp" ? new DDPSender(ip, port) : proto === "openrgb" ? new OpenRGBSender(ip, { port, index: d.orgbIndex || 0 }) : proto === "govee" ? new GoveeSender(ip, { mode: d.goveeMode, segments: d.goveeSegments || d.leds, port }) : new E131Sender(ip, { protocol: proto, universe: d.universe }), ip, port, key }; outs.set(d.id, o); }
       o.size = size; o.buf = new Uint8Array(size * 3); o.used = used;
     }
     col8 = new Uint8Array(L.N * 3);
@@ -236,6 +236,9 @@ export function createRuntime(store, { io, logger = console } = {}) {
   async function checkDevice(d) {
     const h = health.get(d.id) || {}; health.set(d.id, h);
     if (d.virtual) return Object.assign(h, { online: true, version: "virtual", ledsReported: d.leds, lastSeen: Date.now() });
+    if (d.kind === "openrgb") { try { const list = await io.listOpenRGB(ipOf(d.host), d.ddpPort || 6742), c = list.find(x => x.index === (d.orgbIndex || 0));
+        return Object.assign(h, { online: !!c, version: c ? `OpenRGB: ${c.name}` : "OpenRGB", ledsReported: c?.leds, lastSeen: Date.now(), error: c ? null : "device not found in OpenRGB" }); }
+      catch (e) { if (h.online !== false) note(`${d.name}: OpenRGB is not answering (${d.host}). Is its SDK server running?`, "warn"); return Object.assign(h, { online: false, error: e.message }); } }
     if (d.kind === "govee") return Object.assign(h, { online: true, version: "Govee (LAN)", ledsReported: d.leds, lastSeen: Date.now() }); // Govee answers status on a shared port; not checked
     try { const info = await getInfo(d.host, 2500); Object.assign(h, { online: true, rssi: info.rssi, signal: info.signal, version: info.version, ledsReported: info.leds, fps: info.fps, live: info.live, lastSeen: Date.now(), error: null });
       if (!d.leds && info.leds) { d.leds = info.leds; store.save(); } }
@@ -246,7 +249,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
   async function healthLoop() {
     await Promise.all(data().devices.map(checkDevice));
     // a controller that went missing may have a new address from the router: look for it by name
-    const lost = data().devices.filter(d => !d.virtual && d.kind !== "govee" && health.get(d.id)?.online === false);
+    const lost = data().devices.filter(d => !d.virtual && !d.kind && health.get(d.id)?.online === false);
     if (lost.length && Date.now() > rediscoverAt) { rediscoverAt = Date.now() + 5 * 60_000;
       try { const found = await discoverWled({ scan: false, timeoutMs: 2000 });
         for (const d of lost) { const f = found.find(x => x.name === d.name && x.host !== d.host); if (f) { note(`${d.name} moved to ${f.host}; updated`); d.host = f.host; store.save(); rebuild(); } } } catch {} }
@@ -267,7 +270,7 @@ export function createRuntime(store, { io, logger = console } = {}) {
   async function setPower(on) {
     data().show.power = !!on; store.save(); if (!on) rt.powerOffAt = performance.now();
     note(on ? "Lights on" : "Lights off");
-    await Promise.all(data().devices.filter(d => d.enabled && !d.virtual).map(d => d.kind === "govee" ? outs.get(d.id)?.sender.power?.(!!on) : setState(d.host, { on: !!on }, 2000).catch(() => {})));
+    await Promise.all(data().devices.filter(d => d.enabled && !d.virtual).map(d => d.kind === "openrgb" ? null : d.kind === "govee" ? outs.get(d.id)?.sender.power?.(!!on) : setState(d.host, { on: !!on }, 2000).catch(() => {})));
   }
 
   // ---------------------------------------------------------------- live controls (pads, OSC, API)

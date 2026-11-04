@@ -59,7 +59,7 @@ export function createCore({ store, runtime, env }) {
     const y = 1 + (shapes.length % 7) * 1.1;
     shapes.push({ type: "line", name: dev.name, count: dev.leds || 60, dev: dev.id, rot: 0, start: 0, rev: false, from: null, pts: [[1.5, y], [14.5, y]] });
   }
-  async function addDevice({ host, name, ddpPort, leds, force, virtual, kind, goveeMode }) {
+  async function addDevice({ host, name, ddpPort, leds, force, virtual, kind, goveeMode, index }) {
     if (virtual) { // a pretend controller: shows in the preview, sends nothing. For trying the app without hardware.
       const dev = { id: env.newId("d"), name: String(name || "Virtual room").slice(0, 60), host: "virtual", ddpPort: 4048, leds: Number(leds) || 600, enabled: true, virtual: true };
       data().devices.push(dev); if (!data().room.shapes.length) data().room.shapes = buildPreset("living", [dev]); else autoPlace(dev);
@@ -67,6 +67,12 @@ export function createCore({ store, runtime, env }) {
     }
     host = String(host || "").trim().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
     if (!host) throw new HttpError(400, "Enter the controller's IP address, for example 192.168.1.42");
+    if (kind === "openrgb") { // PC lighting through OpenRGB's SDK server: one OpenRGB device = one Tempolight device
+      const idx = Math.max(0, Math.round(Number(index) || 0)), port = Number(ddpPort) || 6742, dup = data().devices.find(d => d.kind === "openrgb" && d.host === host && (d.orgbIndex || 0) === idx); if (dup) return dup;
+      let n = Number(leds) || 0, nm = name; if (!n && env.listOpenRGB) { try { const c = (await env.listOpenRGB(env.ipOf(host), port)).find(x => x.index === idx); if (c) { n = c.leds; nm ||= c.name; } } catch (e) { if (!force) throw new HttpError(400, `Couldn't reach OpenRGB at ${host}:${port} (${e.message}). In OpenRGB, open the SDK Server tab and press Start server.`); } }
+      const dev = { id: env.newId("d"), name: String(nm || "OpenRGB device").slice(0, 60), host, kind: "openrgb", orgbIndex: idx, ddpPort: port, leds: Math.max(1, Math.min(2000, n || 10)), enabled: true };
+      data().devices.push(dev); autoPlace(dev); runtime.rebuild(); runtime.checkDevice(dev); runtime.note(`Added ${dev.name} (OpenRGB, ${dev.leds} LEDs)`); changed("devices"); return dev;
+    }
     const dup = data().devices.find(d => d.host === host); if (dup) return dup;
     if (kind === "govee") { // Govee LAN: nothing to ask the light; it's a few "LEDs" in the room that all get the light's colour (or its segments)
       const dev = { id: env.newId("d"), name: String(name || "Govee light").slice(0, 60), host, kind: "govee", goveeMode: goveeMode === "segments" ? "segments" : "color", leds: Math.max(1, Math.min(300, Number(leds) || 20)), ddpPort: 4003, enabled: true };
@@ -114,6 +120,7 @@ export function createCore({ store, runtime, env }) {
       Object.assign(s.night, { enabled: b.night.enabled ?? s.night.enabled, from: b.night.from ?? s.night.from, to: b.night.to ?? s.night.to,
         maxBrightness: b.night.maxBrightness !== undefined ? num(b.night.maxBrightness, 0.02, 1) : s.night.maxBrightness, warm: b.night.warm ?? s.night.warm }); }
     if (b.songMemory !== undefined) s.songMemory = !!b.songMemory;
+    if (b.requests !== undefined) s.requests = !!b.requests;
     if (b.djlink) Object.assign(s.djlink, { enabled: b.djlink.enabled ?? s.djlink.enabled, port: b.djlink.port !== undefined ? Math.round(num(b.djlink.port, 1024, 65535)) : s.djlink.port });
     if (b.mqtt) { const m = s.mqtt; for (const k of ["url", "username", "prefix", "base"]) if (b.mqtt[k] !== undefined) m[k] = String(b.mqtt[k]).trim().slice(0, 200);
       if (b.mqtt.password) m.password = String(b.mqtt.password).slice(0, 200); if (b.mqtt.clearPassword) m.password = ""; if (b.mqtt.enabled !== undefined) m.enabled = !!b.mqtt.enabled;
@@ -167,6 +174,27 @@ export function createCore({ store, runtime, env }) {
   route("POST", "/api/update", "admin", async () => { if (!env.update) throw new HttpError(400, "Nothing to update in the online demo"); try { const r = await env.update.apply(); runtime.note("Updating Tempolight and restarting…"); return r; } catch (e) { throw new HttpError(400, e.message); } });
   route("GET", "/api/songs", null, () => data().songs.map(e => ({ id: e.id, name: e.name, bpm: e.bpm, dur: e.dur, style: e.style, drops: e.drops.length, at: e.at })));
   route("DELETE", "/api/songs/:id", "admin", (ctx, p) => { if (!runtime.forget(p.id)) throw new HttpError(404, "That song isn't remembered"); changed("songs"); return { ok: true }; });
+  // guest song requests
+  const reqList = () => data().requests.filter(r => !r.done).sort((a, b) => b.votes - a.votes || a.at - b.at).map(({ id, title, by, votes, at }) => ({ id, title, by, votes, at }));
+  const norm = t => String(t).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  let reqTimes = [];
+  route("GET", "/api/requests", null, () => ({ enabled: !!data().settings.requests, requests: reqList() }));
+  route("POST", "/api/requests", null, (ctx) => {
+    if (!data().settings.requests) throw new HttpError(403, "Song requests are turned off");
+    const title = String(ctx.body.title || "").replace(/\s+/g, " ").trim().slice(0, 120), by = String(ctx.body.by || "").replace(/\s+/g, " ").trim().slice(0, 40);
+    if (title.length < 2) throw new HttpError(400, "Type a song, for example: Daft Punk – One More Time");
+    const now = Date.now(); reqTimes = reqTimes.filter(x => now - x < 60000); if (reqTimes.length >= 30) throw new HttpError(429, "Lots of requests right now. Try again in a minute.");
+    reqTimes.push(now);
+    const list = data().requests, same = list.find(r => !r.done && norm(r.title) === norm(title));
+    if (same) { same.votes++; changed("requests"); return { ...same, merged: true }; }
+    const r = { id: env.newId("r"), title, by, votes: 1, at: now, done: false }; list.push(r);
+    while (list.length > 200) list.splice(list.findIndex(x => x.done) >= 0 ? list.findIndex(x => x.done) : 0, 1);
+    runtime.note(`Song request: ${title}${by ? ` (from ${by})` : ""}`); changed("requests"); return r;
+  });
+  route("POST", "/api/requests/:id/vote", null, (ctx, p) => { const r = data().requests.find(x => x.id === p.id && !x.done); if (!r) throw new HttpError(404, "That request is gone"); r.votes++; changed("requests"); return r; });
+  route("PATCH", "/api/requests/:id", "admin", (ctx, p) => { const r = data().requests.find(x => x.id === p.id); if (!r) throw new HttpError(404, "No such request"); if (ctx.body.done !== undefined) r.done = !!ctx.body.done; changed("requests"); return r; });
+  route("DELETE", "/api/requests/:id", "admin", (ctx, p) => { const l = data().requests, i = l.findIndex(x => x.id === p.id); if (i < 0) throw new HttpError(404, "No such request"); l.splice(i, 1); changed("requests"); return { ok: true }; });
+  route("DELETE", "/api/requests", "admin", () => { data().requests = []; changed("requests"); return { ok: true }; });
   route("GET", "/api/network", null, () => ({ addresses: env.lan ? env.lan() : [] })); // for the phone QR code
   route("GET", "/api/log", null, () => runtime.log.slice(-100));
 
@@ -219,8 +247,11 @@ export function createCore({ store, runtime, env }) {
   route("POST", "/api/discover", "admin", async (ctx) => {
     const b = ctx.body, [found, govee] = await Promise.all([env.discoverWled({ scan: b.scan !== false, timeoutMs: 2500, extraHosts: (b.hosts || []).map(String) }),
       env.discoverGovee ? env.discoverGovee({ timeoutMs: 2500 }).catch(() => []) : []]);
+    let orgb = []; if (env.listOpenRGB) orgb = await Promise.race([env.listOpenRGB("127.0.0.1").catch(() => []), new Promise(r => setTimeout(() => r([]), 1500))]); // OpenRGB on this computer
+    const haveOrgb = new Set(data().devices.filter(d => d.kind === "openrgb").map(d => d.orgbIndex || 0));
     const known = new Set(data().devices.map(d => env.ipOf(d.host)));
-    return [...found.map(f => ({ ...f, added: known.has(f.ip) })), ...govee.map(g => ({ ...g, ip: g.host, kind: "govee", leds: 0, added: known.has(g.host) }))];
+    return [...found.map(f => ({ ...f, added: known.has(f.ip) })), ...govee.map(g => ({ ...g, ip: g.host, kind: "govee", leds: 0, added: known.has(g.host) })),
+      ...orgb.map(c => ({ host: "127.0.0.1", ip: "127.0.0.1", name: c.name, leds: c.leds, kind: "openrgb", index: c.index, added: haveOrgb.has(c.index) }))];
   });
 
   // room

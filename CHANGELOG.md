@@ -5,6 +5,10 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+- OpenRGB: PC lighting (RAM, fans, keyboards, motherboards, GPUs) joins the show through OpenRGB's SDK server. Scan network lists its devices with their LED counts.
+
+- Guest song requests: guests scan a QR code (Music page), ask for songs and vote; the host sees the most wanted on top and marks them played. Works when settings are locked.
+
 - Pioneer Pro DJ Link (Settings → Integrations): Tempolight listens to CDJ/XDJ beat packets and takes the tempo and bar position from the decks, with or without live audio. It only listens, so it can't disturb the DJ's setup.
 
 - Song memory: songs played through Tempolight are remembered (a compact beat map, about 10 kB each). When one plays again from anywhere else while Tempolight listens live, it is recognised in about 15 seconds from its loudness shape, lined up with the kicks to a few milliseconds, and the lights follow the stored beat map, so drops are known ahead. Status shows `recognised`.

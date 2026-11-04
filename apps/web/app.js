@@ -217,6 +217,9 @@ function musicPage(el) {
       <label class="check"><input type="checkbox" id="m-pred" ${s.predict ? "checked" : ""}> Predict beats when listening live (lights land on the beat instead of just after it)</label>
       <div class="field"><label>Metronome when nothing plays</label><div class="row"><label class="check"><input type="checkbox" id="m-met" ${s.metronome.enabled ? "checked" : ""}> On</label><input type="number" id="m-bpmset" min="40" max="220" value="${s.metronome.bpm}" style="width:90px"> <span class="faint">BPM</span></div></div>
     </div>`, "span-6")}
+    ${panel("Guest requests", `<span id="m-reqn"></span>`, `<label class="check"><input type="checkbox" id="m-reqon" ${s.requests ? "checked" : ""}> On</label><button class="btn sm" id="m-reqclear" type="button">Clear</button>`, `<div class="pb phones"><div class="qr" id="m-reqqr"></div><div class="stack">
+      <p class="muted">Guests scan the code to ask for songs and vote; the most wanted are on top.</p>
+      <div class="tablewrap"><table><tbody id="m-reqs"></tbody></table></div><p class="faint" style="font-size:12.5px" id="m-requrl"></p></div></div>`, "span-6")}
     ${panel("Song memory", `<span id="m-memn"></span>`, `<label class="check"><input type="checkbox" id="m-mem" ${s.songMemory ? "checked" : ""}> On</label>`, `<div class="pb stack">
       <p class="muted">Songs you play here are remembered. When one plays again from anywhere else (Spotify, a DJ, the radio) while Tempolight listens live, it is recognised after about 15 seconds and the lights follow its full beat map: build-ups and drops are known ahead.</p>
       <div class="tablewrap"><table><tbody id="m-songs"><tr><td class="faint">Loading…</td></tr></tbody></table></div></div>`, "span-6")}
@@ -235,6 +238,15 @@ function musicPage(el) {
     tb.innerHTML = list.length ? list.slice().reverse().map(e => `<tr><td>${esc(e.name)}</td><td class="num faint">${Math.round(e.bpm)} BPM</td><td class="num faint">${fmtT(e.dur)}</td><td class="num faint">${e.drops} drop${e.drops === 1 ? "" : "s"}</td><td>${lockedOut ? "" : `<button class="btn sm" data-forget="${e.id}" type="button">Forget</button>`}</td></tr>`).join("")
       : '<tr><td class="faint">Nothing yet. Play a song on this page and it will be remembered.</td></tr>';
     $$("[data-forget]").forEach(b => b.onclick = () => act(() => api("DELETE", `/api/songs/${b.dataset.forget}`), "Forgotten").then(songs).catch(() => {})); }
+  async function requests() { const r = await api("GET", "/api/requests").catch(() => ({ requests: [] })), tb = $("#m-reqs"); if (!tb) return;
+    $("#m-reqn").textContent = r.requests.length ? `${r.requests.length} waiting` : "";
+    tb.innerHTML = r.requests.length ? r.requests.map(q => `<tr><td>${esc(q.title)}${q.by ? `<br><span class="faint" style="font-size:12px">from ${esc(q.by)}</span>` : ""}</td><td class="num">▲ ${q.votes}</td><td>${lockedOut ? "" : `<button class="btn sm" data-rdone="${q.id}" type="button">Played</button>`}</td></tr>`).join("")
+      : '<tr><td class="faint">No requests yet.</td></tr>';
+    $$("[data-rdone]").forEach(b => b.onclick = () => act(() => api("PATCH", `/api/requests/${b.dataset.rdone}`, { done: true })).then(requests).catch(() => {})); }
+  $("#m-reqon").onchange = e => act(() => api("PATCH", "/api/settings", { requests: e.target.checked }), e.target.checked ? "Requests on" : "Requests off").then(refreshState).catch(() => {});
+  $("#m-reqclear").onclick = () => { if (confirm("Clear all song requests?")) act(() => api("DELETE", "/api/requests"), "Cleared").then(requests).catch(() => {}); };
+  if (!unlocked()) { $("#m-reqon").disabled = true; $("#m-reqclear").disabled = true; }
+  guestUrl("/request").then(async url => { const { qrSvg } = await import("/qr.js"), box = $("#m-reqqr"); if (!box) return; box.innerHTML = qrSvg(url, { px: 4 }); $("#m-requrl").innerHTML = `<a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`; });
   $("#m-mem").onchange = e => act(() => api("PATCH", "/api/settings", { songMemory: e.target.checked }), e.target.checked ? "Song memory on" : "Song memory off").then(refreshState).catch(() => {});
   if (!canShare) $("#m-scr").disabled = true;
   $("#m-scr").onclick = async () => { if (!app.screen) { const { createScreenShare } = await import("/screen.js"); app.screen = createScreenShare({ ws, onChange: sc => { if (sc.error) toast(sc.error, true); const b = $("#m-scr"), t = $("#m-scrst"); if (b) b.textContent = sc.active ? "Stop sharing" : "Share a screen…"; if (t) t.textContent = sc.active ? `Sharing ${sc.label}` : "Off"; } }); }
@@ -296,10 +308,10 @@ function musicPage(el) {
     $("#m-stop").hidden = !(a.mode === "system" || a.mode === "mic");
     $("#m-system").setAttribute("aria-pressed", a.mode === "system"); $("#m-mic").setAttribute("aria-pressed", a.mode === "mic");
   }
-  renderQueue(); songs();
+  renderQueue(); songs(); requests();
   const partName = { calm: "Calm", build: "Build-up", drop: "Drop", silent: "Quiet", idle: "–" };
   return {
-    onAudio: renderQueue, onLog(e) { if (/^Remembered|^Song memory/.test(e.msg)) songs(); },
+    onAudio: renderQueue, onLog(e) { if (/^Remembered|^Song memory/.test(e.msg)) songs(); }, onChanged(w) { if (w.has("requests")) requests(); },
     onStatus(m) {
       $("#m-src").textContent = m.sourceLabel; $("#m-bpm").textContent = m.bpm ? m.bpm.toFixed(0) : "–"; $("#m-part").textContent = partName[m.part] || m.part; $("#m-style").textContent = m.source === "idle" ? "–" : m.styleName; $("#m-voc").textContent = m.vocal == null ? "–" : m.vocal > 0.35 ? "Yes" : m.vocal > 0.15 ? "A little" : "No";
       const bars = $$("#m-spec i"); bars.forEach((b, i) => b.style.height = (m.bands ? Math.max(2, m.bands[i] * 100) : 2) + "%");
@@ -309,7 +321,6 @@ function musicPage(el) {
       const c = app.state.settings.capture; $("#m-cap").textContent = c.enabled ? "Stop listening on the server" : "Start listening on the server";
       if (!lockedOut) $("#m-capst").innerHTML = m.capture ? (m.capture.error ? `<span class="badge err">${esc(m.capture.error)}</span>` : m.capture.running ? `<span class="badge live"><i></i>Listening: ${esc(m.capture.label)}</span>` : "Starting…") : "Not listening on the server.";
     },
-    onChanged() { },
   };
 }
 
@@ -457,11 +468,15 @@ function livePage(el) {
     destroy() { prev.destroy(); removeEventListener("keydown", kd); removeEventListener("keyup", ku); if (midi) [...midi.inputs.values()].forEach(i => i.onmidimessage = null); } };
 }
 
-async function phoneQr() {
-  let url = location.origin + "/phone";
-  if (!DEMO && /^(localhost|127\.|\[?::1)/.test(location.hostname)) { // a phone can't reach "localhost": use this computer's network address
+/** A link a guest's phone can open: a phone can't reach "localhost", so use this computer's network address. */
+async function guestUrl(path) {
+  if (!DEMO && /^(localhost|127\.|\[?::1)/.test(location.hostname)) {
     const n = await api("GET", "/api/network").catch(() => ({ addresses: [] })), a = n.addresses.find(x => /^(192\.168|10\.|172\.(1[6-9]|2\d|3[01]))/.test(x)) || n.addresses[0];
-    if (a) url = `${location.protocol}//${a}${location.port ? ":" + location.port : ""}/phone`; }
+    if (a) return `${location.protocol}//${a}${location.port ? ":" + location.port : ""}${path}`; }
+  return location.origin + path;
+}
+async function phoneQr() {
+  const url = await guestUrl("/phone");
   const { qrSvg } = await import("/qr.js"), box = $("#ph-qr"); if (!box) return;
   box.innerHTML = qrSvg(url, { px: 5 }); $("#ph-url").innerHTML = `Or open <a href="${esc(url)}" target="_blank" rel="noopener">${esc(url)}</a>`;
 }
@@ -512,10 +527,10 @@ function devicesPage(el) {
   if (!unlocked()) return lockScreen(el, "Device setup");
   const st = app.state;
   el.innerHTML = `${panel("Devices", "WLED controllers and other lights that receive the show", `<button class="btn" id="d-scan" type="button">Scan network</button><button class="btn" id="d-virtual" type="button">Add virtual device</button>`, `<div class="tablewrap"><table><thead><tr><th>On</th><th>Name</th><th>Address</th><th class="num">LEDs</th><th class="num">Used</th><th>Protocol</th><th class="num">Port / universe</th><th class="num" title="Power supply limit in amps. Brightness is capped so the strip never draws more.">Power limit (A)</th><th class="num">Drawing now</th><th>Status</th><th>Firmware</th><th class="num">Frames sent</th><th></th></tr></thead><tbody id="d-rows"></tbody></table></div>`, "span-12")}
-    ${panel("Add a controller", "", "", `<div class="pb"><div class="row"><input id="d-ip" placeholder="IP address, e.g. 192.168.1.42 (or host:port)" style="max-width:340px"><input id="d-name" placeholder="Name (optional)" style="max-width:220px"><select id="d-kind" aria-label="Kind of light" style="max-width:190px">${opt("wled", "WLED", true)}${opt("govee", "Govee (LAN, beta)")}</select><button class="btn primary" id="d-add" type="button">Add</button></div>
+    ${panel("Add a controller", "", "", `<div class="pb"><div class="row"><input id="d-ip" placeholder="IP address, e.g. 192.168.1.42 (or host:port)" style="max-width:340px"><input id="d-name" placeholder="Name (optional)" style="max-width:220px"><select id="d-kind" aria-label="Kind of light" style="max-width:190px">${opt("wled", "WLED", true)}${opt("govee", "Govee (LAN, beta)")}${opt("openrgb", "OpenRGB (PC lighting)")}</select><button class="btn primary" id="d-add" type="button">Add</button></div>
       ${DEMO ? `<p class="callout" style="margin-top:8px">This demo has pretend controllers at ${Object.keys(demo.FAKE_WLED).join(", ")}. Press “Scan network” to find them.</p>` : ""}
       <p class="faint" style="margin-top:8px;font-size:12.5px">Power limit: enter your power supply's amps (for example 10 for a 5 V 10 A supply) and Tempolight keeps the strip under it, estimating about 60 mA per LED at full white. Find the address in the WLED app or your router. Tempolight sends light with DDP on UDP port 4048; in WLED, keep “Receive UDP realtime” on (Sync settings).
-      Govee lights (beta): turn on “LAN Control” for the light in the Govee Home app. One colour works on all LAN models; segments mode uses Govee's DreamView streaming and only some models support it.</p></div>`, "span-6")}
+      OpenRGB (RAM, fans, keyboards, motherboards): start OpenRGB's SDK server, then Scan network. Govee lights (beta): turn on “LAN Control” for the light in the Govee Home app. One colour works on all LAN models; segments mode uses Govee's DreamView streaming and only some models support it.</p></div>`, "span-6")}
     ${panel("Found on the network", `<span id="d-scanmsg">Press “Scan network” to look</span>`, "", `<div class="tablewrap"><table><tbody id="d-found"></tbody></table></div>`, "span-6")}`;
   function rows(m) {
     const s = m || app.status || { devices: [] };
@@ -523,13 +538,13 @@ function devicesPage(el) {
       const sig = h.signal != null ? `<span class="sig" title="Wi-Fi ${h.signal}%">${[25, 50, 75, 100].map((v, i) => `<i style="height:${4 + i * 3}px" class="${h.signal >= v - 12 ? "on" : ""}"></i>`).join("")}</span>` : "";
       return `<tr><td><input type="checkbox" data-en="${d.id}" ${d.enabled ? "checked" : ""} aria-label="Send to this device"></td><td><input value="${esc(d.name)}" data-name="${d.id}" style="width:150px"></td>
         <td>${d.virtual ? '<span class="faint">virtual</span>' : `<input class="mono" value="${esc(d.host)}" data-host="${d.id}" style="width:150px">`}</td>
-        <td class="num"><input type="number" min="1" value="${d.leds || ""}" data-leds="${d.id}"></td><td class="num">${h.used ?? 0}</td><td>${d.virtual ? "–" : d.kind === "govee" ? `<select data-gmode="${d.id}" aria-label="Govee mode">${opt("color", "Govee: one colour", d.goveeMode !== "segments")}${opt("segments", "Govee: segments (beta)", d.goveeMode === "segments")}</select>` : `<select data-proto="${d.id}" aria-label="Protocol">${opt("ddp", "DDP", !d.protocol || d.protocol === "ddp")}${opt("e131", "E1.31 (sACN)", d.protocol === "e131")}${opt("artnet", "Art-Net", d.protocol === "artnet")}</select>`}</td>
+        <td class="num"><input type="number" min="1" value="${d.leds || ""}" data-leds="${d.id}"></td><td class="num">${h.used ?? 0}</td><td>${d.virtual ? "–" : d.kind === "openrgb" ? `OpenRGB #${d.orgbIndex || 0}` : d.kind === "govee" ? `<select data-gmode="${d.id}" aria-label="Govee mode">${opt("color", "Govee: one colour", d.goveeMode !== "segments")}${opt("segments", "Govee: segments (beta)", d.goveeMode === "segments")}</select>` : `<select data-proto="${d.id}" aria-label="Protocol">${opt("ddp", "DDP", !d.protocol || d.protocol === "ddp")}${opt("e131", "E1.31 (sACN)", d.protocol === "e131")}${opt("artnet", "Art-Net", d.protocol === "artnet")}</select>`}</td>
         <td class="num">${d.virtual ? "–" : d.kind === "govee" ? (d.goveeMode === "segments" ? `<input type="number" min="1" max="60" title="Segments on the light" placeholder="segments" value="${d.goveeSegments || ""}" data-gseg="${d.id}" aria-label="Segments">` : "–") : (!d.protocol || d.protocol === "ddp") ? `<input type="number" min="1" max="65535" value="${d.ddpPort || 4048}" data-port="${d.id}">` : `<input type="number" min="0" max="63999" title="First universe" value="${d.universe ?? (d.protocol === "artnet" ? 0 : 1)}" data-univ="${d.id}" aria-label="First universe">`}</td>
         <td class="num"><input type="number" min="0" max="500" step="0.5" placeholder="none" value="${d.maxAmps || ""}" data-amps="${d.id}" aria-label="Power limit in amps"></td>
         <td class="num">${h.amps != null ? `${h.amps.toFixed(1)} A${h.limited ? ' <span class="badge warn" title="Brightness is being held back to stay under the limit">capped</span>' : ""}` : "–"}</td>
         <td>${!d.enabled ? '<span class="badge">Off</span>' : h.online ? `<span class="badge live"><i></i>Online</span> ${sig}` : h.online === false ? `<span class="badge err" title="${esc(h.error)}"><i></i>Offline</span>` : '<span class="badge">Checking</span>'}</td>
         <td class="mono faint">${esc(h.version || "")}</td><td class="num">${h.sent ?? 0}</td>
-        <td><button class="btn sm" data-id="${d.id}" type="button">Identify</button> ${d.virtual || d.kind === "govee" ? "" : `<button class="btn sm" data-seg="${d.id}" type="button" title="Write this room's segments into WLED">Send segments</button> <button class="btn sm" data-chk="${d.id}" type="button">Check</button>`} <button class="btn sm danger" data-del="${d.id}" type="button">Remove</button></td></tr>`; }).join("")
+        <td><button class="btn sm" data-id="${d.id}" type="button">Identify</button> ${d.virtual || d.kind ? "" : `<button class="btn sm" data-seg="${d.id}" type="button" title="Write this room's segments into WLED">Send segments</button> <button class="btn sm" data-chk="${d.id}" type="button">Check</button>`} <button class="btn sm danger" data-del="${d.id}" type="button">Remove</button></td></tr>`; }).join("")
       || '<tr><td colspan="13" class="faint">No devices yet. Scan the network or add one by address.</td></tr>';
     const patch = (id, b) => act(() => api("PATCH", `/api/devices/${id}`, b), "Saved").catch(() => {});
     $$("[data-en]").forEach(x => x.onchange = () => patch(x.dataset.en, { enabled: x.checked }));
@@ -548,15 +563,16 @@ function devicesPage(el) {
     $$("[data-del]").forEach(x => x.onclick = () => { if (confirm("Remove this device and its shapes from the room?")) act(() => api("DELETE", `/api/devices/${x.dataset.del}`), "Removed").catch(() => {}); });
   }
   rows();
-  $("#d-add").onclick = () => act(() => api("POST", "/api/devices", { host: $("#d-ip").value, name: $("#d-name").value || undefined, kind: $("#d-kind").value === "govee" ? "govee" : undefined }), "Device added").catch(e => {
+  $("#d-kind").onchange = e => { if (e.target.value === "openrgb" && !$("#d-ip").value) $("#d-ip").value = "127.0.0.1"; };
+  $("#d-add").onclick = () => act(() => api("POST", "/api/devices", { host: $("#d-ip").value, name: $("#d-name").value || undefined, kind: $("#d-kind").value === "wled" ? undefined : $("#d-kind").value }), "Device added").catch(e => {
     if (/add it anyway/.test(e.message) && confirm(e.message + "\n\nAdd it anyway?")) act(() => api("POST", "/api/devices", { host: $("#d-ip").value, name: $("#d-name").value || undefined, force: true }), "Device added").catch(() => {}); });
   $("#d-virtual").onclick = () => act(() => api("POST", "/api/devices", { virtual: true, name: "Virtual room" }), "Virtual device added").catch(() => {});
   $("#d-scan").onclick = async () => {
     $("#d-scanmsg").textContent = "Scanning…"; $("#d-scan").disabled = true;
     try { const found = await act(() => api("POST", "/api/discover", { scan: true }));
       $("#d-scanmsg").textContent = found.length ? `${found.length} found` : "None found. Check the controllers are on the same network.";
-      $("#d-found").innerHTML = found.map((f, i) => `<tr><td>${esc(f.name || "WLED")}</td><td class="mono">${esc(f.host)}</td><td class="num">${f.kind === "govee" ? "Govee" : `${f.leds ?? "?"} LEDs`}</td><td class="faint">${f.kind === "govee" ? "LAN" : f.via === "mdns" ? "mDNS" : "scan"}</td><td>${f.added ? '<span class="faint">added</span>' : `<button class="btn sm primary" data-f="${i}" type="button">Add</button>`}</td></tr>`).join("");
-      $$("[data-f]").forEach(b => b.onclick = () => { const f = found[Number(b.dataset.f)]; act(() => api("POST", "/api/devices", f.kind === "govee" ? { host: f.host, name: f.name, kind: "govee" } : { host: f.host, name: f.name, leds: f.leds, force: true }), "Device added").then(() => b.replaceWith("added")).catch(() => {}); });
+      $("#d-found").innerHTML = found.map((f, i) => `<tr><td>${esc(f.name || "WLED")}</td><td class="mono">${esc(f.host)}</td><td class="num">${f.kind === "govee" ? "Govee" : `${f.leds ?? "?"} LEDs`}</td><td class="faint">${f.kind === "govee" ? "LAN" : f.kind === "openrgb" ? "OpenRGB" : f.via === "mdns" ? "mDNS" : "scan"}</td><td>${f.added ? '<span class="faint">added</span>' : `<button class="btn sm primary" data-f="${i}" type="button">Add</button>`}</td></tr>`).join("");
+      $$("[data-f]").forEach(b => b.onclick = () => { const f = found[Number(b.dataset.f)]; act(() => api("POST", "/api/devices", f.kind === "govee" ? { host: f.host, name: f.name, kind: "govee" } : f.kind === "openrgb" ? { host: f.host, name: f.name, kind: "openrgb", index: f.index, leds: f.leds } : { host: f.host, name: f.name, leds: f.leds, force: true }), "Device added").then(() => b.replaceWith("added")).catch(() => {}); });
     } catch {} finally { $("#d-scan").disabled = false; }
   };
   return { onStatus(m) { if (!el.contains(document.activeElement) || document.activeElement === document.body) rows(m); }, onChanged(w) { if (w.has("devices")) route(); } };

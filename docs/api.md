@@ -43,12 +43,12 @@ Calls marked with a guest area (effects, scenes, pads, brightness) work without 
 | Call | Area | Body |
 | --- | --- | --- |
 | `GET /api/devices` | | |
-| `POST /api/devices` | admin | `{host: "192.168.1.42", name?, ddpPort?, force?}` (reads the LED count from WLED); `{virtual: true}` for a pretend room; `{host, kind: "govee", goveeMode?: "color"\|"segments"}` for a Govee light (beta) |
+| `POST /api/devices` | admin | `{host: "192.168.1.42", name?, ddpPort?, force?}` (reads the LED count from WLED); `{virtual: true}` for a pretend room; `{host, kind: "govee", goveeMode?: "color"\|"segments"}` for a Govee light (beta); `{host: "127.0.0.1", kind: "openrgb", index}` for a device in OpenRGB (LED count is read from it) |
 | `PATCH /api/devices/:id` | admin | `{name?, host?, leds?, ddpPort?, enabled?, maxAmps?, mAperLed?, protocol?: "ddp"\|"e131"\|"artnet", universe?, goveeMode?, goveeSegments?}`; `maxAmps` caps brightness to the power supply |
 | `DELETE /api/devices/:id` | admin | also removes its shapes |
 | `POST /api/devices/:id/identify` | | lights that controller's shapes |
 | `POST /api/devices/:id/segments` | admin | writes the room's LED ranges into WLED as segments |
-| `POST /api/discover` | admin | `{scan: true}` returns WLED controllers found by mDNS and a network scan, and Govee lights (`kind: "govee"`) |
+| `POST /api/discover` | admin | `{scan: true}` returns WLED controllers found by mDNS and a network scan, Govee lights (`kind: "govee"`) and OpenRGB devices on this computer (`kind: "openrgb"`, `index`) |
 | `GET /api/room`, `PUT /api/room` | admin | `{name, shapes: [...]}` |
 | `POST /api/room/preset` | admin | `{id: "fourwalls"}`, built for your controllers |
 
@@ -66,6 +66,20 @@ A shape: `{type: "line"|"pole"|"free"|"circle"|"rect"|"hex"|"tri"|"matrix", name
 | `DELETE /api/songs/:id` | admin: forget a song |
 | `GET /api/audio/sources` | sound inputs the server can capture from |
 | `PATCH /api/settings` | admin: `{capture: {enabled: true, source: "auto"\|<id>, command?}}` |
+
+## Guest song requests
+
+Guests open `/request` on their phone (QR code on the Music page). These calls are open to everyone, even when locked.
+
+| Call | Area | Body |
+| --- | --- | --- |
+| `GET /api/requests` | | `{enabled, requests: [{id, title, by, votes, at}]}`, most votes first |
+| `POST /api/requests` | | `{title, by?}`; the same song again adds a vote instead (`merged: true`) |
+| `POST /api/requests/:id/vote` | | |
+| `PATCH /api/requests/:id` | admin | `{done: true}` when it has been played |
+| `DELETE /api/requests/:id`, `DELETE /api/requests` | admin | remove one, or all |
+
+Turn requests off with `PATCH /api/settings {requests: false}`.
 
 ## Backup
 

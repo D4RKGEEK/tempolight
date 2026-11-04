@@ -13,6 +13,7 @@ export const DEFAULTS = () => ({
     text: { source: "song", custom: "TEMPOLIGHT" }, // what Text Scroller shows on matrix panels: song, bpm, clock or custom
     mqtt: { enabled: false, url: "", username: "", password: "", prefix: "homeassistant", base: "tempolight" }, // Home Assistant
     djlink: { enabled: false, port: 50001 }, // Pioneer Pro DJ Link: take the beat from CDJs/XDJs
+    requests: true, // guests can request songs from their phones (/request)
     songMemory: true, // remember analysed songs and recognise them when they play again while listening live
   },
   show: { power: true, mode: "auto", effect: "shock", style: "auto", palette: "auto", everyBeats: 8, speed: 1, params: {}, layer: null },
@@ -25,7 +26,8 @@ export const DEFAULTS = () => ({
     { id: "focus", name: "Focus", show: { mode: "manual", effect: "aurora", palette: "ocean" }, brightness: 0.4 },
   ],
   schedules: [],
-  songs: [], // song memory: compact analyses of songs played through Tempolight (see engine/src/memory.js)
+  songs: [],
+  requests: [], // guest song requests: {id, title, by, votes, at, done} // song memory: compact analyses of songs played through Tempolight (see engine/src/memory.js)
   lock: null,
 });
 

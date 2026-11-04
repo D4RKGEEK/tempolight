@@ -283,3 +283,42 @@ test("Pro DJ Link: beats from a CDJ set the tempo and the bar", async () => {
     clearInterval(timer); sock.close(); await s.call("PATCH", "/api/settings", { djlink: { enabled: false } });
   } finally { await s.done(); }
 });
+
+test("guest song requests: guests ask and vote, the host marks them played; works when locked", async () => {
+  const s = await setup();
+  try {
+    await s.call("POST", "/api/lock", { pin: "4321" });
+    const a = await s.call("POST", "/api/requests", { title: "Daft Punk – One More Time", by: "Sam" }); assert.equal(a.status, 200);
+    const b = await s.call("POST", "/api/requests", { title: "daft punk one more time!" }); assert.equal(b.body.merged, true, "same song merges into one request");
+    await s.call("POST", "/api/requests", { title: "Robyn - Dancing On My Own" });
+    await s.call("POST", "/api/requests", { title: "x" }).then(r => assert.equal(r.status, 400));
+    let list = (await s.call("GET", "/api/requests")).body; assert.equal(list.requests.length, 2); assert.equal(list.requests[0].votes, 2, "most votes first");
+    await s.call("POST", `/api/requests/${list.requests[1].id}/vote`); await s.call("POST", `/api/requests/${list.requests[1].id}/vote`);
+    list = (await s.call("GET", "/api/requests")).body; assert.match(list.requests[0].title, /Robyn/);
+    assert.equal((await s.call("PATCH", `/api/requests/${list.requests[0].id}`, { done: true })).status, 403, "only the host marks songs played");
+    const tok = (await s.call("POST", "/api/unlock", { pin: "4321" })).body.token, H = { "x-tempolight-token": tok };
+    assert.equal((await s.call("PATCH", `/api/requests/${list.requests[0].id}`, { done: true }, H)).status, 200);
+    assert.equal((await s.call("GET", "/api/requests")).body.requests.length, 1);
+    await s.call("PATCH", "/api/settings", { requests: false }, H);
+    assert.equal((await s.call("POST", "/api/requests", { title: "Another one" })).status, 403);
+    const page = await fetch(s.base + "/request"); assert.equal(page.status, 200); assert.match(await page.text(), /Request a song/);
+  } finally { await s.done(); }
+});
+
+test("OpenRGB devices: added with their LED count and streamed in direct mode", async () => {
+  const net = await import("node:net"), got = [];
+  const srv = net.createServer(sk => { let buf = Buffer.alloc(0); sk.on("error", () => {}); sk.on("data", d => { buf = Buffer.concat([buf, d]);
+    while (buf.length >= 16) { const dev = buf.readUInt32LE(4), id = buf.readUInt32LE(8), size = buf.readUInt32LE(12); if (buf.length < 16 + size) break; buf = buf.subarray(16 + size); got.push(id);
+      const reply = b => { const h = Buffer.alloc(16); h.write("ORGB"); h.writeUInt32LE(dev, 4); h.writeUInt32LE(id, 8); h.writeUInt32LE(b.length, 12); sk.write(Buffer.concat([h, b])); };
+      if (id === 0) reply(Buffer.from([1, 0, 0, 0]));
+      if (id === 1) { const str = t => { const l = Buffer.alloc(2); l.writeUInt16LE(t.length + 1); return Buffer.concat([l, Buffer.from(t + "\0")]); }, u16 = v => { const b = Buffer.alloc(2); b.writeUInt16LE(v); return b; };
+        const body = Buffer.concat([Buffer.alloc(4), str("Fan ring"), str(""), str(""), str(""), str(""), u16(0), Buffer.alloc(4), u16(0), u16(12)]), sz = Buffer.alloc(4); sz.writeUInt32LE(body.length + 4); reply(Buffer.concat([sz, body])); } } }); });
+  await new Promise(r => srv.listen(0, "127.0.0.1", r));
+  const s = await setup();
+  try {
+    const add = await s.call("POST", "/api/devices", { host: "127.0.0.1", kind: "openrgb", index: 0, ddpPort: srv.address().port });
+    assert.equal(add.status, 200); assert.equal(add.body.leds, 12); assert.equal(add.body.name, "Fan ring");
+    assert.ok(await until(() => got.includes(1100) && got.filter(x => x === 1050).length > 3), "direct mode, then LED updates");
+    assert.ok(await until(async () => (await s.call("GET", "/api/status")).body.devices.find(d => d.id === add.body.id)?.online === true), "shows online");
+  } finally { await s.done(); (await import("../../outputs/src/openrgb.js")).closeOpenRGB(); await new Promise(r => srv.close(r)); }
+});

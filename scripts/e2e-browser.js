@@ -71,6 +71,13 @@ await step("music: the song is remembered in song memory", async () => {
   await until(() => page.textContent("#m-songs").then(t => /BPM/.test(t)), 6000, "song not in the memory list");
   ok(app.store.data.songs.length === 1, "not stored");
 });
+await step("guest requests: a guest asks for a song, the host sees it", async () => {
+  const g = await ctx.newPage(); g.on("pageerror", e => errors.push("request: " + e.message)); await g.goto(`${base}/request`);
+  await g.fill("#title", "Daft Punk – One More Time"); await g.fill("#by", "Sam"); await g.click("#send"); await until(() => g.textContent("#msg").then(t => /Sent/.test(t)), 4000, "request not sent");
+  await until(() => g.textContent("#list").then(t => /One More Time/.test(t)), 4000, "not in the guest's list"); await g.close();
+  await go("music"); await until(() => page.textContent("#m-reqs").then(t => /One More Time/.test(t)), 4000, "host doesn't see it");
+  await page.click("[data-rdone]"); await until(() => page.textContent("#m-reqs").then(t => /No requests/.test(t)), 4000, "not marked played");
+});
 await step("home shows the song with transport controls", async () => { await go("home"); await until(() => page.isVisible("#h-transport:not([hidden])"), 4000, "no transport"); await page.click("#h-play"); await sleep(600);
   ok(status().song && !status().song.playing, "pause did not reach the server"); await page.click("#h-play"); await sleep(400); ok(status().song.playing, "play did not resume"); await shot("05-home"); });
 await step("live pads: blackout, flash, build & drop", async () => {

@@ -38,7 +38,7 @@ export async function createApp(opts) {
   const runtime = createRuntime(store, { io, logger: opts.logger === undefined ? console : opts.logger });
   const core = createCore({ store, runtime, env: {
     version: pkg.version, newId, hashPin, checkPin, randomToken: () => crypto.randomBytes(16).toString("hex"),
-    getInfo: io.getInfo, discoverWled: io.discoverWled, discoverGovee: io.discoverGovee, ipOf: io.ipOf, listSources: io.listSources, startOsc,
+    getInfo: io.getInfo, discoverWled: io.discoverWled, discoverGovee: io.discoverGovee, listOpenRGB: io.listOpenRGB, ipOf: io.ipOf, listSources: io.listSources, startOsc,
     uptime: () => process.uptime(), now: opts.now, discover: opts.discover,
     update: updater, startProLink,
     lan: () => Object.values(os.networkInterfaces()).flat().filter(a => a && a.family === "IPv4" && !a.internal).map(a => a.address) } });
@@ -47,7 +47,7 @@ export async function createApp(opts) {
   // ---------------------------------------------------------------- static files
   // /packages/ serves the engine and the server core to the browser too (the web app and the demo import them)
   const STATIC_DIRS = [["/engine/", path.join(ROOT, "packages/engine/src")], ["/packages/", path.join(ROOT, "packages")], ["/", path.join(ROOT, "apps/web")]];
-  const ALIASES = { "/phone": "apps/web/phone.html", "/playground": "apps/playground/index.html", "/demo.mp3": "apps/playground/demo.mp3" };
+  const ALIASES = { "/phone": "apps/web/phone.html", "/request": "apps/web/request.html", "/playground": "apps/playground/index.html", "/demo.mp3": "apps/playground/demo.mp3" };
   async function serveStatic(req, res, pathname) {
     let file = ALIASES[pathname] ? path.join(ROOT, ALIASES[pathname]) : null;
     if (!file) for (const [prefix, dir] of STATIC_DIRS) if (pathname.startsWith(prefix)) {
