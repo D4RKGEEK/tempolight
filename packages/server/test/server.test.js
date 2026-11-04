@@ -264,3 +264,22 @@ test("song memory: a song played once is recognised later when heard live, and i
     assert.equal(s.app.runtime.status().recognised, null, "forgetting a song stops following it");
   } finally { await s.done(); }
 });
+
+test("Pro DJ Link: beats from a CDJ set the tempo and the bar", async () => {
+  const { parseBeat, beatPacket } = await import("../src/prolink.js");
+  const p = parseBeat(beatPacket({ device: 2, name: "CDJ-3000", bpm: 124, pitch: 1.02, beatInBar: 3 }));
+  assert.equal(p.device, 2); assert.equal(p.name, "CDJ-3000"); assert.equal(p.trackBpm, 124); assert.ok(Math.abs(p.bpm - 126.48) < 0.02); assert.equal(p.beatInBar, 3);
+  assert.equal(parseBeat(Buffer.from("not a beat")), null);
+  const s = await setup(), port = 51000 + Math.floor(Math.random() * 900);
+  try {
+    await s.call("POST", "/api/devices", { virtual: true });
+    assert.equal((await s.call("PATCH", "/api/settings", { djlink: { enabled: true, port } })).status, 200);
+    const sock = dgram.createSocket("udp4"); let beat = 0;
+    const timer = setInterval(() => sock.send(beatPacket({ bpm: 128, beatInBar: (beat++ % 4) + 1 }), port, "127.0.0.1"), 60000 / 128);
+    assert.ok(await until(() => s.app.runtime.status().djlink), "beats arrive");
+    const st = s.app.runtime.status(); assert.equal(st.source, "djlink"); assert.equal(st.bpm, 128); assert.match(st.sourceLabel, /CDJ-3000/);
+    await sleep(60000 / 128 * 0.25); // a quarter into a beat: the bar position matches the deck's last beat
+    assert.equal(s.app.runtime.status().beat, s.app.runtime.rt.dj.beatInBar - 1);
+    clearInterval(timer); sock.close(); await s.call("PATCH", "/api/settings", { djlink: { enabled: false } });
+  } finally { await s.done(); }
+});

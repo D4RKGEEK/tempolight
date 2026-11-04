@@ -578,6 +578,7 @@ function settingsPage(el) {
     ${panel("Integrations", "", "", `<div class="pb controls">
       <label class="check"><input type="checkbox" id="s-sync" ${s.audioSync ? "checked" : ""}> Send WLED audio sync (lets WLED's own sound effects react too)</label>
       <div class="field"><label class="check"><input type="checkbox" id="s-osc" ${s.osc.enabled ? "checked" : ""}> OSC control on UDP port</label><input type="number" id="s-oscport" value="${s.osc.port}" style="width:110px"><span class="help">/tempolight/effect laser, /scene Party, /flash, /blackout 1, /brightness 0.5 …</span></div>
+      <label class="check"><input type="checkbox" id="s-dj" ${s.djlink?.enabled ? "checked" : ""} ${DEMO ? "disabled" : ""}> Pioneer Pro DJ Link: take the beat from CDJs and XDJs on this network (listens only)</label>
       <label class="check"><input type="checkbox" id="s-disc" ${s.autoDiscover ? "checked" : ""}> Look for WLED controllers on first start</label>
       <div class="field"><span class="lbl">HTTP API</span><span class="help">Home Assistant, Stream Deck and scripts can call the JSON API, e.g. <span class="mono">POST /api/scenes/&lt;id&gt;/apply</span>. See docs/api.md.</span></div>
     </div>`, "span-12")}
@@ -625,6 +626,7 @@ function settingsPage(el) {
   range("s-idleb", "idleBrightness", v => Math.round(v * 100) + "%"); range("s-idlea", "idleAfterSec", v => v + " s"); range("s-fps", "fps", v => v + " fps");
   $("#s-safe").onchange = e => setS({ safe: e.target.checked }); $("#s-dropf").onchange = e => setS({ dropFlash: e.target.checked });
   $("#s-sync").onchange = e => setS({ audioSync: e.target.checked }); $("#s-disc").onchange = e => setS({ autoDiscover: e.target.checked });
+  $("#s-dj").onchange = e => setS({ djlink: { enabled: e.target.checked } });
   $("#s-osc").onchange = e => setS({ osc: { enabled: e.target.checked } }); $("#s-oscport").onchange = e => setS({ osc: { port: Number(e.target.value) } });
   $$("[data-guest]").forEach(x => x.onchange = () => setS({ guest: { [x.dataset.guest]: x.checked } }));
   const night = () => setS({ night: { enabled: $("#n-on").checked, from: $("#n-from").value.trim(), to: $("#n-to").value.trim(), maxBrightness: Number($("#n-max").value), warm: $("#n-warm").checked } });

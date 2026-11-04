@@ -93,7 +93,7 @@ export function createCore({ store, runtime, env }) {
     runtime.note(`Schedule ran: ${s.name}`);
   }
   function applySettings(b) {
-    const s = data().settings, before = JSON.stringify({ fps: s.fps, cap: s.capture, osc: s.osc });
+    const s = data().settings, before = JSON.stringify({ fps: s.fps, cap: s.capture, osc: s.osc, djlink: s.djlink });
     const num = (v, lo, hi) => Math.max(lo, Math.min(hi, Number(v)));
     if (b.brightness !== undefined) s.brightness = num(b.brightness, 0, 1);
     if (b.fps !== undefined) s.fps = Math.round(num(b.fps, 10, 120));
@@ -114,6 +114,7 @@ export function createCore({ store, runtime, env }) {
       Object.assign(s.night, { enabled: b.night.enabled ?? s.night.enabled, from: b.night.from ?? s.night.from, to: b.night.to ?? s.night.to,
         maxBrightness: b.night.maxBrightness !== undefined ? num(b.night.maxBrightness, 0.02, 1) : s.night.maxBrightness, warm: b.night.warm ?? s.night.warm }); }
     if (b.songMemory !== undefined) s.songMemory = !!b.songMemory;
+    if (b.djlink) Object.assign(s.djlink, { enabled: b.djlink.enabled ?? s.djlink.enabled, port: b.djlink.port !== undefined ? Math.round(num(b.djlink.port, 1024, 65535)) : s.djlink.port });
     if (b.mqtt) { const m = s.mqtt; for (const k of ["url", "username", "prefix", "base"]) if (b.mqtt[k] !== undefined) m[k] = String(b.mqtt[k]).trim().slice(0, 200);
       if (b.mqtt.password) m.password = String(b.mqtt.password).slice(0, 200); if (b.mqtt.clearPassword) m.password = ""; if (b.mqtt.enabled !== undefined) m.enabled = !!b.mqtt.enabled;
       if (m.enabled && !m.url) throw new HttpError(400, "Enter your MQTT broker's address, for example mqtt://192.168.1.10:1883"); }
@@ -123,6 +124,7 @@ export function createCore({ store, runtime, env }) {
     if (prev.fps !== s.fps) runtime.startLoop();
     if (JSON.stringify(prev.cap) !== JSON.stringify(s.capture)) { if (s.capture.enabled) runtime.startCaptureSource(); else runtime.stopCaptureSource(); }
     if (JSON.stringify(prev.osc) !== JSON.stringify(s.osc)) restartOsc();
+    if (JSON.stringify(prev.djlink) !== JSON.stringify(s.djlink)) restartDjLink();
     runtime.syncDirector(); changed("settings"); void after;
   }
   function applyShow(b) {
@@ -147,6 +149,8 @@ export function createCore({ store, runtime, env }) {
     else if (a === "/bpm") applySettings({ metronome: { bpm: Number(v) } });
     else runtime.action({ type: a.slice(1), on: v === undefined ? undefined : !!v, color: typeof v === "string" ? v : undefined, value: v });
   }
+  let djlink = null;
+  function restartDjLink() { if (djlink) { djlink.close(); djlink = null; } const o = data().settings.djlink; if (o && o.enabled && env.startProLink) { djlink = env.startProLink(b => runtime.djBeat(b), { port: o.port }); runtime.note(`Pro DJ Link: listening for CDJ beats on UDP ${o.port}`); } }
   function restartOsc() { if (osc) { osc.close(); osc = null; } const o = data().settings.osc; if (o.enabled) { if (!env.startOsc) return; osc = env.startOsc(o.port, m => { try { oscMessage(m); } catch {} }); runtime.note(`OSC listening on UDP ${o.port}`); } }
 
   // ---------------------------------------------------------------- API routes
@@ -314,7 +318,7 @@ export function createCore({ store, runtime, env }) {
 
   // ---------------------------------------------------------------- background jobs
   const sched = startScheduler(() => data().schedules, runSchedule, env.now, () => data().settings.location);
-  restartOsc();
+  restartOsc(); restartDjLink();
   async function firstRunDiscovery() {
     if (env.discover === false || !data().settings.autoDiscover || data().devices.length) return;
     runtime.note("Looking for WLED controllers on your network…");
@@ -335,5 +339,5 @@ export function createCore({ store, runtime, env }) {
   }
 
   return { handle, connect, broadcast, discovery, onChange: f => changeListeners.add(f), applyScene, applyShow, applySettings, addDevice, pub,
-    close() { clearInterval(statusTimer); sched.stop(); osc && osc.close(); for (const c of clients) c.close?.(); } };
+    close() { clearInterval(statusTimer); sched.stop(); osc && osc.close(); djlink && djlink.close(); for (const c of clients) c.close?.(); } };
 }
