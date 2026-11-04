@@ -5,6 +5,12 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Hearing the music, and the docs
+- "How should Tempolight hear your music?": a guided panel on the Music page (and a setup wizard step) with three ways: this computer's sound (macOS with BlackHole and a live checklist; Linux output monitor; Windows Stereo Mix), the microphone (remembered, starts by itself when an unlearned song plays), or automatic on a Raspberry Pi. After the Mac setup you just play Spotify: no tab, no mic.
+- Bluetooth speakers are detected and the light timing is kept per speaker, switching by itself when the output changes.
+- A plain status line on Home and Music: "Hearing Spotify ✓ · song · learning", or "Can't hear anything → Fix".
+- Documentation: a new README, a docs website (VitePress, published to GitHub Pages) with guides for every light, music source, Spotify, Docker, smart home, parties, creators, troubleshooting and an FAQ; internals pages; a complete API reference checked against the code; diagrams throughout (checked with Mermaid CLI).
+
 ### Spotify and integrations
 - Sync with Spotify: exact position from the Spotify app on this computer or the Web API (smoothed, follows pause, skip and seek); old Spotify apps that still have audio analysis use it; any other song is learned on its first play and followed exactly from then on. Reacts to pause, skips and volume; optional album-cover colours. Optional shared beat maps on your own Cloudflare Worker + D1 (served once two installs agree). Guide: docs/spotify.md.
 - More lights: LIFX (bulbs and multizone strips), WiZ, TP-Link Kasa, Yeelight (music mode, 20 updates/s), Twinkly (realtime, real layout), and Philips Hue Entertainment (fast streaming over a built-in DTLS client), falling back to basic Hue.
