@@ -1,0 +1,82 @@
+{
+ "songSeconds": 181,
+ "preAnalyseMs": 1913,
+ "songChromaMs": 425,
+ "offlineBpm": 119.99999999999994,
+ "liveWholeSongMs": 1590,
+ "liveUsPerHop": 102,
+ "liveMsPerAudioSecond": 8.78,
+ "liveBreakdownMsPerAudioSecond": {
+  "push(total, wrapped)": 9.212,
+  "fpTap": 0.023,
+  "fft": 3.628,
+  "hop": 6.533,
+  "vocalHop": 0.658,
+  "estimateTempo": 0.176,
+  "sections": 0.691,
+  "estimateStyle": 0.026,
+  "estimateMood": 0.019,
+  "chroma.frame": 2.42
+ },
+ "liveBreakdownNote": "hop includes fft/vocal/tempo/sections/style/mood; push includes hop + chroma; wrappers add overhead",
+ "liveBpm": 119.99999999999997,
+ "fft1024_current_us": 41.23,
+ "fft1024_stageTwiddle_f32_us": 38.11,
+ "fft1024_stageTwiddle_f64_us": 71.12,
+ "rfft1024_viaHalf_f64_us": 9.34,
+ "rfftMaxAbsErr": null,
+ "chromaFrame4096_us": 243.5,
+ "fft4096_stageTwiddle_f64_us": 270.5,
+ "alloc": {
+  "bytesPerAudioSecond": 1343548,
+  "bytesPerHop": 15599,
+  "gcDuring": 0,
+  "note": "heap delta, needs --expose-gc; includes view() not called",
+  "viewBytesPerCall": 2170
+ },
+ "director700": {
+  "frames": 10545,
+  "directorMsPerFrame": 0.263,
+  "viewMsPerFrame": 0.0019,
+  "analyserMsPerFrame": 0.186
+ },
+ "recog": {
+  "1": {
+   "coldMs": 20.4,
+   "warmMs": 3.12,
+   "perSongUs": 3119,
+   "noTempoGateMs": 1,
+   "found": "id0@60"
+  },
+  "12": {
+   "coldMs": 48.9,
+   "warmMs": 11.42,
+   "perSongUs": 952,
+   "noTempoGateMs": 5.3,
+   "found": "id0@60"
+  },
+  "50": {
+   "coldMs": 31.4,
+   "warmMs": 26.33,
+   "perSongUs": 527,
+   "noTempoGateMs": 23.5,
+   "found": "id0@60"
+  },
+  "200": {
+   "coldMs": 132.7,
+   "warmMs": 144.34,
+   "perSongUs": 722,
+   "noTempoGateMs": 130.9,
+   "found": "id0@60"
+  },
+  "1000": {
+   "coldMs": 771.4,
+   "warmMs": 725.75,
+   "perSongUs": 726,
+   "noTempoGateMs": 637.5,
+   "found": "id0@60"
+  }
+ },
+ "matchAtUs": 54.6,
+ "entryBytes": 22468
+}
