@@ -70,7 +70,8 @@ jobs:
           mkdir -p out pkg
           case "${{ matrix.platform }}" in
             windows) cp "dist/$name.exe" out/ ;;
-            macos) cp "dist/$name" pkg/tempolight && (cd pkg && zip -q -9 "../out/$name.zip" tempolight) ;;
+            macos) cp "dist/$name" pkg/tempolight && (cd pkg && zip -q -9 "../out/$name.zip" tempolight)
+                   bash scripts/make-macos-dmg.sh "dist/$name" "out/Tempolight-macos-${{ matrix.arch }}.dmg" "$(node -p 'require("./package.json").version')" ;;
             linux) cp "dist/$name" pkg/tempolight && tar -C pkg -czf "out/$name.tar.gz" tempolight ;;
           esac
           ls -l out
@@ -81,7 +82,9 @@ jobs:
           mkdir -p unpacked
           case "${{ matrix.platform }}" in
             windows) cp out/*.exe unpacked/tempolight.exe ;;
-            macos) unzip -q out/*.zip -d unpacked ;;
+            macos) unzip -q out/*.zip -d unpacked
+                   hdiutil attach -nobrowse -readonly -mountpoint "$RUNNER_TEMP/tl" out/*.dmg >/dev/null
+                   node scripts/smoke.js "$RUNNER_TEMP/tl/Tempolight.app/Contents/MacOS/tempolight" && hdiutil detach "$RUNNER_TEMP/tl" >/dev/null ;;
             linux) tar -C unpacked -xzf out/*.tar.gz ;;
           esac
           node scripts/smoke.js "unpacked/tempolight$( [ "${{ matrix.platform }}" = windows ] && echo .exe || true )"

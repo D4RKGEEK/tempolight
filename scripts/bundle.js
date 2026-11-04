@@ -168,7 +168,7 @@ globalThis.__tempolightAssets = {
   read(file) { const k = this.key(file); if (k == null || !__keys.has(k)) throw Object.assign(new Error("ENOENT: " + file), { code: "ENOENT" }); return __sea ? Buffer.from(__sea.getAsset(k)) : __fs.readFileSync(__path.join(__root, k)); },
   stat(file) { const k = this.key(file); if (k == null) throw Object.assign(new Error("ENOENT: " + file), { code: "ENOENT" }); const dir = k === "" || [...__keys].some(x => x.startsWith(k + "/")); if (!dir && !__keys.has(k)) throw Object.assign(new Error("ENOENT: " + file), { code: "ENOENT" }); return { isDirectory: () => dir, isFile: () => !dir }; },
 };
-if (__sea && process.argv.length <= 2) process.argv.push("--open"); // double-clicked: open the browser too
+if (__sea) { process.argv = process.argv.filter((a, i) => i < 2 || !a.startsWith("-psn_")); if (process.argv.length <= 2) process.argv.push("--open"); } // double-clicked (or opened as a Mac app, which may add -psn_…): open the browser too
 const __defs = {}, __mods = {}, __loading = {};
 function __star(target, src) { for (const k of Object.keys(src)) if (k !== "default" && !(k in target)) Object.defineProperty(target, k, { enumerable: true, get: () => src[k] }); }
 function __load(id) {

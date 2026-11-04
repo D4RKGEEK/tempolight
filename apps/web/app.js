@@ -729,7 +729,7 @@ function settingsPage(el) {
     </div>`, "span-6")}
     ${panel("About", "", "", `<div class="pb stack"><p>Tempolight ${esc(st.version)}, MIT licence. <a href="https://github.com/D4RKGEEK/tempolight" target="_blank" rel="noopener">Source and docs</a>.</p>
       <p class="muted">The old single-page playground is at <a href="/playground">/playground</a>.</p>
-      <div class="row"><button class="btn" id="s-upd" type="button">${DEMO ? "Always up to date" : "Check for updates"}</button><button class="btn primary" id="s-updgo" type="button" hidden>Update now</button><button class="btn" id="s-wizard" type="button">Run setup again</button><button class="btn danger" id="s-reset" type="button">Reset everything</button></div>
+      <div class="row"><button class="btn" id="s-upd" type="button">${DEMO ? "Always up to date" : "Check for updates"}</button><button class="btn primary" id="s-updgo" type="button" hidden>Update now</button><button class="btn" id="s-wizard" type="button">Run setup again</button>${st.canQuit ? '<button class="btn" id="s-quit" type="button">Quit Tempolight</button>' : ""}<button class="btn danger" id="s-reset" type="button">Reset everything</button></div>
       <div id="s-updmsg" class="faint" style="font-size:13px" aria-live="polite"></div></div>`, "span-6")}`;
   if (!admin) {
     $$("#page input:not(#u-pin), #page select, #page button:not(#u-go)").forEach(x => x.disabled = true);
@@ -777,6 +777,7 @@ function settingsPage(el) {
     m.innerHTML = esc(r.message) + (r.changes?.length ? `<ul style="margin:6px 0 0 18px">${r.changes.map(c => `<li>${esc(c)}</li>`).join("")}</ul>` : ""); $("#s-updgo").hidden = !r.canUpdate; };
   $("#s-updgo").onclick = async () => { const r = await act(() => api("POST", "/api/update")).catch(() => null); if (!r) return; $("#s-updmsg").textContent = r.message; $("#s-updgo").hidden = true;
     const t0 = Date.now(), wait = async () => { await new Promise(x => setTimeout(x, 1500)); try { await api("GET", "/api/health"); if (Date.now() - t0 > 4000) return location.reload(); } catch {} if (Date.now() - t0 < 90000) wait(); }; wait(); };
+  if ($("#s-quit")) $("#s-quit").onclick = () => { if (confirm("Quit Tempolight? The lights stop until you open the app again.")) act(() => api("POST", "/api/quit"), "Tempolight is quitting. Open the app again to start it.").catch(() => {}); };
   $("#s-reset").onclick = async () => { if (confirm("Reset all devices, the room, scenes, schedules and settings?")) { await act(() => api("POST", "/api/reset"), "Reset").catch(() => {}); await refreshState(); await loadLayout(); route(); } };
   const perfLabel = p => p ? `Now: ${p.mode === "lite" ? "low power" : "full"}${p.why && p.why !== "auto" ? ` (${p.why.replace(/^auto: /, "")})` : ""}${p.fps ? ` · ${p.fps} fps, ${p.frameMs} ms a frame` : ""}${p.cpu != null ? ` · CPU ${p.cpu}%` : ""}` : "";
   return { onChanged(w) { if (w.has("lock")) route(); }, onStatus(m) { const e = $("#m-state"); if (e) e.textContent = mqttLabel(m.mqtt); const pf = $("#s-perf-st"); if (pf && m.perf) pf.textContent = perfLabel(m.perf); } };

@@ -33,7 +33,7 @@ export function createCore({ store, runtime, env }) {
   const effectIds = () => new Set(runtime.effects.list.map(e => e.id));
   const pub = () => {
     const d = data();
-    return { version: env.version, settings: { ...d.settings, mqtt: { ...d.settings.mqtt, password: "", hasPassword: !!d.settings.mqtt?.password } }, show: d.show, devices: d.devices.map(x => safeDev(x)), room: d.room, scenes: d.scenes,
+    return { version: env.version, canQuit: !!env.quit, settings: { ...d.settings, mqtt: { ...d.settings.mqtt, password: "", hasPassword: !!d.settings.mqtt?.password } }, show: d.show, devices: d.devices.map(x => safeDev(x)), room: d.room, scenes: d.scenes,
       schedules: d.schedules.map(s => ({ ...s, next: nextRun(s, new Date(), d.settings.location)?.toISOString() || null })), locked: locked(),
       effects: runtime.effects.list, styles: Object.fromEntries(Object.entries(runtime.effects.styles).map(([k, v]) => [k, v.name])),
       palettes: Object.keys(runtime.effects.palettes), presets: Object.values(ROOM_PRESETS), captureSources: env.listSources().map(({ id, label }) => ({ id, label })), firstRun: store.firstRun && !d.devices.length };
@@ -205,6 +205,7 @@ export function createCore({ store, runtime, env }) {
   route("GET", "/api/health", null, () => ({ ok: true, version: env.version, uptime: env.uptime(), fps: Math.round(runtime.rt.fps), leds: runtime.layout.N }));
   route("GET", "/api/effects", null, () => runtime.effects.list);
   route("GET", "/api/layout", null, () => runtime.layoutInfo());
+  route("POST", "/api/quit", "admin", () => { if (!env.quit) throw new HttpError(400, "Stop Tempolight where it runs (its terminal, service or container)"); runtime.note("Quitting Tempolight"); setTimeout(env.quit, 300); return { ok: true }; });
   route("GET", "/api/update", "admin", () => env.update ? env.update.check() : { method: "demo", canUpdate: false, message: "The online demo is always the latest version." });
   route("POST", "/api/update", "admin", async () => { if (!env.update) throw new HttpError(400, "Nothing to update in the online demo"); try { const r = await env.update.apply(); runtime.note("Updating Tempolight and restarting…"); return r; } catch (e) { throw new HttpError(e.code === 409 ? 409 : 400, e.message); } });
   // Wi-Fi setup (the Raspberry Pi image's tempolight-wifi service): only where that service exists

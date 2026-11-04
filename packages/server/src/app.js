@@ -85,6 +85,7 @@ export async function createApp(opts) {
     getInfo: io.getInfo, discoverWled: io.discoverWled, discoverGovee: io.discoverGovee, listOpenRGB: io.listOpenRGB, nanoleafPair: io.nanoleafPair, nanoleafInfo: io.nanoleafInfo, panelPoints: io.panelPoints, huePair: io.huePair, hueLights: io.hueLights, ipOf: io.ipOf, listSources: io.listSources, startOsc,
     uptime: () => process.uptime(), now: opts.now, discover: opts.discover,
     update: updater, startProLink, startLink, wifi,
+    quit: embedded?.sea ? async () => { try { await closeApp(); } catch {} process.exit(0); } : null, // the one-file app has no terminal to stop it from
     lan: () => Object.values(os.networkInterfaces()).flat().filter(a => a && a.family === "IPv4" && !a.internal).map(a => a.address) } });
   const ha = startHomeAssistant({ core, store, runtime, version: pkg.version });
   const np = startNowPlaying({ core, store, runtime, dataDir: opts.dataDir, port: () => server.address()?.port || 8080, ...opts.nowPlaying }); // opts.nowPlaying: test runner/platform

@@ -12,6 +12,7 @@ import { settingsFromEnv } from "./env-settings.js";
 
 const argv = process.argv.slice(2);
 const flag = k => argv.includes("--" + k);
+function openBrowser(u) { const cmd = process.platform === "win32" ? ["cmd", ["/c", "start", "", u]] : process.platform === "darwin" ? ["open", [u]] : ["xdg-open", [u]]; try { spawn(cmd[0], cmd[1], { stdio: "ignore", detached: true }).unref(); } catch {} }
 const opt = (k, d) => { const i = argv.indexOf("--" + k); return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith("--") ? argv[i + 1] : d; };
 
 if (flag("help") || flag("h")) {
@@ -51,7 +52,10 @@ if (audio) {
 let bound;
 try { for (let tries = 0; ; tries++) { try { bound = await app.listen(port, host); break; } catch (e) { if (e.code !== "EADDRINUSE" || !process.env.TEMPOLIGHT_RESTART_WAIT || tries > 40) throw e; await new Promise(r => setTimeout(r, 250)); } } } // after an update, the old copy may still be closing
 catch (e) {
-  if (e.code === "EADDRINUSE") { console.error(`Port ${port} is already in use. Is Tempolight already running? Or start it on another port: --port ${port + 1}`); process.exit(1); }
+  if (e.code === "EADDRINUSE") {
+    // opened again (double-clicking the app while it runs): just show the one that's running
+    try { const r = await fetch(`http://127.0.0.1:${port}/api/health`, { signal: AbortSignal.timeout(1500) }), j = await r.json(); if (j && j.ok) { console.log(`  Tempolight is already running at http://localhost:${port}`); if (flag("open")) openBrowser(`http://localhost:${port}`); process.exit(0); } } catch {}
+    console.error(`Port ${port} is already in use. Is Tempolight already running? Or start it on another port: --port ${port + 1}`); process.exit(1); }
   throw e;
 }
 delete process.env.TEMPOLIGHT_RESTART_WAIT; // only for this start: a copy started later by hand shouldn't wait for a busy port
@@ -61,7 +65,7 @@ console.log(`  On this computer:  http://localhost:${bound}`);
 for (const u of lan) console.log(`  On your phone:     ${u}`);
 console.log(`  Settings are saved in ${dataDir}\n`);
 
-if (flag("open")) { const u = `http://localhost:${bound}`; const cmd = process.platform === "win32" ? ["cmd", ["/c", "start", "", u]] : process.platform === "darwin" ? ["open", [u]] : ["xdg-open", [u]]; try { spawn(cmd[0], cmd[1], { stdio: "ignore", detached: true }).unref(); } catch {} }
+if (flag("open")) openBrowser(`http://localhost:${bound}`);
 
 let closing = false;
 for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, async () => { if (closing) process.exit(0); closing = true; console.log("\n  Stopping…"); await app.close(); process.exit(0); });

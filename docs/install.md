@@ -25,8 +25,8 @@ A single file with everything inside, Node.js included. Download the one for you
 | Computer | File |
 | --- | --- |
 | Windows 10/11 (64-bit) | `tempolight-windows-x64.exe` |
-| Mac with Apple silicon (M1 and later) | `tempolight-macos-arm64.zip` |
-| Mac with an Intel processor | `tempolight-macos-x64.zip` |
+| Mac with Apple silicon (M1 and later) | `Tempolight-macos-arm64.dmg` (or `tempolight-macos-arm64.zip` for the terminal) |
+| Mac with an Intel processor | `Tempolight-macos-x64.dmg` (or `tempolight-macos-x64.zip`) |
 | Linux PC (64-bit) | `tempolight-linux-x64.tar.gz` |
 | Raspberry Pi 3/4/5 with 64-bit Raspberry Pi OS, other ARM64 Linux | `tempolight-linux-arm64.tar.gz` |
 
@@ -36,7 +36,12 @@ Close the window (or press Ctrl+C in it) to stop Tempolight. From a terminal it 
 
 - **Windows:** the file isn't signed yet, so SmartScreen may say *Windows protected your PC*: click **More info** →
   **Run anyway**. Put it wherever you like (for example in `%LOCALAPPDATA%\Programs\Tempolight`) and pin it to Start.
-- **macOS:** unzip it (double-click the zip). The app isn't notarised by Apple, so the first time, right-click (or
+- **macOS (.dmg):** open the .dmg and drag **Tempolight** to **Applications**. The first time, right-click (or
+  Control-click) Tempolight in Applications → **Open** → **Open** (it isn't notarised by Apple yet). Opening it starts
+  Tempolight and opens it in your browser; it has no window or Dock icon, so open the app again to get back to it, and
+  quit it from **Settings → About → Quit Tempolight**. If macOS says it's damaged, run
+  `xattr -dr com.apple.quarantine /Applications/Tempolight.app` once in Terminal.
+- **macOS (.zip, for the terminal):** unzip it (double-click the zip). The app isn't notarised by Apple, so the first time, right-click (or
   Control-click) `tempolight` → **Open** → **Open**. If macOS still refuses, run
   `xattr -d com.apple.quarantine ~/Downloads/tempolight` once in Terminal. Homebrew avoids both steps.
 - **Linux / Raspberry Pi:**
