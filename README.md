@@ -51,6 +51,12 @@ designer: it knows where the beat is, which part of the song you're in, and what
 | 🧩 **Make your own effects** | Build effects from parts (pattern, direction, what moves it, colours) without code, and share them as codes |
 | 📷 **Camera LED mapping** | A phone or laptop camera finds where every LED really is |
 | 🎉 **Parties** | Phones become extra lights by scanning a QR code; guests request songs and vote; screen sync turns a film or game into room light |
+| 🧭 **Setup wizard and delay meter** | Five steps on first start; see each light's delay and Wi-Fi warnings |
+| 🎨 **Key and mood colours** | The song's key and mood pick the colours: warm for happy, deep blues for sad |
+| 🎧 **Now playing** | Reads Spotify and Apple Music on the same computer, so remembered songs light up exactly with no microphone |
+| 🌅 **Home & sleep** | Sunrise wake-up linked to your phone's alarm, a sleep timer, and an hourly ambient plan; voice control through Home Assistant |
+| 🎚️ **Show editor** | Effects, colours, flashes and brightness on the song's waveform, snapped to the beat |
+| 🔦 **DMX, Link, MIDI clock** | Moving heads, pars, lasers and fog over Art-Net/sACN; follow Ableton Link or MIDI clock |
 | ⏱️ **One-tap timing fix** | Plays clicks, listens with the microphone and sets the light delay for your speakers, Bluetooth included |
 | 🔌 **Power limit** | Tell it your power supply's amps and the strip never draws more |
 | 🎛️ **Live pads** | Flash, strobe, blackout, freeze, build & drop, drop now, next effect, boost, tap tempo, colour hold, with keyboard shortcuts |

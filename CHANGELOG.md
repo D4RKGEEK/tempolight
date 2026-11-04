@@ -5,6 +5,19 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### New
+- Setup wizard: five steps on first start (find the lights, pick a room, fix the timing, play a test song, done), big buttons and no reading needed; run it again from Settings.
+- Live latency meter: the delay from sound to light per device, with warnings for weak Wi-Fi, a slow network, a WLED that drops frames or isn't showing the stream, and the power limiter.
+- Key and mood colours: the song's key, major or minor, and mood set the colours with the Automatic palette (warm for happy, deep blues for sad, reds for intense, teal for calm). Shown on the Music page.
+- Song memory recognises songs without drums, using the notes (chroma) as well as loudness.
+- Now playing: Tempolight reads what Spotify, Apple Music and other players on the same computer are playing (macOS, Linux, Windows; Spotify Web API optional). Remembered songs then follow their beat map exactly, with no microphone.
+- Voice control: every scene is a Home Assistant scene, so "Hey Google, activate Party mode" works through Home Assistant; guide in docs/voice.md.
+- Home & sleep page: a sunrise wake-up (weekly times or linked to your phone's alarm, with snooze), a sleep timer that fades out, and an hourly ambient plan for when no music plays. Guide in docs/wake-up.md.
+- Show editor: a timeline on the song's waveform with effect blocks, colour blocks, flash/strobe/blackout/build/drop cues and brightness keyframes, snapping to beats and bars, undo/redo and a live preview.
+- DMX fixtures over Art-Net or sACN: pars, dimmers, strobes, moving heads (move on the beat), lasers (only in drops, off by default) and fog machines (a burst before the drop, with a cool-down), plus custom channel lists.
+- Ableton Link (listen-only) and MIDI clock (through the browser) as beat-grid sources.
+- The online demo build now copies every server module the app needs by following imports.
+
 ### Hardening (four parallel reviews)
 - Security: browsers can no longer change settings, run updates or open the WebSocket from another website (Origin check); Nanoleaf tokens and Hue user names are kept out of every API answer, including PATCH responses.
 - Song memory: recognition kept working after a restart (caches were being saved and broke on reload); no more locks one or two beats off in repetitive songs; the lock now follows songs played slightly fast or slow, lets go when the song ends, the room goes silent, the source stops or song memory is turned off, and follows skips; memory is capped at about 2 MB.
