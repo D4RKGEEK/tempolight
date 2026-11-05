@@ -97,9 +97,9 @@ test("sync and song map in /api/status and the map routes, for a song played her
     await s.call("PATCH", "/api/settings", { songMemory: false });
     const x = song.x, chunk = 11025; let states = new Set();
     for (let i = 0; i < 24 * 22050; i += chunk) { const pcm = new Int16Array(chunk); for (let k = 0; k < chunk; k++) pcm[k] = Math.round((x[i + k] || 0) * 0.6 * 32767);
-      s.app.runtime.pushPcm(pcm, "capture", "Line in", null, 22050); await sleep(25); const y = s.app.runtime.status().sync; states.add(y.state);
+      s.app.runtime.pushPcm(pcm, "capture", "Line in", null, 22050); await sleep(60); const y = s.app.runtime.status().sync; states.add(y.state); // (the score eases over ~1 s of wall time: give it some)
       assert.ok(Number.isInteger(y.score) && y.score >= 0 && y.score <= 100 && ["locked", "finding", "none"].includes(y.state)); }
-    st = s.app.runtime.status(); assert.equal(st.sync.source, "live"); assert.equal(st.sync.state, "locked", JSON.stringify(st.sync)); assert.ok(states.has("finding"), "finding the beat at first");
+    st = s.app.runtime.status(); assert.equal(st.sync.source, "live"); assert.equal(st.sync.state, "locked", JSON.stringify(st.sync)); assert.ok(states.has("finding") || states.has("none"), `not locked from the first moment (${[...states]})`); // the beat tracker can lock within a second or two
     const lm = (await s.call("GET", "/api/song/map")).body;
     assert.equal(lm.source, "live"); assert.equal(lm.growing, true); assert.ok(lm.dur > 15 && lm.dur < 25, `dur ${lm.dur}`); assert.ok(lm.sections.length >= 1 && lm.env.length > 50);
   } finally { await s.done(); }

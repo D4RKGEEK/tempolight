@@ -49,6 +49,7 @@ export function songView(pre, t) {
   return { section, barI: bi, chord: bar && typeof bar.chord === "number" ? bar.chord : null, g, bpm: pre.bpm, style: pre.style, loud, level: lvl < 0.35 ? "low" : lvl < 0.72 ? "mid" : "peak",
     state: quietFor(pre.env, t) ? "silent" : state, buildP,
     dropT: di >= 0 ? pre.drops[di] : -9, nextDrop: di + 1 < pre.drops.length ? pre.drops[di + 1] : null,
+    dropConf: di + 1 < pre.drops.length ? 1 : 0, dropSource: di + 1 < pre.drops.length ? "memory" : null, // (known: the whole song was analysed)
     kick, snare: si >= 0 ? pre.snares[si] : -9, hat: hi >= 0 ? pre.hats[hi] : -9, pulses, snares, pulseN: ki, kickS: kickStrength(pre, ki),
     key: pre.key || null, mode: pre.mode || null, keyConf: pre.keyConfidence ?? 0, mood: pre.mood || null }; // key and mood: whole-song (tonal.js)
 }
@@ -86,7 +87,7 @@ export function buildSignals(V, t, opts) {
     snareE: Math.exp(-(t - V.snare) / (0.15 * tk)) * punch, hatE: Math.exp(-(t - V.hat) / 0.12) * punch,
     bassL: opts.bassL ?? (V.state === "drop" ? 0.9 : 0.3), bands: opts.bands || new Float32Array(24), vocal: V.vocal ?? null, // null: no live estimate (Vocal Glow uses the mid bands)
     buildP: V.state === "build" ? V.buildP : ((((g.idx - g.beatInBar) / 4) % 4 + 4) % 4 + g.barPhase) / 4,
-    // seconds until the next known drop (whole-song analysis or a forced build-up) and since the last one; 99 = none
-    dropIn: V.nextDrop != null && V.nextDrop >= t ? V.nextDrop - t : 99, sinceDrop: V.dropT > -9 ? t - V.dropT : 99,
+    // seconds until the next drop (known, or predicted live with dropConf 0.5 or more) and since the last one; 99 = none
+    dropIn: V.nextDrop != null && V.nextDrop >= t && (V.dropConf ?? 1) >= 0.5 ? V.nextDrop - t : 99, sinceDrop: V.dropT > -9 ? t - V.dropT : 99,
   };
 }

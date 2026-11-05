@@ -444,7 +444,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     const f = rt.forced; if (!f || !V) return V;
     const el = (now - f.t0) / 1000;
     if (f.kind === "build") {
-      if (el < f.dur) return { ...V, state: "build", buildP: el / f.dur, nextDrop: t + (f.dur - el) };
+      if (el < f.dur) return { ...V, state: "build", buildP: el / f.dur, nextDrop: t + (f.dur - el), dropConf: 1, dropSource: "memory" };
       rt.forced = { kind: "drop", t0: now, dur: 8, dropT: t }; return { ...V, state: "drop", dropT: t };
     }
     if (f.kind === "drop") { if (f.dropT == null) f.dropT = t; if (el < Math.max(4, f.dur)) return { ...V, state: "drop", dropT: f.dropT, level: "peak" }; rt.forced = null; }
@@ -740,12 +740,20 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     return { ...NO_MAP };
   }
 
+  /** The next drop for the status: {next: seconds until it, at: when (the music's clock), conf 0..1, source: "memory"
+   *  (known ahead: an analysed or remembered song, a show's cue, the Build & drop pad) | "predicted" (heard coming, live) |
+   *  null, building: the lights are building toward it}. */
+  function dropInfo(V, t) {
+    const at = V && V.nextDrop != null && Number.isFinite(V.nextDrop) && Number.isFinite(t) && V.nextDrop >= t - 0.05 ? V.nextDrop : null, r = D.ramp, r2 = v => Math.round(v * 100) / 100;
+    if (at == null) return { next: null, at: null, conf: 0, source: null, building: false };
+    return { next: r2(Math.max(0, at - t)), at: r2(at), conf: r2(Math.max(0, Math.min(1, V.dropConf ?? 1))), source: V.dropSource === "predicted" ? "predicted" : "memory", building: !!(r && r.building && Math.abs(r.at - at) < 0.5) };
+  }
   function status() {
     const V = rt.view, an = liveFresh() ? rt.live.an : null, hear = hearingInfo();
     return {
       type: "status", source: rt.source, sourceLabel: rt.sourceLabel, fps: Math.round(rt.fps), leds: L.N, effect: D.showing, effectName: fx.list.find(e => e.id === D.showing)?.name || D.showing, style: D.style,
       styleName: fx.styles[D.style]?.name || D.style, bpm: V && V.bpm ? Math.round(V.bpm * 10) / 10 : null, part: V ? V.state : "idle",
-      beat: V && V.g.has ? V.g.beatInBar : null, level: an ? Math.round(Math.min(1, an.eFast / an.eMax) * 100) / 100 : V ? Math.round((V.loud || 0) * 100) / 100 : 0,
+      beat: V && V.g.has ? V.g.beatInBar : null, drop: dropInfo(V, rt.t), level: an ? Math.round(Math.min(1, an.eFast / an.eMax) * 100) / 100 : V ? Math.round((V.loud || 0) * 100) / 100 : 0,
       bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, key: V && V.key ? { key: V.key, mode: V.mode, name: `${V.key} ${V.mode}`, confidence: V.keyConf ?? 0 } : null, mood: V && V.mood ? { ...V.mood, name: moodName(V.mood) } : null, hears: V ? hearsLabel(V.key, V.mode, V.mood) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, mapping: rt.mapping ? { device: rt.mapping.dev, led: rt.mapping.led } : null, djlink: djFresh(performance.now()) ? { name: rt.dj.name, bpm: rt.dj.bpm, beatInBar: rt.dj.beatInBar } : null, recognised: rt.mem.lock && liveFresh() ? { id: rt.mem.lock.id, name: rt.mem.lock.name, pos: Math.round(lockPos(rt.mem.lock, rt.live.an.t) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, home: rt.home ? rt.home.status() : null, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
       look: lookInfo(D.look, { song: playingEntry()?.id || null }),
       song: rt.song ? { memId: rt.song.memId || null, name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,

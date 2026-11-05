@@ -8,6 +8,10 @@
 // is seeded while the engine runs). Both run for each variety of automatic mode: "show" (whole, live: effects change
 // with the song), and "one" and "parts" (varieties.one / varieties.parts: the song's look, looks.js; whole-song mode
 // gets it from pickLook(), live mode picks its own as it listens).
+// The drop countdown (drops.js) is measured too: on the feel song and four more synthetic songs (synth.js edm(),
+// long-edm.js, majorPop(), minorBallad()) through the LiveAnalyser alone, how long before each drop the prediction
+// (dropConf 0.5 or more) already had the right time, and how many predictions were wrong; and in every run, the build
+// ramp: how much brighter the last bar of a build-up is than its first.
 //
 //   node scripts/feel-eval.js                     # metrics, targets report
 //   node scripts/feel-eval.js --json
@@ -18,7 +22,8 @@ import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { preAnalyseCore, buildLayout, exampleRoom, createEffects, createDirector, songView, LiveAnalyser, toRGB8, pickLook } from "../packages/engine/src/index.js";
-import { rng } from "../packages/engine/test/synth.js";
+import { rng, edm, majorPop, minorBallad } from "../packages/engine/test/synth.js";
+import { longEdm } from "../packages/engine/test/long-edm.js";
 import { feelSong } from "../packages/engine/test/feel-song.js";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
@@ -32,14 +37,14 @@ const r3 = v => v == null || !Number.isFinite(v) ? null : Math.round(v * 1000) /
 const r1 = v => v == null || !Number.isFinite(v) ? null : Math.round(v * 10) / 10;
 
 // ---------------------------------------------------------------- run the engine, record every frame
-function runEngine(song, pre, L, mode, variety = "show") {
+export function runEngine(song, pre, L, mode, variety = "show") {
   const savedRandom = Math.random; Math.random = (r => () => (r() + 1) / 2)(rng(42)); // effects use Math.random: seed it
   try {
     const N = L.N, fx = createEffects(L), D = createDirector(L, fx);
     D.settings.variety = variety;
     if (variety !== "show" && mode !== "live") D.settings.look = pickLook(pre, { seed: "feel", available: fx.list.map(e => e.id) });
     const an = mode === "live" ? new LiveAnalyser(song.sr) : null, chunk = Math.round(song.sr / FPS);
-    const nF = Math.floor(song.dur * FPS), lum = new Float32Array(nF), cur = [], states = [], c8 = new Uint8Array(N * 3);
+    const nF = Math.floor(song.dur * FPS), lum = new Float32Array(nF), cur = [], states = [], c8 = new Uint8Array(N * 3), pred = [];
     let pos = 0;
     for (let f = 0; f < nF; f++) {
       const now = (f + 1) / FPS; // the moment the frame is shown, on the audio clock (no network or LED delay)
@@ -53,8 +58,9 @@ function runEngine(song, pre, L, mode, variety = "show") {
       let s = 0; for (let i = 0; i < c8.length; i++) s += c8[i]; lum[f] = s / c8.length / 255;
       if (!cur.length || cur.at(-1).id !== D.showing) cur.push({ id: D.showing, t: now });
       if (V && (!states.length || states.at(-1).s !== V.state)) states.push({ s: V.state, t: now });
+      if (an) pred.push([t, V ? V.nextDrop : null, V ? V.dropConf || 0 : 0]);
     }
-    return { lum, cur, states, nF, look: D.look ? { ...D.look } : null };
+    return { lum, cur, states, nF, pred, look: D.look ? { ...D.look } : null };
   } finally { Math.random = savedRandom; }
 }
 
@@ -83,11 +89,14 @@ function measure(R, T, dur) {
   const near = (t, len, before, after) => { const x = ((t % len) + len) % len; return x <= after || len - x <= before; };
   const onDown = ch.filter(t => near(t, bar, 0.03, 0.075)).length, on4 = ch.filter(t => near(t, 4 * bar, 0.03, 0.075)).length;
   const short = R.cur.slice(1, -1).filter((c, i) => R.cur[i + 2].t - c.t < bar - 0.05).length; // an effect that showed for less than a bar
+  // build ramp: a build-up's last bar (without its last beat, the planned dip) against its first bar
+  const buildRamp = T.parts.filter((p, i) => p.part === "build" && T.parts[i + 1]?.part === "drop").map(p => r3(mean(win(p.t1 - bar, p.t1 - T.beat)) / Math.max(1e-3, mean(win(p.t0 + 0.05, p.t0 + bar)))));
   return {
     kickContrast: r3(med(kc)), kickContrastP10: r3(pctl(kc, 0.1)), kickLagMs: r1(med(lag)),
     lum: Object.fromEntries(["intro", "build", "drop", "break", "outro", "silence"].map(p => [p, r3(lumOf(p))])),
     dropBreak: r3(lumOf("drop") / Math.max(1e-3, lumOf("break"))),
     preDropDip, preDropDipWorst: r3(Math.max(...preDropDip)), dropImpact, dropImpactMin: r3(Math.min(...dropImpact)),
+    buildRamp, buildRampMin: r3(Math.min(...buildRamp)),
     changes: ch.length, changesPerMin: r1(ch.length / (dur / 60)), onDownbeat: ch.length ? r3(onDown / ch.length) : null, on4Bar: ch.length ? r3(on4 / ch.length) : null, shortEffects: short,
   };
 }
@@ -103,6 +112,36 @@ function liveDrops(states, T) {
   return { dropDelayMs: delays, dropDelayWorstMs: got.length ? Math.max(...got) : null, missedDrops: delays.length - got.length, falseDrops: entries.length - used.size };
 }
 
+// the drop countdown: pred = [[t, nextDrop, dropConf]] on the analyser's clock. A prediction counts once dropConf is
+// 0.5 or more. lead: how long before a true drop the prediction had already been right (within 0.25 s) without a
+// break; first: how long before it the first warning came (a countdown that ended at this drop); a run of predictions
+// (with no break) that didn't end at a true drop is a false one.
+export function countdown(pred, drops) {
+  const runs = []; let cur = null;
+  for (const [t, at, c] of pred) { if (at != null && c >= 0.5) { if (!cur) runs.push(cur = { t0: t, items: [] }); cur.items.push([t, at]); } else cur = null; }
+  const lead = [], first = []; let falseN = 0;
+  for (const r of runs) { const last = r.items.at(-1)[1]; if (!drops.some(d => Math.abs(d - last) < 0.3)) falseN++; }
+  for (const d of drops) {
+    const r = runs.find(x => Math.abs(x.items.at(-1)[1] - d) < 0.3 && x.items.at(-1)[0] >= d - 1);
+    if (!r) { lead.push(0); first.push(0); continue; }
+    let k = r.items.length - 1; while (k > 0 && Math.abs(r.items[k - 1][1] - d) < 0.25) k--;
+    lead.push(r1(Math.max(0, d - r.items[k][0]))); first.push(r1(Math.max(0, d - r.t0)));
+  }
+  return { lead, first, falseN };
+}
+function listenOnly(song) { const an = new LiveAnalyser(song.sr), chunk = Math.round(song.sr / FPS), pred = [];
+  for (let i = 0; i < song.x.length; i += chunk) { an.push(song.x.subarray(i, i + chunk)); const t = an.t, V = an.view(t); pred.push([t, V.nextDrop, V.dropConf || 0]); }
+  return pred; }
+/** The drop countdown on the other test songs (the feel song's is measured in its live run). */
+export function countdownSongs() {
+  const out = {}, e = edm(22050), L = longEdm(22050);
+  out.edm = countdown(listenOnly(e), [e.dropStart]);
+  out.longEdm = countdown(listenOnly(L), L.truth.parts.filter(p => p.part === "drop").map(p => p.t0));
+  out.majorPop = countdown(listenOnly(majorPop(22050)), []);
+  out.ballad = countdown(listenOnly(minorBallad(22050)), []);
+  return out;
+}
+
 /** Run the whole evaluation. */
 export async function runFeel({ effects = false } = {}) {
   const song = feelSong(), T = song.truth, L = buildLayout(exampleRoom());
@@ -116,6 +155,8 @@ export async function runFeel({ effects = false } = {}) {
     whole: sm,
     live: { ...lm, ...ld },
   };
+  { const fc = countdown(Lv.pred, truthDrops), so = countdownSongs(), edmLeads = [...fc.lead, ...so.edm.lead, ...so.longEdm.lead];
+    out.countdown = { feel: fc, ...so, leadMin: Math.min(...edmLeads), leadMedian: r1(med(edmLeads)), falseEdm: fc.falseN + so.edm.falseN + so.longEdm.falseN, falseCalm: so.majorPop.falseN + so.ballad.falseN }; }
   const fxs = R => R.cur.map(c => `${c.t.toFixed(2)}:${c.id}`).join(" ");
   if (effects) { out.whole.effects = fxs(S); out.live.effects = fxs(Lv); out.live.states = Lv.states.map(s => `${s.t.toFixed(2)}:${s.s}`).join(" "); }
   out.varieties = {};
@@ -140,6 +181,11 @@ export const TARGETS = [
   ["drop / breakdown brightness", r => r.whole.dropBreak, v => v >= 1.8, ">= 1.8"],
   ["pre-drop dip (worst drop)", r => r.whole.preDropDipWorst, v => v <= 0.7, "<= 0.7"],
   ["live drop delay (worst drop, ms)", r => r.live.missedDrops ? null : r.live.dropDelayWorstMs, v => v != null && v <= 150, "<= 150"],
+  ["live pre-drop dip (worst drop)", r => r.live.preDropDipWorst, v => v <= 0.7, "<= 0.7"],
+  ["build ramp, last bar / first bar (worst)", r => r.whole.buildRampMin, v => v >= 1.5, ">= 1.5"],
+  ["live build ramp, last bar / first bar (worst)", r => r.live.buildRampMin, v => v >= 1.5, ">= 1.5"],
+  ["drop countdown lead, EDM songs (shortest, s)", r => r.countdown?.leadMin, v => v >= 2, ">= 2"],
+  ["drop countdown: false predictions, pop + ballad", r => r.countdown?.falseCalm, v => v === 0, "0"],
 ];
 export function targetReport(r) { return TARGETS.map(([name, get, ok, aim]) => { const v = get(r); return { name, value: v, aim, pass: v != null && ok(v) }; }); }
 /** The aims that apply to a look (varieties "one" and "parts"): the feel must be as strong with one effect, and
@@ -152,6 +198,8 @@ export const VARIETY_TARGETS = [
   ["effects shorter than one bar", m => m.whole.shortEffects, v => v === 0, "0"],
   ["live: effects shorter than one bar", m => m.live.shortEffects, v => v === 0, "0"],
   ["live: drop kick contrast, median", m => m.live.kickContrast, v => v >= 0.40, ">= 0.40"],
+  ["build ramp, last bar / first bar (worst)", m => m.whole.buildRampMin, v => v >= 1.5, ">= 1.5"],
+  ["live: build ramp, last bar / first bar (worst)", m => m.live.buildRampMin, v => v >= 1.5, ">= 1.5"],
 ];
 const CPM = { one: 2, parts: 8 }; // effect changes a minute at most, whole song and live
 export function varietyReport(r) {
@@ -182,6 +230,13 @@ export const GUARDS = [
   ["live: false drops", r => r.live.falseDrops, Lo(1)],
   ["live: effect changes", r => r.live.changes, (n, b) => n > b * 1.25 + 2],
   ["live: effects shorter than a bar", r => r.live.shortEffects, (n, b) => n > b * 1.25 + 2],
+  ["live: pre-drop dip (worst)", r => r.live.preDropDipWorst, Lo(0.15)],
+  ["whole: build ramp (worst)", r => r.whole.buildRampMin, H(0.15)],
+  ["live: build ramp (worst)", r => r.live.buildRampMin, H(0.15)],
+  ["countdown: lead on EDM songs (shortest, s)", r => r.countdown?.leadMin, H(0.5)],
+  ["countdown: lead on EDM songs (median, s)", r => r.countdown?.leadMedian, H(0.5)],
+  ["countdown: false predictions on EDM songs", r => r.countdown?.falseEdm, Lo(0)],
+  ["countdown: false predictions on pop and ballad", r => r.countdown?.falseCalm, Lo(0)],
   ...["one", "parts"].flatMap(v => [
     [`${v}: kick contrast median`, r => r.varieties?.[v]?.whole.kickContrast, H(0.05)],
     [`${v}: drop / breakdown brightness`, r => r.varieties?.[v]?.whole.dropBreak, (n, b) => n < b * 0.85],
@@ -225,9 +280,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       console.log(`  brightness: ${Object.entries(m.lum).map(([k, x]) => `${k} ${v(x)}`).join(", ")}; drop/breakdown ${v(m.dropBreak)}`);
       console.log(`  pre-drop dip ${v(m.preDropDip)}; drop impact ${v(m.dropImpact)}`);
       console.log(`  effect changes ${m.changes} (${v(m.changesPerMin)} a minute): on downbeat ${v(m.onDownbeat)}, on 4-bar line ${v(m.on4Bar)}; shorter than a bar ${m.shortEffects}`);
+      console.log(`  build ramp (last bar / first bar of each build-up) ${v(m.buildRamp)}`);
       if (m.dropDelayMs) console.log(`  drop delay ${v(m.dropDelayMs)} ms; missed ${m.missedDrops}; false drops ${m.falseDrops}`);
       if (m.effects) console.log(`  effects: ${m.effects}`); if (m.states) console.log(`  states: ${m.states}`);
     }
+    if (r.countdown) { const c = r.countdown; console.log(`\ndrop countdown (live): right time ahead of each drop (s), first warning (s), false predictions`);
+      for (const k of ["feel", "edm", "longEdm", "majorPop", "ballad"]) console.log(`  ${k.padEnd(9)} lead ${v(c[k].lead)}; first ${v(c[k].first)}; false ${c[k].falseN}`);
+      console.log(`  EDM songs: shortest lead ${v(c.leadMin)} s, median ${v(c.leadMedian)} s; false: EDM ${c.falseEdm}, pop + ballad ${c.falseCalm}`); }
     console.log(`\ntargets (roadmap): ${tg.filter(x => x.pass).length}/${tg.length} met`);
     for (const x of tg) console.log(`  ${x.pass ? "PASS" : "FAIL"}  ${x.name.padEnd(38)} ${v(x.value).padEnd(8)} aim ${x.aim}`);
     const vr = varietyReport(r); console.log(`\nlooks (varieties one, parts): ${vr.filter(x => x.pass).length}/${vr.length} met`);

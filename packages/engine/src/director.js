@@ -247,6 +247,33 @@ export function createDirector(layout, fx) {
     return d;
   }
 
+  // ---- the build toward a drop: in the last 8 bars before a drop that is known (whole-song analysis, a remembered
+  // song, a show's cue: dropConf 1) or predicted live (drops.js, from dropConf 0.5), the room gets brighter and its
+  // effect faster, the last bar pulses tighter (effects with the energy for it), then the dip and the drop flash.
+  // It runs while the music builds up (a build-up part, or a live prediction), or over the last 2 bars before any
+  // known drop. One effect throughout: the energy comes from brightness and speed, never from switching effect.
+  /** The drop ahead if it is sure enough to act on: {at, conf}, else null. */
+  function dropAhead(V, t) { const at = V.nextDrop; if (at == null || !(at >= t)) return null; const c = V.dropConf ?? 1; return c >= 0.5 ? { at, conf: c } : null; }
+  function rampOf(V, t, P, wall) {
+    const d = dropAhead(V, t), bar = 4 * P, R = st.ramp;
+    const on = d && V.state !== "drop" && V.state !== "silent" && d.at - t <= 16 * bar && (V.state === "build" || V.dropSource === "predicted" || d.at - t <= 2 * bar);
+    // (off: at the drop at once; otherwise eased out over half a second, so a prediction missing for a moment is no flicker)
+    if (!on) { if (R && (V.state === "drop" || !(wall - R.seen < 0.5))) st.ramp = null; else if (R) R.r += (0 - R.r) * 0.1; return st.ramp ? st.ramp.r : 0; }
+    // the same drop (a prediction may move by a phrase): keep where the ramp began; a new one, or the clock went back: begin now
+    // (k0: the brightness it starts from, what showed the frame before; a known drop: it eases lower first, over a beat, for more to rise)
+    if (!R || Math.abs(R.at - d.at) > 8 * bar + 0.1 || t < R.t0) st.ramp = { at: d.at, t0: t, seen: wall, r: 0, conf: d.conf, k0: st.lastK ?? 1, known: V.dropSource !== "predicted" };
+    const r = st.ramp; r.at = d.at; r.seen = wall; r.conf = d.conf;
+    const t0 = Math.max(r.t0, d.at - 8 * bar), want = Math.max(0, Math.min(1, (t - t0) / Math.max(0.5, d.at - t0)));
+    r.r += (want - r.r) * (want < r.r ? 0.05 : 0.5); // (a prediction moved later: ease back, don't drop)
+    return r.r;
+  }
+  // the speed-up: free-running animation runs up to 1.7x as fast; hits (kick, snare, hat, the beat) stay where they are
+  function speedUp(S, dt, r, id) {
+    if (r > 0 && dt > 0 && !(rating(id) || {}).needsBeat) st.tShift = (st.tShift || 0) + dt * 0.7 * r * r;
+    const d = st.tShift || 0; if (!d) return S;
+    return { ...S, t: S.t + d, pulseT: S.pulseT + d, snare: S.snare + d, hat: S.hat + d, pulses: S.pulses.map(x => x + d), snares: S.snares.map(x => x + d), g: S.g && { ...S.g, beatT: S.g.beatT + d } };
+  }
+
   function renderAmbient(t, out) {
     if (settings.ambientHook && settings.ambientHook(t, out)) return true; // the ambient plan for this hour (Home & sleep)
     if (settings.ambient === "off" || !ids.has(settings.ambient)) { out.fill(0); return false; }
@@ -306,17 +333,19 @@ export function createDirector(layout, fx) {
     } else {
       // a hand-made timeline: build-up and drop cues change what the music "is doing", colour blocks the palette
       const TL = settings.timeline, P = (V.g && V.g.P) || 0.5, cs = TL ? cuesAt(TL.cues, t, P) : null, cpal = TL ? blockPalette(rangeAt(TL.colors, t), fx.palettes) : null;
-      if (cs && cs.build) V = { ...V, state: "build", buildP: Math.min(1, (t - cs.build.t0) / (cs.build.t1 - cs.build.t0)), nextDrop: cs.build.t1 };
+      if (cs && cs.build) V = { ...V, state: "build", buildP: Math.min(1, (t - cs.build.t0) / (cs.build.t1 - cs.build.t0)), nextDrop: cs.build.t1, dropConf: 1, dropSource: "memory" };
       if (cs && cs.drop != null) V = { ...V, state: "drop", dropT: cs.drop, level: "peak" };
       const ST = style(V); st.styleName = settings.style !== "auto" ? settings.style : V.style || "party";
       choose(t, V);
-      const S = buildSignals(st.styleName === V.style ? V : { ...V, style: st.styleName }, t, { pal: cpal || palette(), fixed: !!cpal || settings.palette !== "auto", ...extra });
+      let S = buildSignals(st.styleName === V.style ? V : { ...V, style: st.styleName }, t, { pal: cpal || palette(), fixed: !!cpal || settings.palette !== "auto", ...extra });
       S.text = extra.text || ""; S.screen = extra.screen || null;
       const g = V.g || {}, auto = settings.mode === "auto", dt = Math.max(0, Math.min(0.1, t - (st.frameT ?? t))); st.frameT = t;
       // variation: in a drop, every other 2-bar line flips the colours and mirrors the room instead of a new effect
       const vb = auto && settings.variations !== false ? varyBars(swapBars(settings.everyBeats, ST, st.hot), st.hot) : 0;
       const vary = vb > 0 && st.switchBar != null && Math.floor((barOf(g, t) - st.switchBar) / 4 / vb) % 2 === 1;
       st.vary = vary;
+      // (the speed-up ends at the drop: its hard cut and flash hide the jump back)
+      const rp = rampOf(V, t, P, wall), S0 = S; if (V.state === "drop") st.tShift = 0; S = speedUp(S, dt, rp, st.cur);
       if (vary) { renderFx(st.cur, { ...S, pal: [S.pal[1], S.pal[0]] }, COL); const m = mirrorMap(); ZTMP.set(COL); for (let i = 0; i < N; i++) { const j = m[i] * 3; COL[i * 3] = ZTMP[j]; COL[i * 3 + 1] = ZTMP[j + 1]; COL[i * 3 + 2] = ZTMP[j + 2]; } }
       else renderFx(st.cur, S, COL);
       // energy contour and evening out (automatic mode): each effect is brought toward the song part's brightness
@@ -331,10 +360,16 @@ export function createDirector(layout, fx) {
           const post = seen(COL), c = st.fxCorr[st.cur] ?? 1, r = lin(aimOf(st.cur, e)) / lin(post);
           st.fxCorr[st.cur] = Math.max(0.3, Math.min(3, c * Math.exp(Math.log(Math.max(0.5, Math.min(2, r))) * (1 - Math.exp(-dt / 2))))); }
       }
-      // a look plays one effect through the song: in a build-up it rises from inside, instead of a new effect
-      if (lookOn() && V.state === "build") { const k = 0.8 + 0.45 * Math.max(0, Math.min(1, V.buildP || 0)); for (let i = 0; i < COL.length; i++) COL[i] *= k; }
+      // the build toward a drop: brighter as it nears (as much as Drama and the style's moment say; gentler at night).
+      // Without a drop ahead, a look's build-up still rises from inside (one effect plays through the song)
+      const mo = ST.moment ?? 1, drama = Math.min(1, clamp01(settings.dynamics, 0.8) * 1.25);
+      // (from where it was to 1.9x, all the way at Drama 80% and up; a known drop first eases down)
+      let k = 1;
+      if (rp > 0 && st.ramp) { const amt = 0.9 * drama * mo * (settings.night ? 0.5 : 1), R = st.ramp, k0 = R.known ? R.k0 + (Math.min(R.k0, 1 - 0.5 * amt) - R.k0) * Math.min(1, (t - R.t0) / P) : R.k0; k = k0 + (1 + amt - k0) * rp * rp; }
+      else if (lookOn() && V.state === "build") k = 0.8 + 0.45 * Math.max(0, Math.min(1, V.buildP || 0));
+      st.lastK = k; if (rp > 0) st.peakK = Math.max(st.peakK || 1, k); if (k !== 1) for (let i = 0; i < COL.length; i++) COL[i] *= k;
       if (fading) {
-        const k = Math.max(0, (t - st.xfadeT) / ST.xfade), gp = gainOf(st.prev, e); PREV.set(COL); renderFx(st.prev, S, COL);
+        const k = Math.max(0, (t - st.xfadeT) / ST.xfade), gp = gainOf(st.prev, e); PREV.set(COL); renderFx(st.prev, S0, COL);
         for (let i = 0; i < COL.length; i++) COL[i] = PREV[i] * k + COL[i] * gp * (1 - k);
       }
       // kick pump in drops: dips between kicks and comes back on each one (as hard as the kick was played)
@@ -352,18 +387,27 @@ export function createDirector(layout, fx) {
         if (q > 0.001) for (let i = 0; i < N; i++) { const s = Math.max(0, 1 - q * KW[i]); COL[i * 3] *= s; COL[i * 3 + 1] *= s; COL[i * 3 + 2] *= s; }
       }
       // never let the room go dark: quiet parts fade to the ambient effect; only the planned pause before a drop is a blackout
-      const preDrop = V.nextDrop != null && V.nextDrop >= t && V.nextDrop - t < 1.4;
+      const ahead = dropAhead(V, t), preDrop = !!ahead && ahead.at - t < 1.4;
       const quietFor = V.quietFor != null ? V.quietFor : 99;
       if (V.state === "silent" && (preDrop || quietFor < 1.5)) { for (let i = 0; i < COL.length; i++) COL[i] *= 0.12; }
       else if (V.state === "silent") { renderAmbient(t, AMB); for (let i = 0; i < COL.length; i++) COL[i] = COL[i] * 0.2 + AMB[i] * 0.8; }
       else keepAlive(t, ST.floor * Math.min(1, gain) * Math.max(0, Math.min(1, 1.3 - (V.loud || 0) * 1.6))); // dimmed on purpose: a lower floor
       // moments, in every style (as big as the style's "moment"): the last beat before a known drop dims (no silence
       // needed), then the drop flashes
-      const mo = ST.moment ?? 1, dIn = V.nextDrop != null ? V.nextDrop - t : 99;
-      if (dIn > 0 && dIn <= P && V.state !== "silent") { const k = Math.min(1, (P - dIn) / 0.05) * 0.75 * mo * Math.min(1, clamp01(settings.dynamics, 0.8) * 1.25);
+      // the last bar before the drop pulses on eighths, then sixteenths (an effect with the energy for it; never in
+      // photosensitive-safe or night mode), as hard as Punch says
+      const dIn = ahead ? ahead.at - t : 99;
+      if (rp > 0 && dIn > P && dIn <= 4 * P && !settings.safe && !settings.night && (rating(st.cur) || {}).energy !== "low") {
+        const sub = dIn > 2 * P ? 2 : 4, x = (((ahead.at - t) / P * sub) % 1 + 1) % 1, ph = 1 - x; // ph: 0 on each subdivision
+        const L = P / sub, depth = 0.45 * clamp01(settings.punch, 0.7) * mo, avg = 1 - 0.06 / L * (1 - Math.exp(-L / 0.06)); // (as bright on average)
+        const f = (1 - depth * (1 - Math.exp(-ph * L / 0.06))) / (1 - depth * avg); for (let i = 0; i < COL.length; i++) COL[i] *= f; }
+      if (dIn > 0 && dIn <= P && V.state !== "silent") { const k = Math.min(1, (P - dIn) / 0.05) * (0.75 + 0.15 * rp) * mo * drama; // (deeper after a ramp)
         if (k > 0) for (let i = 0; i < COL.length; i++) COL[i] *= 1 - k; }
       spatial.apply(COL, V, t, settings.stereo); st.spatial = spatial.state;
-      const df = t - V.dropT; if (settings.dropFlash && df >= 0 && df < 0.7) { const f = Math.exp(-df / 0.17) * 2.3 * mo * (settings.safe ? 0.6 : 1); for (let i = 0; i < COL.length; i++) COL[i] += f; }
+      // (after a build ramp the flash peaks as much higher as the room got brighter, so it still stands out; the extra
+      // part is short, gone by the next kick)
+      const df = t - V.dropT; if (settings.dropFlash && df >= 0 && df < 0.7) { const pk = st.peakK || 1, f = (Math.exp(-df / 0.17) + (pk - 1) * Math.exp(-df * pk / 0.17)) * 2.3 * mo * (settings.safe ? 0.6 : 1); for (let i = 0; i < COL.length; i++) COL[i] += f; }
+      else if (st.peakK && !(rp > 0) && (df >= 0.7 || V.state !== "drop")) st.peakK = 1;
       st.lastState = V.state; st.showing = st.cur;
       applyLayer(S, t); applyZones(S, t);
       if (TL) { // flashes fire once as the clock passes them; strobe (sixteenth notes), blackout and brightness follow the clock
@@ -384,6 +428,8 @@ export function createDirector(layout, fx) {
   return {
     frame, settings, state: st,
     get current() { return st.cur; }, get showing() { return st.showing || st.cur; }, get style() { return st.styleName; },
+    /** The build toward the next drop: {at, conf, r (0..1 how far along), building}, or null. */
+    get ramp() { const r = st.ramp; return r ? { at: r.at, conf: r.conf, r: r.r, building: r.r > 0.02 } : null; },
     /** The look playing (the song's, or the one picked live; provisional: true), or null (variety "show", manual mode). */
     get look() { return lookOn() ? activeLook() : null; },
     /** Forget the look picked live (a new song). */

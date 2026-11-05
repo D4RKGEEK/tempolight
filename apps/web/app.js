@@ -553,7 +553,9 @@ const PADS = [
 ];
 const COLORS = ["#ff2bd6", "#16e0ff", "#ffd23f", "#ff3d3d", "#20ffa8", "#7a3cff", "#ffffff"];
 function livePage(el) {
-  el.innerHTML = `${panel("Live pads", "Play the lights like an instrument. Keyboard shortcuts work on this page.", "", `<div class="pb stack"><div class="pads" id="pads">${PADS.filter(p => !p.dmx || app.state.devices.some(d => d.kind === "dmx")).map(p => `<button class="pad" data-pad="${p.id}" type="button"><b>${p.name}</b><span>${p.desc}</span><kbd>${p.key}</kbd></button>`).join("")}</div>
+  el.innerHTML = `${panel("Live pads", "Play the lights like an instrument. Keyboard shortcuts work on this page.", "", `<div class="pb stack">
+      <div class="dropcd" id="l-drop" role="timer" aria-label="Drop countdown" hidden><span class="dropcd-l" id="l-drop-l">Drop in</span><b id="l-drop-n">4</b><span class="dropcd-dots" aria-hidden="true">${[4, 3, 2, 1].map(n => `<i data-n="${n}">${n}</i>`).join(" · ")}</span></div>
+      <div class="pads" id="pads">${PADS.filter(p => !p.dmx || app.state.devices.some(d => d.kind === "dmx")).map(p => `<button class="pad" data-pad="${p.id}" type="button"><b>${p.name}</b><span>${p.desc}</span><kbd>${p.key}</kbd></button>`).join("")}</div>
       <div class="field"><span class="lbl">Colour hold (tap again to release)</span><div class="swatches" id="holds">${COLORS.map(c => `<button class="swatch" style="background:${c}" data-c="${c}" aria-label="Hold ${c}" type="button"></button>`).join("")}</div></div>
       <div class="field"><span class="lbl">Flash colour</span><div class="swatches" id="flashc">${COLORS.map((c, i) => `<button class="swatch" style="background:${c}" data-c="${c}" aria-pressed="${i === 6}" aria-label="Flash ${c}" type="button"></button>`).join("")}</div></div></div>`, "span-7")}
     ${panel("Preview", `<span id="l-now"></span>`, "", `<div class="stage" id="l-stage"></div>`, "span-5")}
@@ -569,6 +571,18 @@ function livePage(el) {
   phoneQr();
   if (!guestOk("pads")) { $$(".pad, .swatch").forEach(b => b.disabled = true); }
   let flashColor = "#ffffff", holdColor = null;
+  // the drop countdown: "Drop in 4 · 3 · 2 · 1" from 8 s before a drop that is known or predicted fairly surely
+  // (status.drop, 4 times a second; counted down here in between), unless Settings turned it off
+  const cd = { at: null, timer: null };
+  const cdShow = () => { const box = $("#l-drop"); if (!box) return; const left = cd.at == null ? null : (cd.at - performance.now()) / 1000;
+    if (left == null || left > 8 || left < -0.6) { box.hidden = true; return; }
+    const n = Math.max(0, Math.ceil(left)); box.hidden = false; box.classList.toggle("now", n === 0);
+    $("#l-drop-l").textContent = n === 0 ? "" : "Drop in"; $("#l-drop-n").textContent = n === 0 ? "Drop!" : String(n);
+    $$("#l-drop i").forEach(i => i.classList.toggle("on", Number(i.dataset.n) === n)); };
+  const cdStatus = m => { const d = m.drop, on = app.state?.settings?.dropCountdown !== false;
+    cd.at = on && d && d.next != null && d.conf >= 0.5 && d.next <= 8 ? performance.now() + d.next * 1000 : (cd.at != null && performance.now() - cd.at < 600 && performance.now() >= cd.at ? cd.at : null); // (keeps "Drop!" a moment)
+    if (cd.at != null && !cd.timer) cd.timer = setInterval(() => { cdShow(); if (cd.at == null || performance.now() - cd.at > 600) { clearInterval(cd.timer); cd.timer = null; cdShow(); } }, 100);
+    cdShow(); };
   const send = a => { if (ws.open) ws.send({ type: "action", action: a }); else api("POST", "/api/action", a).catch(e => toast(e.message, true)); };
   const press = (id, down) => {
     const p = PADS.find(x => x.id === id); if (!p) return; const b = $(`[data-pad="${id}"]`); b && b.classList.toggle("down", down);
@@ -613,10 +627,10 @@ function livePage(el) {
     sel.onchange = () => { if (on.checked && pick()) clock.follow(pick()); };
     if (clock.input && !ins.some(i => i.id === clock.input.id)) { clock.stop(); on.checked = false; } }
   return { preview: true,
-    onStatus(m) { $("#l-now").textContent = m.effectName; const o = m.overlay; if ($("#mc-st") && clock.input) $("#mc-st").textContent = m.midiClock ? (m.midiClock.running ? `Following ${m.midiClock.input}: ${m.midiClock.bpm} BPM${m.midiClock.barKnown ? "" : " (no Start yet: the bar is a guess)"}` : m.midiClock.stopped ? "Stopped: waiting for Start or Continue" : "Waiting for clock…") : "Waiting for clock…"; $("#ph-n").textContent = m.phones ? `${m.phones} phone${m.phones > 1 ? "s" : ""} joined` : "No phones yet";
+    onStatus(m) { $("#l-now").textContent = m.effectName; const o = m.overlay; cdStatus(m); if ($("#mc-st") && clock.input) $("#mc-st").textContent = m.midiClock ? (m.midiClock.running ? `Following ${m.midiClock.input}: ${m.midiClock.bpm} BPM${m.midiClock.barKnown ? "" : " (no Start yet: the bar is a guess)"}` : m.midiClock.stopped ? "Stopped: waiting for Start or Continue" : "Waiting for clock…") : "Waiting for clock…"; $("#ph-n").textContent = m.phones ? `${m.phones} phone${m.phones > 1 ? "s" : ""} joined` : "No phones yet";
       $('[data-pad="blackout"]').setAttribute("aria-pressed", o.blackout); $('[data-pad="freeze"]').setAttribute("aria-pressed", o.freeze);
       $('[data-pad="strobe"]').setAttribute("aria-pressed", o.strobe); $('[data-pad="build"]').classList.toggle("hot", o.forced === "build"); $('[data-pad="drop"]').classList.toggle("hot", o.forced === "drop"); },
-    destroy() { prev.destroy(); removeEventListener("keydown", kd); removeEventListener("keyup", ku); if (midi) [...midi.inputs.values()].forEach(i => i.onmidimessage = null); clock.stop(); } };
+    destroy() { prev.destroy(); clearInterval(cd.timer); removeEventListener("keydown", kd); removeEventListener("keyup", ku); if (midi) [...midi.inputs.values()].forEach(i => i.onmidimessage = null); clock.stop(); } };
 }
 
 /** A link a guest's phone can open: a phone can't reach "localhost", so use this computer's network address. */
@@ -779,6 +793,7 @@ function settingsPage(el) {
       <label class="check"><input type="checkbox" id="s-vary" ${s.variations !== false ? "checked" : ""}> Vary drops every 2 bars (colour flip, mirror)</label>
       <label class="check" title="With Automatic colours, each chord has its own shade of the palette; the colour steps on the bar line when the chord changes"><input type="checkbox" id="s-chordc" ${s.chordColours !== false ? "checked" : ""}> Chord colours (colours step with the song's chords)</label>
       <div class="field"><label for="s-stereo">Stereo</label><select id="s-stereo">${opt("off", "Off", s.stereo === "off")}${opt("subtle", "Subtle", (s.stereo || "subtle") === "subtle")}${opt("strong", "Strong", s.stereo === "strong")}</select><span class="help">With a stereo source (this computer's sound, a song played here), the side of the room a hit came from lights up more. Mono sources and rooms with no width are unchanged.</span></div>
+      <label class="check"><input type="checkbox" id="s-dropcd" ${s.dropCountdown !== false ? "checked" : ""}> Show drop countdown (on the Live pads page: "Drop in 4 · 3 · 2 · 1")</label>
     </div>`, "span-12")}
     ${panel("Integrations", "", "", `<div class="pb controls">
       <label class="check"><input type="checkbox" id="s-sync" ${s.audioSync ? "checked" : ""}> Send WLED audio sync (lets WLED's own sound effects react too)</label>
@@ -835,7 +850,7 @@ function settingsPage(el) {
   $("#s-amb").onchange = e => setS({ ambient: e.target.value });
   range("s-idleb", "idleBrightness", v => Math.round(v * 100) + "%"); range("s-idlea", "idleAfterSec", v => v + " s"); range("s-fps", "fps", v => v + " fps");
   $("#s-perf").onchange = e => setS({ performance: e.target.value });
-  $("#s-safe").onchange = e => setS({ safe: e.target.checked }); $("#s-dropf").onchange = e => setS({ dropFlash: e.target.checked }); $("#s-vary").onchange = e => setS({ variations: e.target.checked });
+  $("#s-safe").onchange = e => setS({ safe: e.target.checked }); $("#s-dropf").onchange = e => setS({ dropFlash: e.target.checked }); $("#s-vary").onchange = e => setS({ variations: e.target.checked }); $("#s-dropcd").onchange = e => setS({ dropCountdown: e.target.checked });
   $("#s-chordc").onchange = e => setS({ chordColours: e.target.checked }); $("#s-stereo").onchange = e => setS({ stereo: e.target.value });
   for (const [id, k] of [["s-punch", "punch"], ["s-dyn", "dynamics"]]) { const r = $(`#${id}`); r.oninput = () => { $(`#${id}-o`).textContent = `${Math.round(r.value * 100)}%`; }; r.onchange = () => setS({ [k]: Number(r.value) }); }
   $("#s-sync").onchange = e => setS({ audioSync: e.target.checked }); $("#s-disc").onchange = e => setS({ autoDiscover: e.target.checked });

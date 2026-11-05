@@ -18,28 +18,33 @@
   "style": "party"
  },
  "whole": {
-  "kickContrast": 0.729,
-  "kickContrastP10": 0.255,
+  "kickContrast": 0.731,
+  "kickContrastP10": 0.257,
   "kickLagMs": 12.5,
   "lum": {
-   "intro": 0.143,
-   "build": 0.241,
-   "drop": 0.217,
+   "intro": 0.118,
+   "build": 0.268,
+   "drop": 0.22,
    "break": 0.1,
    "outro": 0.103,
    "silence": 0.077
   },
-  "dropBreak": 2.173,
+  "dropBreak": 2.21,
   "preDropDip": [
-   0.266,
-   0.148
+   0.133,
+   0.09
   ],
-  "preDropDipWorst": 0.266,
+  "preDropDipWorst": 0.133,
   "dropImpact": [
-   4.424,
-   5.201
+   4.576,
+   5.568
   ],
-  "dropImpactMin": 4.424,
+  "dropImpactMin": 4.576,
+  "buildRamp": [
+   1.719,
+   4.615
+  ],
+  "buildRampMin": 1.719,
   "changes": 8,
   "changesPerMin": 7.9,
   "onDownbeat": 1,
@@ -47,28 +52,33 @@
   "shortEffects": 0
  },
  "live": {
-  "kickContrast": 0.655,
-  "kickContrastP10": 0.53,
+  "kickContrast": 0.66,
+  "kickContrastP10": 0.55,
   "kickLagMs": 0,
   "lum": {
    "intro": 0.181,
-   "build": 0.157,
-   "drop": 0.18,
+   "build": 0.172,
+   "drop": 0.178,
    "break": 0.119,
-   "outro": 0.219,
-   "silence": 0.098
+   "outro": 0.204,
+   "silence": 0.104
   },
-  "dropBreak": 1.522,
+  "dropBreak": 1.502,
   "preDropDip": [
-   0.472,
-   1.139
+   0.399,
+   0.223
   ],
-  "preDropDipWorst": 1.139,
+  "preDropDipWorst": 0.399,
   "dropImpact": [
-   6.494,
-   9.448
+   6.919,
+   9.639
   ],
-  "dropImpactMin": 6.494,
+  "dropImpactMin": 6.919,
+  "buildRamp": [
+   3.108,
+   2.225
+  ],
+  "buildRampMin": 2.225,
   "changes": 10,
   "changesPerMin": 9.9,
   "onDownbeat": 0.7,
@@ -82,33 +92,85 @@
   "missedDrops": 0,
   "falseDrops": 0
  },
+ "countdown": {
+  "feel": {
+   "lead": [
+    5.2,
+    5.4
+   ],
+   "first": [
+    5.2,
+    5.4
+   ],
+   "falseN": 0
+  },
+  "edm": {
+   "lead": [
+    5.2
+   ],
+   "first": [
+    5.2
+   ],
+   "falseN": 0
+  },
+  "longEdm": {
+   "lead": [
+    12.9,
+    0.2
+   ],
+   "first": [
+    12.9,
+    5.3
+   ],
+   "falseN": 0
+  },
+  "majorPop": {
+   "lead": [],
+   "first": [],
+   "falseN": 0
+  },
+  "ballad": {
+   "lead": [],
+   "first": [],
+   "falseN": 0
+  },
+  "leadMin": 0.2,
+  "leadMedian": 5.2,
+  "falseEdm": 0,
+  "falseCalm": 0
+ },
  "varieties": {
   "one": {
    "look": "ping//vortex/ping/sunset",
    "liveLook": "ping/fire",
    "whole": {
-    "kickContrast": 0.798,
-    "kickContrastP10": 0.486,
+    "kickContrast": 0.809,
+    "kickContrastP10": 0.494,
     "kickLagMs": 12.5,
     "lum": {
-     "intro": 0.155,
-     "build": 0.259,
-     "drop": 0.212,
-     "break": 0.104,
-     "outro": 0.127,
-     "silence": 0.082
+     "intro": 0.126,
+     "build": 0.256,
+     "drop": 0.22,
+     "break": 0.113,
+     "outro": 0.124,
+     "silence": 0.083
     },
-    "dropBreak": 2.031,
+    "dropBreak": 1.939,
     "preDropDip": [
-     0.291,
-     0.305
+     0.143,
+     0.16
     ],
-    "preDropDipWorst": 0.305,
+    "preDropDipWorst": 0.16,
     "dropImpact": [
-     5.472,
-     5.588
+     5.654,
+     5.584
     ],
-    "dropImpactMin": 5.472,
+    "dropImpactMin": 5.584,
+    "buildRamp": [
+     1.705,
+     3.577
+    ],
+    "buildRampMin": 1.705,
     "changes": 0,
     "changesPerMin": 0,
     "onDownbeat": null,
@@ -116,28 +178,33 @@
     "shortEffects": 0
    },
    "live": {
-    "kickContrast": 0.735,
-    "kickContrastP10": 0.672,
+    "kickContrast": 0.729,
+    "kickContrastP10": 0.667,
     "kickLagMs": 0,
     "lum": {
-     "intro": 0.162,
-     "build": 0.147,
-     "drop": 0.204,
-     "break": 0.112,
-     "outro": 0.166,
-     "silence": 0.095
+     "intro": 0.158,
+     "build": 0.162,
+     "drop": 0.2,
+     "break": 0.123,
+     "outro": 0.211,
+     "silence": 0.106
     },
-    "dropBreak": 1.823,
+    "dropBreak": 1.621,
     "preDropDip": [
-     0.448,
-     1.074
+     0.359,
+     0.301
     ],
-    "preDropDipWorst": 1.074,
+    "preDropDipWorst": 0.359,
     "dropImpact": [
-     5.077,
-     6.383
+     5.613,
+     6.993
     ],
-    "dropImpactMin": 5.077,
+    "dropImpactMin": 5.613,
+    "buildRamp": [
+     1.601,
+     2.442
+    ],
+    "buildRampMin": 1.601,
     "changes": 2,
     "changesPerMin": 2,
     "onDownbeat": 0.5,
@@ -156,28 +223,33 @@
    "look": "ping//vortex/ping/sunset",
    "liveLook": "ping/fire",
    "whole": {
-    "kickContrast": 0.794,
-    "kickContrastP10": 0.496,
+    "kickContrast": 0.808,
+    "kickContrastP10": 0.493,
     "kickLagMs": 12.5,
     "lum": {
-     "intro": 0.119,
-     "build": 0.268,
-     "drop": 0.218,
-     "break": 0.105,
-     "outro": 0.123,
-     "silence": 0.082
+     "intro": 0.105,
+     "build": 0.279,
+     "drop": 0.221,
+     "break": 0.114,
+     "outro": 0.122,
+     "silence": 0.083
     },
-    "dropBreak": 2.074,
+    "dropBreak": 1.933,
     "preDropDip": [
-     0.362,
-     0.479
+     0.194,
+     0.281
     ],
-    "preDropDipWorst": 0.479,
+    "preDropDipWorst": 0.281,
     "dropImpact": [
-     5.33,
-     5.644
+     5.566,
+     5.664
     ],
-    "dropImpactMin": 5.33,
+    "dropImpactMin": 5.566,
+    "buildRamp": [
+     1.891,
+     6.185
+    ],
+    "buildRampMin": 1.891,
     "changes": 4,
     "changesPerMin": 4,
     "onDownbeat": 1,
@@ -185,28 +257,33 @@
     "shortEffects": 0
    },
    "live": {
-    "kickContrast": 0.735,
-    "kickContrastP10": 0.672,
+    "kickContrast": 0.729,
+    "kickContrastP10": 0.667,
     "kickLagMs": 0,
     "lum": {
-     "intro": 0.162,
-     "build": 0.145,
-     "drop": 0.205,
-     "break": 0.112,
-     "outro": 0.167,
-     "silence": 0.095
+     "intro": 0.158,
+     "build": 0.156,
+     "drop": 0.201,
+     "break": 0.123,
+     "outro": 0.21,
+     "silence": 0.106
     },
-    "dropBreak": 1.826,
+    "dropBreak": 1.63,
     "preDropDip": [
-     0.448,
-     1.106
+     0.359,
+     0.264
     ],
-    "preDropDipWorst": 1.106,
+    "preDropDipWorst": 0.359,
     "dropImpact": [
-     5.077,
-     6.371
+     5.613,
+     6.839
     ],
-    "dropImpactMin": 5.077,
+    "dropImpactMin": 5.613,
+    "buildRamp": [
+     1.601,
+     1.94
+    ],
+    "buildRampMin": 1.601,
     "changes": 4,
     "changesPerMin": 4,
     "onDownbeat": 0.75,
