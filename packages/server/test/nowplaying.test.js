@@ -34,7 +34,7 @@ test("now playing: reads the real output of osascript, playerctl, dbus-send, Pow
   const pc = parsePlayerctl(fx("playerctl.txt"));
   assert.equal(pc.length, 2); assert.deepEqual(pc[0], { app: "Spotify", title: "One More Time", artist: "Daft Punk", album: "Discovery", dur: 320.357, pos: 42.123, playing: true, posOk: true });
   assert.equal(pc[1].app, "Firefox"); assert.equal(pc[1].playing, false); assert.equal(pc[1].dur, 0);
-  assert.equal(PLAYERCTL_FORMAT.split(SEP).length, 8, "the 8th field is the track ID (Spotify: spotify:track:…)");
+  assert.equal(PLAYERCTL_FORMAT.split(SEP).length, 9, "the 8th field is the track ID (Spotify: spotify:track:…), the 9th the address (a local file: file://…)");
 
   const names = parseDbusReply(fx("dbus-listnames.txt")); // captured from dbus-send against a real session bus with two MPRIS players
   assert.deepEqual(names.filter(n => n.startsWith("org.mpris.")), ["org.mpris.MediaPlayer2.spotify", "org.mpris.MediaPlayer2.vlc"]);

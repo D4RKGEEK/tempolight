@@ -28,6 +28,7 @@ export const DEFAULTS = () => ({
     songMemory: true, // remember analysed songs and recognise them when they play again while listening live
     nowPlaying: { enabled: true, spotifyClientId: "" }, // read the track music apps on this computer play (server only, see nowplaying.js)
     moodColours: true, // with the "auto" palette, colours follow the music's mood (key, brightness, energy)
+    library: { folders: [], watch: true, paused: false }, // the music library: folders whose songs are analysed ahead (server only, see library.js)
   },
   // variety (automatic mode): "one" = one look per song (looks.js), "parts" = one for calm parts, build-ups and drops, "show" = effects change with the song
   show: { power: true, mode: "auto", effect: "shock", style: "auto", palette: "auto", everyBeats: 8, variety: "one", speed: 1, params: {}, layer: null },

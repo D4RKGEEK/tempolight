@@ -46,6 +46,11 @@ The image is built for `amd64` and `arm64` (Raspberry Pi 4/5 with a 64-bit OS).
 in docker-compose.yml (or add `--device /dev/snd` to `docker run`), then `docker compose up -d`. The image includes
 ffmpeg and alsa-utils.
 
+**Your own music** (Music → Your own music): the container only sees folders you mount into it. Uncomment the music
+lines in docker-compose.yml (`- /home/you/Music:/music:ro` and `TEMPOLIGHT_MUSIC=/music`), or add
+`-v /home/you/Music:/music:ro -e TEMPOLIGHT_MUSIC=/music` to `docker run`. In the panel the folder is `/music`, the path
+inside the container. See [Your own music](/guides/your-music).
+
 ## Docker Desktop (Mac, Windows)
 
 Docker Desktop runs containers inside a small virtual machine, so the container doesn't see your home network

@@ -5,6 +5,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Your own music
+- Music → **Your own music**: add a music folder and every song in it is analysed ahead (beat map, sections, key, mood, its look and show), so it is followed exactly from its first play: at once when a music player here reports the file (VLC, Rhythmbox, mpv and other MPRIS players; Music on a Mac), by title and length otherwise, and after a few seconds of listening live. ffmpeg reads every format when installed; WAV works without it. Worker threads at the lowest priority (one in low-power mode), pausable, resumable, skipping songs already analysed, copies and the same recording twice. Songs live in `library/`, not the settings file. API: `/api/library` (admin); Docker: mount the folder and set `TEMPOLIGHT_MUSIC`.
+
 ### One look per song
 - Automatic mode now picks one well-chosen effect and palette for each song when it is analysed, and keeps it for the whole song, on the beat (like picking one LedFx effect). It fits the song: a fast four-on-the-floor track gets a kick-driven effect, a ballad a calm one that doesn't need a beat; the colours come from the mood. The same song always gets the same look; different songs get different ones.
 - The look stays lively from inside: speed follows the tempo, it gets stronger through build-ups, the colour steps at new sections (a chorus that comes back gets the same colour), drops vary every 2 bars, and the pump, the dip before the drop and the drop flash stay.
