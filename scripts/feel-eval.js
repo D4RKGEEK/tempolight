@@ -5,7 +5,9 @@
 //   whole-song mode: preAnalyseCore -> songView -> director -> effects (a file played in the app)
 //   live mode:       LiveAnalyser -> view -> director -> effects (the microphone or line-in)
 // and the brightness of every frame is measured against the truth. Zero dependencies; deterministic (Math.random
-// is seeded while the engine runs).
+// is seeded while the engine runs). Both run for each variety of automatic mode: "show" (whole, live: effects change
+// with the song), and "one" and "parts" (varieties.one / varieties.parts: the song's look, looks.js; whole-song mode
+// gets it from pickLook(), live mode picks its own as it listens).
 //
 //   node scripts/feel-eval.js                     # metrics, targets report
 //   node scripts/feel-eval.js --json
@@ -15,7 +17,7 @@
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { preAnalyseCore, buildLayout, exampleRoom, createEffects, createDirector, songView, LiveAnalyser, toRGB8 } from "../packages/engine/src/index.js";
+import { preAnalyseCore, buildLayout, exampleRoom, createEffects, createDirector, songView, LiveAnalyser, toRGB8, pickLook } from "../packages/engine/src/index.js";
 import { rng } from "../packages/engine/test/synth.js";
 import { feelSong } from "../packages/engine/test/feel-song.js";
 
@@ -30,10 +32,12 @@ const r3 = v => v == null || !Number.isFinite(v) ? null : Math.round(v * 1000) /
 const r1 = v => v == null || !Number.isFinite(v) ? null : Math.round(v * 10) / 10;
 
 // ---------------------------------------------------------------- run the engine, record every frame
-function runEngine(song, pre, L, mode) {
+function runEngine(song, pre, L, mode, variety = "show") {
   const savedRandom = Math.random; Math.random = (r => () => (r() + 1) / 2)(rng(42)); // effects use Math.random: seed it
   try {
     const N = L.N, fx = createEffects(L), D = createDirector(L, fx);
+    D.settings.variety = variety;
+    if (variety !== "show" && mode !== "live") D.settings.look = pickLook(pre, { seed: "feel", available: fx.list.map(e => e.id) });
     const an = mode === "live" ? new LiveAnalyser(song.sr) : null, chunk = Math.round(song.sr / FPS);
     const nF = Math.floor(song.dur * FPS), lum = new Float32Array(nF), cur = [], states = [], c8 = new Uint8Array(N * 3);
     let pos = 0;
@@ -50,7 +54,7 @@ function runEngine(song, pre, L, mode) {
       if (!cur.length || cur.at(-1).id !== D.showing) cur.push({ id: D.showing, t: now });
       if (V && (!states.length || states.at(-1).s !== V.state)) states.push({ s: V.state, t: now });
     }
-    return { lum, cur, states, nF };
+    return { lum, cur, states, nF, look: D.look ? { ...D.look } : null };
   } finally { Math.random = savedRandom; }
 }
 
@@ -84,7 +88,7 @@ function measure(R, T, dur) {
     lum: Object.fromEntries(["intro", "build", "drop", "break", "outro", "silence"].map(p => [p, r3(lumOf(p))])),
     dropBreak: r3(lumOf("drop") / Math.max(1e-3, lumOf("break"))),
     preDropDip, preDropDipWorst: r3(Math.max(...preDropDip)), dropImpact, dropImpactMin: r3(Math.min(...dropImpact)),
-    changes: ch.length, onDownbeat: ch.length ? r3(onDown / ch.length) : null, on4Bar: ch.length ? r3(on4 / ch.length) : null, shortEffects: short,
+    changes: ch.length, changesPerMin: r1(ch.length / (dur / 60)), onDownbeat: ch.length ? r3(onDown / ch.length) : null, on4Bar: ch.length ? r3(on4 / ch.length) : null, shortEffects: short,
   };
 }
 // live: when does the analyser call the drop? The first "drop" within a bar before to 4 bars after a true drop is
@@ -112,7 +116,15 @@ export async function runFeel({ effects = false } = {}) {
     whole: sm,
     live: { ...lm, ...ld },
   };
-  if (effects) { out.whole.effects = S.cur.map(c => `${c.t.toFixed(2)}:${c.id}`).join(" "); out.live.effects = Lv.cur.map(c => `${c.t.toFixed(2)}:${c.id}`).join(" "); out.live.states = Lv.states.map(s => `${s.t.toFixed(2)}:${s.s}`).join(" "); }
+  const fxs = R => R.cur.map(c => `${c.t.toFixed(2)}:${c.id}`).join(" ");
+  if (effects) { out.whole.effects = fxs(S); out.live.effects = fxs(Lv); out.live.states = Lv.states.map(s => `${s.t.toFixed(2)}:${s.s}`).join(" "); }
+  out.varieties = {};
+  for (const v of ["one", "parts"]) {
+    const Sv = runEngine(song, pre, L, "song", v), Lvv = runEngine(song, pre, L, "live", v), lw = measure(Lvv, T, song.dur);
+    out.varieties[v] = { look: Sv.look && [Sv.look.main, Sv.look.drop, Sv.look.build, Sv.look.calm, Sv.look.palette].join("/"), liveLook: Lvv.look && [Lvv.look.main, Lvv.look.palette].join("/"),
+      whole: measure(Sv, T, song.dur), live: { ...lw, ...liveDrops(Lvv.states, T) } };
+    if (effects) { out.varieties[v].whole.effects = fxs(Sv); out.varieties[v].live.effects = fxs(Lvv); }
+  }
   return out;
 }
 
@@ -130,6 +142,26 @@ export const TARGETS = [
   ["live drop delay (worst drop, ms)", r => r.live.missedDrops ? null : r.live.dropDelayWorstMs, v => v != null && v <= 150, "<= 150"],
 ];
 export function targetReport(r) { return TARGETS.map(([name, get, ok, aim]) => { const v = get(r); return { name, value: v, aim, pass: v != null && ok(v) }; }); }
+/** The aims that apply to a look (varieties "one" and "parts"): the feel must be as strong with one effect, and
+ *  "one" must hardly change effect. These are tested (feel.test.js). */
+export const VARIETY_TARGETS = [
+  ["drop kick contrast, median", m => m.whole.kickContrast, v => v >= 0.40, ">= 0.40"],
+  ["drop kick contrast, 10th percentile", m => m.whole.kickContrastP10, v => v >= 0.25, ">= 0.25"],
+  ["drop / breakdown brightness", m => m.whole.dropBreak, v => v >= 1.8, ">= 1.8"],
+  ["pre-drop dip (worst drop)", m => m.whole.preDropDipWorst, v => v <= 0.7, "<= 0.7"],
+  ["effects shorter than one bar", m => m.whole.shortEffects, v => v === 0, "0"],
+  ["live: effects shorter than one bar", m => m.live.shortEffects, v => v === 0, "0"],
+  ["live: drop kick contrast, median", m => m.live.kickContrast, v => v >= 0.40, ">= 0.40"],
+];
+const CPM = { one: 2, parts: 8 }; // effect changes a minute at most, whole song and live
+export function varietyReport(r) {
+  const out = [];
+  for (const [v, m] of Object.entries(r.varieties || {})) {
+    for (const [name, get, ok, aim] of VARIETY_TARGETS) { const x = get(m); out.push({ variety: v, name, value: x, aim, pass: x != null && ok(x) }); }
+    for (const k of ["whole", "live"]) { const x = m[k].changesPerMin; out.push({ variety: v, name: `${k === "live" ? "live: " : ""}effect changes per minute`, value: x, aim: `<= ${CPM[v]}`, pass: x != null && x <= CPM[v] }); }
+  }
+  return out;
+}
 
 // [label, getter, worse(now, base)] — "no worse than the baseline by a margin"
 const H = (m) => (n, b) => n < b - m, Lo = (m) => (n, b) => n > b + m;
@@ -150,6 +182,15 @@ export const GUARDS = [
   ["live: false drops", r => r.live.falseDrops, Lo(1)],
   ["live: effect changes", r => r.live.changes, (n, b) => n > b * 1.25 + 2],
   ["live: effects shorter than a bar", r => r.live.shortEffects, (n, b) => n > b * 1.25 + 2],
+  ...["one", "parts"].flatMap(v => [
+    [`${v}: kick contrast median`, r => r.varieties?.[v]?.whole.kickContrast, H(0.05)],
+    [`${v}: drop / breakdown brightness`, r => r.varieties?.[v]?.whole.dropBreak, (n, b) => n < b * 0.85],
+    [`${v}: pre-drop dip (worst)`, r => r.varieties?.[v]?.whole.preDropDipWorst, Lo(0.15)],
+    [`${v}: drop impact (weakest)`, r => r.varieties?.[v]?.whole.dropImpactMin, (n, b) => n < b * 0.8],
+    [`${v}: effect changes`, r => r.varieties?.[v]?.whole.changes, Lo(1)],
+    [`${v}: live kick contrast median`, r => r.varieties?.[v]?.live.kickContrast, H(0.05)],
+    [`${v}: live effect changes`, r => r.varieties?.[v]?.live.changes, Lo(1)],
+  ]),
 ];
 /** Each guard: ok unless the value got worse than the baseline by more than its margin. A value that is missing now
  *  (no drop found) but was there in the baseline counts as worse. */
@@ -167,25 +208,30 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const args = process.argv.slice(2), mi = args.indexOf("--baseline"), mode = mi >= 0 ? args[mi + 1] : null;
   if (mode && !["write", "check"].includes(mode)) { console.error("--baseline write|check"); process.exit(2); }
   const t0 = performance.now(), r = await runFeel({ effects: args.includes("--effects") }), tg = targetReport(r);
-  if (mode === "write") { const { effects: _a, ...w } = r.whole, { effects: _b, states: _c, ...l } = r.live; mkdirSync(path.dirname(BASELINE), { recursive: true });
-    writeFileSync(BASELINE, JSON.stringify({ about: "Feel baseline (scripts/feel-eval.js). Rewrite with: npm run eval:feel -- --baseline write", ...r, whole: w, live: l }, null, 1) + "\n"); }
+  if (mode === "write") { const strip = m => { const { effects: _a, states: _b, ...x } = m; return x; }; mkdirSync(path.dirname(BASELINE), { recursive: true });
+    const vs = Object.fromEntries(Object.entries(r.varieties || {}).map(([k, m]) => [k, { ...m, whole: strip(m.whole), live: strip(m.live) }]));
+    writeFileSync(BASELINE, JSON.stringify({ about: "Feel baseline (scripts/feel-eval.js). Rewrite with: npm run eval:feel -- --baseline write", ...r, whole: strip(r.whole), live: strip(r.live), varieties: vs }, null, 1) + "\n"); }
   const chk = mode === "check" ? checkBaseline(r, readBaseline()) : null;
-  if (args.includes("--json")) { console.log(JSON.stringify({ ...r, targets: tg, ...(chk ? { baseline: chk } : {}) }, null, 1)); }
+  if (args.includes("--json")) { console.log(JSON.stringify({ ...r, targets: tg, looks: varietyReport(r), ...(chk ? { baseline: chk } : {}) }, null, 1)); }
   else {
     const v = x => x == null ? "-" : Array.isArray(x) ? x.map(v).join(", ") : String(x);
     console.log(`song: ${r.song.seconds} s at ${r.song.bpm} BPM, drops at ${v(r.song.drops)} s`);
     console.log(`analysis: ${r.analysis.bpm} BPM (${r.analysis.bpmOk ? "right" : "wrong"}), drops at ${v(r.analysis.drops)} s, style ${r.analysis.style}`);
-    for (const [label, m] of [["whole song", r.whole], ["live", r.live]]) {
+    const runs = [["whole song", r.whole], ["live", r.live]];
+    for (const [k, m] of Object.entries(r.varieties || {})) runs.push([`variety "${k}", whole song (look ${m.look})`, m.whole], [`variety "${k}", live (look ${m.liveLook})`, m.live]);
+    for (const [label, m] of runs) {
       console.log(`\n${label}:`);
       console.log(`  kick contrast median ${v(m.kickContrast)}, p10 ${v(m.kickContrastP10)}; kick-to-light lag ${v(m.kickLagMs)} ms`);
       console.log(`  brightness: ${Object.entries(m.lum).map(([k, x]) => `${k} ${v(x)}`).join(", ")}; drop/breakdown ${v(m.dropBreak)}`);
       console.log(`  pre-drop dip ${v(m.preDropDip)}; drop impact ${v(m.dropImpact)}`);
-      console.log(`  effect changes ${m.changes}: on downbeat ${v(m.onDownbeat)}, on 4-bar line ${v(m.on4Bar)}; shorter than a bar ${m.shortEffects}`);
+      console.log(`  effect changes ${m.changes} (${v(m.changesPerMin)} a minute): on downbeat ${v(m.onDownbeat)}, on 4-bar line ${v(m.on4Bar)}; shorter than a bar ${m.shortEffects}`);
       if (m.dropDelayMs) console.log(`  drop delay ${v(m.dropDelayMs)} ms; missed ${m.missedDrops}; false drops ${m.falseDrops}`);
       if (m.effects) console.log(`  effects: ${m.effects}`); if (m.states) console.log(`  states: ${m.states}`);
     }
     console.log(`\ntargets (roadmap): ${tg.filter(x => x.pass).length}/${tg.length} met`);
     for (const x of tg) console.log(`  ${x.pass ? "PASS" : "FAIL"}  ${x.name.padEnd(38)} ${v(x.value).padEnd(8)} aim ${x.aim}`);
+    const vr = varietyReport(r); console.log(`\nlooks (varieties one, parts): ${vr.filter(x => x.pass).length}/${vr.length} met`);
+    for (const x of vr) console.log(`  ${x.pass ? "PASS" : "FAIL"}  ${(x.variety + ": " + x.name).padEnd(44)} ${v(x.value).padEnd(8)} aim ${x.aim}`);
     if (chk) { console.log(`\nbaseline check: ${chk.every(c => c.ok) ? "OK" : "WORSE"}`); for (const c of chk) console.log(`  ${c.ok ? "ok  " : "FAIL"}  ${c.name.padEnd(36)} ${v(c.now).padEnd(8)} baseline ${v(c.base)}`); }
     if (mode === "write") console.log(`\nbaseline written: ${path.relative(root, BASELINE)}`);
     console.log(`(${((performance.now() - t0) / 1000).toFixed(1)} s)`);

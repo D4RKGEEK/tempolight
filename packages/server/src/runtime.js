@@ -6,7 +6,7 @@ import { createFixtures } from "./fixtures.js";
 import { createBeatSources } from "./beatsources.js";
 import { noteRtt, audioDelay, deviceLatency, lightLatency, timingPlan, newestSampleClock, level, LOOKAHEAD_CAP_MS } from "./latency.js";
 import { createPerf, LITE } from "./perf.js";
-import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, gridAt, toRGB8, LiveAnalyser, memoryEntry, memoryAnalysis, recognise, matchAt, refineByKicks, planShow, SHOW_VERSION, drumlessEntry, hearsLabel, moodName } from "../../engine/src/index.js";
+import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, gridAt, toRGB8, LiveAnalyser, memoryEntry, memoryAnalysis, recognise, matchAt, refineByKicks, planShow, SHOW_VERSION, drumlessEntry, hearsLabel, moodName, pickLook, lookLabel, LOOK_VERSION } from "../../engine/src/index.js";
 // Everything that touches the network or the sound card comes in through `io` (see node-io.js), so the same runtime
 // runs on a PC or Pi and, with pretend devices, inside the browser for the online demo.
 
@@ -83,7 +83,8 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     const night = !!rt.night; // night mode: no strobing, warm colours
     Object.assign(D.settings, { mode: sh.mode, effect: sh.effect, style: sh.style, palette: night && s.night.warm ? "sunset" : sh.palette, everyBeats: sh.everyBeats, speed: sh.speed,
       ambient: s.ambient, moodColours: s.moodColours !== false, safe: s.safe || night, dropFlash: s.dropFlash && !night, night,
-      punch: s.punch ?? 0.7, dynamics: s.dynamics ?? 0.8, variations: s.variations !== false, prefs: s.effectPrefs || {}, params: sh.params || {}, layer: sh.layer || null, zones: data().room.zones || [] });
+      punch: s.punch ?? 0.7, dynamics: s.dynamics ?? 0.8, variations: s.variations !== false, prefs: s.effectPrefs || {}, params: sh.params || {}, layer: sh.layer || null, zones: data().room.zones || [],
+      variety: sh.variety || "one", nudge: s.effectNudge || {} });
   }
   let col8 = new Uint8Array(0);
 
@@ -93,7 +94,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     if (!rt.live || rt.live.kind !== kind || rt.live.clientId !== clientId || rt.live.rate !== rate) {
       if (rt.live && rt.live.kind === "browser" && kind === "capture" && performance.now() - rt.live.lastPush < 1500) return; // a browser that is sending wins
       rt.live = { an: new LiveAnalyser(rate), kind, label, clientId, rate, lastPush: 0, started: performance.now() }; rt.mem.lock = null; rt.mem.cand = null; memT = 0; memJob = null;
-      rt.live.an.lite = perf.lite; note(`Listening to ${label}`);
+      rt.live.an.lite = perf.lite; D.resetLook(); note(`Listening to ${label}`); // (a new source: a new song, a look of its own)
     }
     const t0 = performance.now(); rt.live.an.push(samples); perf.add("analysis", performance.now() - t0); rt.live.lastPush = performance.now(); rt.live.inMs = inMs; rt.live.chunkMs = samples.length / rate * 1000;
     if (rt.pcmTap) rt.pcmTap(samples, rate, kind, inMs);
@@ -158,7 +159,9 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     pre.env = Float32Array.from(pre.env || []); pre.bars = pre.bars || [];
     rt.song = { name: song.name || "Song", pre, pos: 0, playing: false, rate: 1, at: performance.now(), clientId };
     if (data().settings.songMemory && pre.dur > 20 && pre.env.length) rt.song.memId = remember(rt.song.name, pre)?.id;
-    note(`Song ready: ${rt.song.name} (${Math.round(pre.bpm)} BPM, ${fx.styles[pre.style]?.name || pre.style})`);
+    if (!rt.song.memId) rt.song.look = newLook(pre, rt.song.name, []); // (not remembered: a look for this time)
+    const lk = rt.song.memId ? data().songs.find(e => e.id === rt.song.memId)?.look : rt.song.look;
+    note(`Song ready: ${rt.song.name} (${Math.round(pre.bpm)} BPM, ${fx.styles[pre.style]?.name || pre.style})${lk ? `. Look: ${lookLabel(lk, fxNames())}` : ""}`);
   }
   // ---------------------------------------------------------------- Pro DJ Link: the decks' beat grid
   // One deck leads: the deck already leading keeps the grid while it plays, so two decks playing at once don't make
@@ -189,7 +192,9 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   function remember(name, pre) {
     const list = data().songs, old = list.findIndex(e => e.name === name && Math.abs(e.dur - pre.dur) < 1.5);
     const e = memoryEntry(name, pre, old >= 0 ? list[old].id : "m" + Math.random().toString(36).slice(2, 10));
-    e.show = old >= 0 && list[old].showEdited ? list[old].show : planShow(pre, fx, { prefs: data().settings.effectPrefs, everyBeats: data().show.everyBeats }); e.showEdited = old >= 0 && !!list[old].showEdited; e.showV = SHOW_V; // a show of its own; hand edits are kept
+    // its look (kept if it was kept by hand; the effects turned down for it stay turned down), then its show
+    const was = old >= 0 ? list[old].look : null; e.look = was && was.locked ? was : newLook(pre, name, was?.rejected || []);
+    e.show = old >= 0 && list[old].showEdited ? list[old].show : planShow(pre, fx, planOpts(e)); e.showEdited = old >= 0 && !!list[old].showEdited; e.showV = SHOW_V; e.showKey = showKey(e); // a show of its own; hand edits are kept
     if (old >= 0) for (const k of ["colors", "cues", "bright"]) if (list[old][k]) e[k] = list[old][k]; // and the timeline editor's colours, cues and brightness
     const size = JSON.stringify(e).length; if (size > MEM_ONE) { note(`“${name}” is too long to remember (a mix?): it won't be recognised later`); return old >= 0 ? list[old] : null; }
     if (old >= 0) list.splice(old, 1); else note(`Remembered “${name}”: Tempolight will recognise it when it plays again`);
@@ -199,13 +204,81 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     store.save(); return e;
   }
   const SHOW_V = SHOW_VERSION; // shows made by an older planner are made again, unless edited by hand
-  const planFor = (e, seed = e.name + ":" + Date.now()) => planShow(memoryAnalysis(e), fx, { seed, prefs: data().settings.effectPrefs, everyBeats: data().show.everyBeats }); // "New show": a new seed
+  // ---------------------------------------------------------------- looks: one effect (and palette) per song (looks.js)
+  const fxNames = () => Object.fromEntries(fx.list.map(f => [f.id, f.name]));
+  const variety = () => data().show.variety || "one";
+  const nudges = () => data().settings.effectNudge || {};
+  function newLook(pre, name, rejected = []) {
+    const o = { prefs: data().settings.effectPrefs, nudge: nudges(), seed: name, available: fx.list.map(f => f.id) };
+    let lk = pickLook(pre, { ...o, exclude: rejected }); if (!lk && rejected.length) { rejected = []; lk = pickLook(pre, o); } // every one turned down: start again
+    return lk ? { ...lk, rejected: [...rejected], locked: false } : null;
+  }
+  /** A remembered song's look, picked (again) when it has none, the picker changed, or its effect is banned now (unless kept by hand). */
+  const lookTried = new WeakMap(); // entry -> the effect preferences it last found no look with (everything banned)
+  function lookOf(e) {
+    const L = e.look, prefs = data().settings.effectPrefs || {}, banned = L && prefs[L.main] === -1;
+    if (L && !banned && (L.locked || L.v === LOOK_VERSION)) return L;
+    const key = JSON.stringify(prefs); if (!L && lookTried.get(e) === key) return null;
+    e.look = newLook(memoryAnalysis(e), e.name, L?.rejected || []); if (!e.look) lookTried.set(e, key); store.save();
+    return e.look;
+  }
+  /** The remembered song playing now (played here, in a music app, or recognised while listening), or null. */
+  function playingEntry() {
+    const id = rt.source === "song" ? rt.song?.memId : rt.source === "nowplaying" ? rt.nowPlaying?.memId : rt.mem.lock && liveFresh() ? rt.mem.lock.id : null;
+    return id ? data().songs.find(x => x.id === id) || null : null;
+  }
+  /** The look for what plays now: the song's, or null (live listening: the director picks one as it listens). */
+  function currentLook() {
+    if (variety() === "show") return null;
+    const e = playingEntry(); if (e) return lookOf(e);
+    return rt.source === "song" && rt.song ? rt.song.look || null : null;
+  }
+  const planOpts = (e, seed = "") => ({ seed, prefs: data().settings.effectPrefs, everyBeats: data().show.everyBeats, variety: variety(), look: variety() === "show" ? null : lookOf(e) });
+  const showKey = e => variety() === "show" ? "show" : `${variety()}:${["main", "drop", "build", "calm"].map(k => e.look?.[k] || "").join("/")}`;
+  const planFor = (e, seed = e.name + ":" + Date.now()) => { const p = planShow(memoryAnalysis(e), fx, planOpts(e, seed)); e.showKey = showKey(e); return p; }; // "New show": a new seed
+  /** A remembered song's show, made again when the planner, the variety or the look changed (unless edited by hand). */
+  function freshShow(e) { if (!e.show || (!e.showEdited && (e.showV !== SHOW_V || e.showKey !== showKey(e)))) { e.show = planFor(e, ""); e.showV = SHOW_V; store.save(); } return e; }
+  function nudge(id, d) { const s = data().settings; s.effectNudge ||= {}; const v = Math.round(Math.max(-1, Math.min(1, (s.effectNudge[id] || 0) + d)) * 100) / 100; if (v) s.effectNudge[id] = v; else delete s.effectNudge[id]; D.settings.nudge = s.effectNudge; }
+  /** What the look is about, for the status and the API. */
+  function lookInfo(L, extra = {}) {
+    if (!L) return null; const n = fxNames();
+    return { main: L.main, mainName: n[L.main] || L.main, drop: L.drop || null, build: L.build || null, calm: L.calm || null, palette: L.palette || null, params: L.params || {}, why: L.why || [],
+      label: lookLabel(L, n), locked: !!L.locked, rejected: L.rejected || [], provisional: !!L.provisional, variety: variety(), ...extra };
+  }
+  // the song a "Not this one" or "Keep" is for: a remembered song (id, or the one playing), a song played here that
+  // isn't remembered, or the look picked while listening live
+  function lookTarget(id) {
+    if (id) { const e = data().songs.find(x => x.id === id); return e ? { e } : null; }
+    const e = playingEntry(); if (e) return { e };
+    if (rt.source === "song" && rt.song && rt.song.look) return { song: rt.song };
+    if (D.look && D.look.provisional) return { live: true };
+    return null;
+  }
+  /** "Not this one": the next best look for the song; the one turned down is remembered with it (and liked a little less). */
+  function lookNext(id) {
+    const tg = lookTarget(id); if (!tg) return null;
+    if (tg.live) { const cur = D.look; nudge(cur.main, -0.15); D.nextLiveLook(cur.main); store.save(); note(`Look: not ${fxNames()[cur.main] || cur.main}`); return lookInfo(D.look || cur, { song: null }); }
+    const cur = tg.e ? lookOf(tg.e) : tg.song.look, rejected = [...new Set([...(cur?.rejected || []), ...(cur ? [cur.main] : [])])];
+    const L = newLook(tg.e ? memoryAnalysis(tg.e) : tg.song.pre, tg.e ? tg.e.name : tg.song.name, rejected);
+    if (cur) nudge(cur.main, -0.15);
+    if (tg.e) { tg.e.look = L; freshShow(tg.e); } else tg.song.look = L;
+    store.save(); note(`Look for “${tg.e ? tg.e.name : tg.song.name}”: ${lookLabel(L, fxNames())}`);
+    return lookInfo(L, { song: tg.e ? tg.e.id : null });
+  }
+  /** "Keep": this song keeps its look (no new pick when the picker changes); keep false lets it go again. */
+  function lookKeep(id, keep = true) {
+    const tg = lookTarget(id); if (!tg) return null;
+    const L = tg.e ? lookOf(tg.e) : tg.song ? tg.song.look : D.look; if (!L) return null;
+    if (keep && !L.locked) nudge(L.main, 0.1);
+    L.locked = !!keep; store.save();
+    return lookInfo(L, { song: tg.e ? tg.e.id : null });
+  }
   /** The show timeline for the song playing now (played or recognised), when shows are on. */
   function currentPlan() {
     if (data().settings.shows === false) return null;
     const id = rt.source === "song" ? rt.song?.memId : rt.source === "nowplaying" ? rt.nowPlaying?.memId : rt.mem.lock && liveFresh() ? rt.mem.lock.id : null; if (!id) return null;
     const dr = rt.draft; if (dr && dr.id === id && performance.now() < dr.until) return dr; // the timeline editor's unsaved version, while it previews
-    const e = data().songs.find(x => x.id === id); if (!e) return null; if (!e.show || (!e.showEdited && e.showV !== SHOW_V)) { e.show = planFor(e, ""); e.showV = SHOW_V; store.save(); } return e;
+    const e = data().songs.find(x => x.id === id); if (!e) return null; return freshShow(e);
   }
   /** The timeline editor previews its unsaved changes on the lights: {id, show, colors, cues, bright} for a while, or null. */
   function setDraft(d) { rt.draft = d ? { ...d, until: performance.now() + 120000 } : null; }
@@ -386,6 +459,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     const wall = now / 1000, sh = data().show, s = data().settings;
     updateTiming(now); const lead = leadMs();
     let { V, t, extra } = currentView(now, lead);
+    D.settings.look = V ? currentLook() : null; // (null while listening live to a song it doesn't know: the director picks one)
     const pe = V ? currentPlan() : null; D.settings.plan = pe ? pe.show : null;
     D.settings.timeline = pe && (pe.colors?.length || pe.cues?.length || pe.bright?.length) ? { colors: pe.colors || [], cues: pe.cues || [], bright: pe.bright || [] } : null;
     if (rt.spotify && V) D.settings.timeline = rt.spotify.timeline(D.settings.timeline); // the album cover's colours, if on
@@ -594,6 +668,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       styleName: fx.styles[D.style]?.name || D.style, bpm: V && V.bpm ? Math.round(V.bpm * 10) / 10 : null, part: V ? V.state : "idle",
       beat: V && V.g.has ? V.g.beatInBar : null, level: an ? Math.round(Math.min(1, an.eFast / an.eMax) * 100) / 100 : V ? Math.round((V.loud || 0) * 100) / 100 : 0,
       bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, key: V && V.key ? { key: V.key, mode: V.mode, name: `${V.key} ${V.mode}`, confidence: V.keyConf ?? 0 } : null, mood: V && V.mood ? { ...V.mood, name: moodName(V.mood) } : null, hears: V ? hearsLabel(V.key, V.mode, V.mood) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, mapping: rt.mapping ? { device: rt.mapping.dev, led: rt.mapping.led } : null, djlink: djFresh(performance.now()) ? { name: rt.dj.name, bpm: rt.dj.bpm, beatInBar: rt.dj.beatInBar } : null, recognised: rt.mem.lock && liveFresh() ? { id: rt.mem.lock.id, name: rt.mem.lock.name, pos: Math.round(lockPos(rt.mem.lock, rt.live.an.t) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, home: rt.home ? rt.home.status() : null, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
+      look: lookInfo(D.look, { song: playingEntry()?.id || null }),
       song: rt.song ? { memId: rt.song.memId || null, name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
       nowPlaying: rt.nowPlaying ? rt.nowPlaying.info() : null, spotify: rt.spotify ? rt.spotify.info() : null,
       capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null, hearing: hearingInfo(), offsetMs: syncOffset(), timing: timingInfo(),
@@ -631,7 +706,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   return {
     get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, perf, rt, log, listeners, previewClients, phones, health,
     rebuild, rebuildEffects, syncDirector, startLoop, syncOffset, setOutput, hearingInfo, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
-    fixtures, beats, identify, syncSegments, setPower, action, status, setScreen, clearScreen, remember, forget, djBeat, djOnAir, planFor, setDraft, mapLight, endMap, layoutInfo, checkDevice, note,
+    fixtures, beats, identify, syncSegments, setPower, action, status, setScreen, clearScreen, remember, forget, djBeat, djOnAir, planFor, freshShow, lookNext, lookKeep, lookOf, setDraft, mapLight, endMap, layoutInfo, checkDevice, note,
     close() { for (const [id, o] of outs) if (data().devices.find(d => d.id === id)?.kind === "dmx") try { o.sender.send(new Uint8Array(512)); } catch {} // DMX: leave everything at zero
       loopGen++; clearTimeout(timer); clearTimeout(flushTimer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
   };

@@ -45,8 +45,9 @@ layout or the senders), and what the director was doing carries over (the effect
 blackout and strobe).
 
 `syncDirector()` copies `show` and `settings` into `director.settings` (mode, effect, style, palette, everyBeats, speed,
-ambient, moodColours, safe, dropFlash, night, punch, dynamics, variations, prefs, params, layer, zones), applying night mode (warm palette, safe on, no drop
-flash).
+ambient, moodColours, safe, dropFlash, night, punch, dynamics, variations, prefs, params, layer, zones, variety, nudge), applying night mode (warm palette, safe on, no drop
+flash). Each frame also sets `director.settings.look`: the look of the song playing (played here, in a music app, or
+recognised), or null while listening live to a song it doesn't know (the director picks one itself).
 
 ## Health and latency
 

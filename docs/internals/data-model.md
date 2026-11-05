@@ -61,6 +61,7 @@ Changed with `PATCH /api/settings` (admin) unless noted; out-of-range numbers ar
 | `metronome` | `{enabled, bpm}` | `{enabled: false, bpm: 120}` | bpm 40-220; tapping sets it too |
 | `guest` | `{effects, scenes, pads, brightness}` booleans | all `true` | what guests may do while a PIN lock is set |
 | `effectPrefs` | `{[effectId]: 1 \| -1}` | `{}` | liked / banned in automatic mode; set with `PATCH /api/effects/:id {pref}` |
+| `effectNudge` | `{[effectId]: -1..1}` | `{}` | a soft preference for song looks: "Not this one" takes 0.15 off, "Keep" adds 0.1 (`POST /api/song/look/next`, `/keep`) |
 | `location` | `{lat, lon, name}` or null | `null` | for sunrise/sunset times (rounded to 4 decimals) |
 | `night` | `{enabled, from, to, maxBrightness, warm}` | `{enabled: false, from: "23:00", to: "07:00", maxBrightness: 0.3, warm: true}` | times `HH:MM`, `sunset`, `sunrise-30`; maxBrightness 0.02-1 |
 | `text` | `{source, custom}` | `{source: "song", custom: "TEMPOLIGHT"}` | Text Scroller: `song`, `bpm`, `clock` or `custom` (≤ 80 characters) |
@@ -88,7 +89,8 @@ Changed with `PATCH /api/settings` (admin) unless noted; out-of-range numbers ar
 | `effect` | effect id | `"shock"` | the manual effect |
 | `style` | `"auto"` or a style id | `"auto"` | `party`, `poprock`, `hiphop`, `chill`, `emotional` |
 | `palette` | palette id | `"auto"` | `auto`, `mood`, `neon`, `sunset`, `ocean`, `fire`, `ice`, `forest`, `mono` |
-| `everyBeats` | integer 1-64 | `8` | beats between automatic effect changes |
+| `everyBeats` | integer 1-64 | `8` | beats between automatic effect changes (variety `show`) |
+| `variety` | `"one"` \| `"parts"` \| `"show"` | `"one"` | automatic mode: one look per song, one effect per song part, or effects changing with the song |
 | `speed` | number 0.1-4 | `1` | ambient and idle speed |
 | `params` | `{[effectId]: {speed 0.1-4, intensity 0-3, hue -180..180, saturation 0-2, mirror}}` | `{}` | per-effect settings; defaults are removed |
 | `layer` | `{effect, amount 0-1.5}` or null | `null` | accent effect on top |
