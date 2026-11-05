@@ -139,7 +139,7 @@ async function recordClip(canvas, btn, seconds = 15) {
   rec.ondataavailable = e => e.data.size && chunks.push(e.data);
   const done = new Promise(r => rec.onstop = r); rec.start(500); btn.disabled = true;
   for (let k = seconds; k > 0; k--) { btn.textContent = `Recording… ${k}`; await new Promise(r => setTimeout(r, 1000)); }
-  rec.stop(); await done; btn.textContent = "Record clip"; btn.disabled = false;
+  rec.stop(); await done; btn.textContent = "Record a clip"; btn.disabled = false;
   const ext = (rec.mimeType || type).includes("mp4") ? "mp4" : "webm", file = new File(chunks, `tempolight-${new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-")}.${ext}`, { type: rec.mimeType || type });
   if (navigator.canShare && navigator.canShare({ files: [file] })) { try { await navigator.share({ files: [file], title: "Tempolight" }); return; } catch {} }
   const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = file.name; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 10000); toast("Clip saved");
@@ -154,26 +154,44 @@ function homePage(el) {
         <div class="opt"><h3>Find my WLED lights</h3><p>Looks for WLED controllers on your Wi-Fi and adds them, each as a strip in the room.</p><button class="btn primary" id="s-scan" type="button">Scan the network</button></div>
         <div class="opt"><h3>Add by IP address</h3><p>Type the address shown in the WLED app (for example 192.168.1.42).</p><div class="row" style="width:100%"><input id="s-ip" placeholder="192.168.1.42" style="flex:1"><button class="btn" id="s-add" type="button">Add</button></div></div>
         <div class="opt"><h3>Try it without lights</h3><p>Adds a virtual living room so you can see every effect and play music right here.</p><button class="btn" id="s-virtual" type="button">Add a virtual room</button></div>
-      </div><p class="faint" id="s-msg"></p></div>`) : ""}
-    ${panel("Live preview", `<span id="h-fx"></span>`, `<span class="badge" id="h-leds"></span><button class="btn" id="h-rec" type="button" title="Record 15 seconds of the preview with the music">Record clip</button><a class="btn" href="#/room">Edit room</a>`, `<div class="stage" id="h-stage">${noDevices ? '<div class="empty">No lights yet</div>' : ""}</div>`, "span-8")}
-    ${panel("Now playing", `<span id="h-src"></span>`, `<span class="badge acc" id="h-style"></span>`, `<div class="pb np stack">
-      <div class="hearline" id="h-hear"></div>
-      <div><div class="song" id="h-song">Nothing playing</div><div class="meta" id="h-meta">Play a song or listen to your computer on the Music page.</div></div>
-      <div class="kv"><div><span>Tempo</span><b id="h-bpm">–</b></div><div><span>Part</span><b id="h-part">–</b></div><div><span>Level</span><b id="h-level">–</b></div></div>
-      <div class="row" style="justify-content:space-between"><div class="beat" id="h-beat"><i></i><i></i><i></i><i></i></div><a class="btn" href="#/music">Music</a></div>
-      <div class="meter"><i id="h-meter"></i></div>
-      <div id="h-transport" hidden class="stack"><div class="progress" id="h-prog"><div class="fill" id="h-fill"></div></div><div class="times"><span id="h-pos">0:00</span><span id="h-dur">0:00</span></div>
-        <div class="row"><button class="btn" id="h-prev" type="button">Previous</button><button class="btn primary" id="h-play" type="button">Pause</button><button class="btn" id="h-next" type="button">Next</button></div></div>
-    </div>`, "span-4")}
-    ${panel("Controls", "Applies to the whole room", `<button class="btn" id="h-save" type="button">Save as scene</button><button class="btn" id="h-black" type="button" aria-pressed="false">Blackout</button>`, `<div class="pb controls">
+      </div><p class="faint" id="s-msg"></p></div>`, "span-12 o0") : ""}
+    <div class="col span-8">
+    ${panel("Live preview", `<span id="h-fx"></span>`, `<span class="badge" id="h-leds"></span><button class="btn" id="h-rec" type="button" title="Record 15 seconds of the preview with the music">Record a clip</button><a class="btn" href="#/room">Edit the room</a>`, `<div class="stage" id="h-stage">${noDevices ? '<div class="empty">No lights yet</div>' : ""}</div>`, "span-12 o1")}
+    ${panel("Controls", "Applies to the whole room", `<button class="btn" id="h-save" type="button">Save as a scene</button><button class="btn" id="h-black" type="button" aria-pressed="false">Blackout</button>`, `<div class="pb controls fit">
       <div class="field"><label for="h-mode">Effect choice</label><select id="h-mode">${opt("auto", "Automatic (follows the song)", st.show.mode === "auto")}${opt("manual", "Fixed effect", st.show.mode === "manual")}</select></div>
       <div class="field"><label for="h-effect">Effect</label><select id="h-effect">${st.effects.map(e => opt(e.id, e.name, e.id === st.show.effect)).join("")}</select></div>
       <div class="field"><label for="h-styl">Music style</label><select id="h-styl">${Object.entries(STYLE_NAMES()).map(([k, v]) => opt(k, v, k === st.show.style)).join("")}</select></div>
       <div class="field"><label for="h-pal">Colours</label><select id="h-pal">${st.palettes.map(p => opt(p, p === "auto" ? "Automatic (changes with the song)" : p[0].toUpperCase() + p.slice(1), p === st.show.palette)).join("")}</select></div>
-    </div>`, "span-8")}
-    ${panel("Scenes", "", `<a class="btn" href="#/scenes">Manage</a>`, `<div class="pb chips" id="h-scenes">${st.scenes.map(s => `<button class="chip" data-scene="${s.id}" type="button">${esc(s.name)}</button>`).join("") || '<span class="faint">No scenes yet</span>'}</div><div class="pb" style="padding-top:0">${homeStrip()}</div>`, "span-4")}
-    ${panel("Devices", `${st.devices.length} controller${st.devices.length === 1 ? "" : "s"}`, `<span id="h-lat"></span><a class="btn" href="#/devices">Manage</a>`, `<div class="tablewrap"><table><thead><tr><th>Name</th><th>Address</th><th class="num">LEDs</th><th>Status</th><th class="num">Delay</th></tr></thead><tbody id="h-devs"></tbody></table></div>`, "span-6")}
-    ${panel("Activity", "", `<button class="btn sm" id="h-clear" type="button">Clear</button>`, `<div class="log" id="h-log"></div>`, "span-6")}`;
+    </div>`, "span-12 o3")}
+    ${panel("What's new", "Recent features, and where to find them", "", `<div class="pb"><ul class="news two">
+      <li><a href="#/music/sync"><b>In sync</b><small>How tightly the lights follow the song, its map and the next drop</small><span class="where">Music</span></a></li>
+      <li><a href="#/effects/variety"><b>Variety</b><small>One look per song, one per part, or a full show</small><span class="where">Effects</span></a></li>
+      <li><a href="#/settings/punch"><b>Punch and drama</b><small>How hard drops hit, and how much brighter they get</small><span class="where">Settings</span></a></li>
+      <li><a href="#/settings/chords"><b>Chord colours</b><small>Colours step with the song's chords</small><span class="where">Settings</span></a></li>
+      <li><a href="#/settings/stereo"><b>Stereo</b><small>The side of the room a hit came from lights up more</small><span class="where">Settings</span></a></li>
+      <li><a href="#/settings/countdown"><b>Live pads countdown</b><small>Drop in 4, 3, 2, 1, big enough to read across the room</small><span class="where">Settings</span></a></li>
+      <li><a href="#/music/library"><b>Your own music</b><small>A music folder analysed ahead, in sync from the first play</small><span class="where">Music</span></a></li>
+    </ul></div>`, "span-12 o5")}
+    </div>
+    <div class="col span-4">
+    ${panel("Now", `<span id="h-src"></span>`, `<span class="badge acc" id="h-style"></span>`, `<div class="pb np stack">
+      <div class="hearline" id="h-hear"></div>
+      <div><div class="song" id="h-song">Nothing playing</div><div class="meta" id="h-meta">Play a song or listen to your computer on the Music page.</div></div>
+      <div class="kv now">
+        <div><span>Sync</span><b class="txt now-st" id="h-sync" data-state="none">–</b></div>
+        <div><span>Next drop</span><b id="h-drop">–</b></div>
+        <div class="wide"><span>Look</span><b class="txt" id="h-look" title="The effect and colours picked for this song">–</b></div>
+        <div><span>Tempo</span><b id="h-bpm">–</b></div><div><span>Part</span><b class="txt" id="h-part">–</b></div>
+      </div>
+      <div class="row now-beat"><div class="beat" id="h-beat" aria-hidden="true"><i></i><i></i><i></i><i></i></div><div class="meter" title="Level"><i id="h-meter"></i></div><span class="mono faint" id="h-level">–</span></div>
+      <div id="h-transport" hidden class="stack"><div class="progress" id="h-prog"><div class="fill" id="h-fill"></div></div><div class="times"><span id="h-pos">0:00</span><span id="h-dur">0:00</span></div>
+        <div class="row"><button class="btn" id="h-prev" type="button">Previous</button><button class="btn primary" id="h-play" type="button">Pause</button><button class="btn" id="h-next" type="button">Next</button></div></div>
+      <a class="btn" href="#/music/sync">Open the music page</a>
+    </div>`, "span-12 o2")}
+    ${panel("Scenes", "", `<a class="btn" href="#/scenes">Manage scenes</a>`, `<div class="pb chips" id="h-scenes">${st.scenes.map(s => `<button class="chip" data-scene="${s.id}" type="button">${esc(s.name)}</button>`).join("") || '<span class="faint">No scenes yet</span>'}</div><div class="pb" style="padding-top:0">${homeStrip()}</div>`, "span-12 o4")}
+    ${panel("Devices", `${st.devices.length} controller${st.devices.length === 1 ? "" : "s"}`, `<span id="h-lat"></span><a class="btn" href="#/devices">Manage devices</a>`, `<div class="tablewrap"><table><thead><tr><th>Name</th><th>Address</th><th class="num">LEDs</th><th>Status</th><th class="num">Delay</th></tr></thead><tbody id="h-devs"></tbody></table></div>`, "span-12 o6")}
+    </div>
+    ${panel("Activity", "", `<button class="btn sm" id="h-clear" type="button">Clear the log</button>`, `<div class="log" id="h-log"></div>`, "span-12 o7")}`;
 
   let prev = null;
   if (!noDevices) prev = createPreview($("#h-stage"));
@@ -207,8 +225,11 @@ function homePage(el) {
     onStatus(m) {
       $("#h-fx").textContent = `${m.effectName}${app.state.show.mode === "auto" ? ", automatic" : ""}`; $("#h-leds").textContent = `${m.leds} LEDs`;
       $("#h-src").textContent = m.sourceLabel; $("#h-style").textContent = m.source === "idle" ? "Ambient" : m.styleName;
-      $("#h-bpm").textContent = m.bpm ? Math.round(m.bpm) : "–"; $("#h-part").textContent = partName[m.part] || m.part; $("#h-level").textContent = Math.round(m.level * 100) + "%";
+      $("#h-bpm").textContent = m.bpm ? Math.round(m.bpm) : "–"; $("#h-part").textContent = partName[m.part] || m.part; $("#h-level").textContent = String(Math.round(m.level * 100)).padStart(3, " ") + "%";
       $$("#h-beat i").forEach((x, i) => x.classList.toggle("on", m.beat === i)); $("#h-meter").style.width = Math.round(m.level * 100) + "%";
+      { const v = syncView(m), sy = $("#h-sync"), d = m.drop, lk = m.look; sy.dataset.state = v.state; sy.textContent = v.state === "none" ? "–" : `${v.label} · ${v.score}`; sy.title = v.title;
+        $("#h-drop").textContent = d && Number.isFinite(d.next) && d.next >= 0 && (d.conf == null || d.conf >= 0.5) ? `in ${fmtTime(d.next)}` : "–";
+        $("#h-look").textContent = lk ? lk.label : m.source === "idle" ? "–" : app.state.show.variety === "show" ? "Changes with the song" : "–"; }
       const a = A.state;
       $("#h-song").textContent = m.song ? m.song.name : m.source === "idle" ? "Nothing playing" : m.sourceLabel;
       $("#h-meta").textContent = m.song ? `${Math.round(m.song.bpm)} BPM · ${app.state.styles[m.song.style] || m.song.style}${m.song.drops?.length ? ` · ${m.song.drops.length} drop${m.song.drops.length > 1 ? "s" : ""}` : ""}` : m.source === "idle" ? "Play a song or listen to your computer on the Music page." : "Listening live";
@@ -435,10 +456,10 @@ function effectsPage(el) {
       <div class="field"><label for="p-hue">Colour shift <output id="p-hue-o"></output></label><input type="range" id="p-hue" min="-180" max="180" step="5"></div>
       <div class="field"><label for="p-sat">Saturation <output id="p-sat-o"></output></label><input type="range" id="p-sat" min="0" max="2" step="0.05"></div>
       <label class="check"><input type="checkbox" id="p-mirror"> Mirror left and right</label></div>`, "span-4")}
-    ${panel("How effects are chosen", "", "", `<div class="pb controls">
+    ${panel("How effects are chosen", "In automatic mode", "", `<div class="pb controls fit">
+      <div class="field"><label for="e-var">Variety</label><select id="e-var">${opt("one", "One look per song", (st.show.variety || "one") === "one")}${opt("parts", "Song parts", st.show.variety === "parts")}${opt("show", "Show (changes often)", st.show.variety === "show")}</select><span class="help">One look: one effect for the whole song, picked to fit it. Song parts: one each for calm parts, build-ups and drops. Show: effects change with the song.</span></div>
       <div class="field"><label for="e-style">Music style</label><select id="e-style">${Object.entries(STYLE_NAMES()).map(([k, v]) => opt(k, v, k === st.show.style)).join("")}</select><span class="help">Each style has its own effect lists for calm parts, build-ups and drops.</span></div>
       <div class="field"><label for="e-pal">Colours</label><select id="e-pal">${st.palettes.map(p => opt(p, p === "auto" ? "Automatic" : p[0].toUpperCase() + p.slice(1), p === st.show.palette)).join("")}</select></div>
-      <div class="field"><label for="e-var">Variety</label><select id="e-var">${opt("one", "One look per song", (st.show.variety || "one") === "one")}${opt("parts", "Song parts", st.show.variety === "parts")}${opt("show", "Show (changes often)", st.show.variety === "show")}</select><span class="help">One look: one effect for the whole song, picked to fit it. Song parts: one each for calm parts, build-ups and drops. Show: effects change with the song.</span></div>
       <div class="field"><label for="e-every">Change effect every <output id="e-every-o">${st.show.everyBeats} beats</output></label><input type="range" id="e-every" min="4" max="64" step="4" value="${st.show.everyBeats}"><span class="help">In automatic mode with the Show variety. Song changes (build-up, drop) always switch straight away.</span></div>
       <div class="field"><label for="e-speed">Ambient speed <output id="e-speed-o">${st.show.speed}×</output></label><input type="range" id="e-speed" min="0.25" max="3" step="0.25" value="${st.show.speed}"></div>
       <div class="field"><label for="e-layer">Accent layer</label><select id="e-layer">${opt("", "None", !st.show.layer)}${st.effects.map(e => opt(e.id, e.name, st.show.layer?.effect === e.id)).join("")}</select><span class="help">An extra effect added on top, for example Hi-hat Starfield over a calm background.</span></div>
@@ -652,9 +673,9 @@ function scenesPage(el) {
   const st = app.state, canScenes = guestOk("scenes"), admin = unlocked();
   const actName = a => a.type === "scene" ? `Scene: ${st.scenes.find(s => s.id === a.scene)?.name || "(deleted)"}` : a.type === "on" ? "Lights on" : a.type === "off" ? "Lights off" : `Brightness ${Math.round(a.value * 100)}%`;
   const showName = sc => sc.show.mode === "manual" ? (st.effects.find(e => e.id === sc.show.effect)?.name || sc.show.effect) : `Automatic${sc.show.style && sc.show.style !== "auto" ? ", " + (st.styles[sc.show.style] || sc.show.style) : ""}`;
-  el.innerHTML = `${panel("Scenes", "A scene remembers the effect, style, colours and brightness", `<button class="btn primary" id="sc-save" type="button"${canScenes ? "" : " disabled"}>Save current as scene</button>`, `<div class="tablewrap"><table><thead><tr><th>Name</th><th>Effect</th><th>Colours</th><th class="num">Brightness</th><th></th></tr></thead><tbody>
+  el.innerHTML = `${panel("Scenes", "A scene remembers the effect, style, colours and brightness", `<button class="btn primary" id="sc-save" type="button"${canScenes ? "" : " disabled"}>Save current as a scene</button>`, `<div class="tablewrap"><table><thead><tr><th>Name</th><th>Effect</th><th>Colours</th><th class="num">Brightness</th><th></th></tr></thead><tbody>
       ${st.scenes.map(sc => `<tr><td>${esc(sc.name)}</td><td>${esc(showName(sc))}</td><td>${esc(sc.show.palette || "auto")}</td><td class="num">${Math.round((sc.brightness ?? 1) * 100)}%</td>
-        <td><button class="btn sm primary" data-apply="${sc.id}" type="button"${canScenes ? "" : " disabled"}>Apply</button> <button class="btn sm" data-ren="${sc.id}" type="button"${canScenes ? "" : " disabled"}>Rename</button> <button class="btn sm" data-upd="${sc.id}" type="button"${canScenes ? "" : " disabled"}>Update to current</button> <button class="btn sm danger" data-del="${sc.id}" type="button"${canScenes ? "" : " disabled"}>Delete</button></td></tr>`).join("") || '<tr><td colspan="5" class="faint">No scenes</td></tr>'}
+        <td><button class="btn sm" data-apply="${sc.id}" type="button"${canScenes ? "" : " disabled"}>Apply</button> <button class="btn sm" data-ren="${sc.id}" type="button"${canScenes ? "" : " disabled"}>Rename</button> <button class="btn sm" data-upd="${sc.id}" type="button"${canScenes ? "" : " disabled"}>Update to current</button> <button class="btn sm danger" data-del="${sc.id}" type="button"${canScenes ? "" : " disabled"}>Delete</button></td></tr>`).join("") || '<tr><td colspan="5" class="faint">No scenes</td></tr>'}
     </tbody></table></div>`, "span-12")}
     ${panel("Schedules", `Times are this server's local time (${new Date().toTimeString().slice(9, 17)})`, "", `<div class="tablewrap"><table><thead><tr><th>On</th><th>Name</th><th>Time</th><th>Days</th><th>Action</th><th>Next run</th><th></th></tr></thead><tbody>
       ${st.schedules.map(s => `<tr><td><input type="checkbox" data-en="${s.id}" ${s.enabled ? "checked" : ""}${admin ? "" : " disabled"} aria-label="Enabled"></td><td>${esc(s.name)}</td><td class="mono">${/^sun/.test(s.time) ? esc(s.time.replace(/^sunrise/, "Sunrise ").replace(/^sunset/, "Sunset ").replace(/([+-])(\d+)/, "$1$2 min")) : s.time}</td><td class="mono">${s.days.length === 7 ? "Every day" : s.days.map(d => DAYS[d]).join(" ")}</td><td>${esc(actName(s.action))}</td>
@@ -767,7 +788,7 @@ function devicesPage(el) {
     $("#d-scanmsg").textContent = "Scanning…"; $("#d-scan").disabled = true;
     try { const found = await act(() => api("POST", "/api/discover", { scan: true }));
       $("#d-scanmsg").textContent = found.length ? `${found.length} found` : "None found. Check the controllers are on the same network.";
-      $("#d-found").innerHTML = found.map((f, i) => `<tr><td>${esc(f.name || "WLED")}</td><td class="mono">${esc(f.host)}</td><td class="num">${f.kind === "govee" ? "Govee" : SMART[f.kind] ? (f.leds > 1 ? `${f.leds} zones` : "") : `${f.leds ?? "?"} LEDs`}</td><td class="faint">${f.kind === "govee" ? "LAN" : f.kind === "openrgb" ? "OpenRGB" : SMART[f.kind] || (f.via === "mdns" ? "WLED (mDNS)" : "WLED")}</td><td>${f.added ? '<span class="faint">added</span>' : `<button class="btn sm primary" data-f="${i}" type="button">Add</button>`}</td></tr>`).join("");
+      $("#d-found").innerHTML = found.map((f, i) => `<tr><td>${esc(f.name || "WLED")}</td><td class="mono">${esc(f.host)}</td><td class="num">${f.kind === "govee" ? "Govee" : SMART[f.kind] ? (f.leds > 1 ? `${f.leds} zones` : "") : `${f.leds ?? "?"} LEDs`}</td><td class="faint">${f.kind === "govee" ? "LAN" : f.kind === "openrgb" ? "OpenRGB" : SMART[f.kind] || (f.via === "mdns" ? "WLED (mDNS)" : "WLED")}</td><td>${f.added ? '<span class="faint">added</span>' : `<button class="btn sm" data-f="${i}" type="button">Add</button>`}</td></tr>`).join("");
       $$("[data-f]").forEach(b => b.onclick = () => { const f = found[Number(b.dataset.f)]; act(() => api("POST", "/api/devices", f.kind === "govee" || SMART[f.kind] ? { host: f.host, name: f.name, kind: f.kind } : f.kind === "openrgb" ? { host: f.host, name: f.name, kind: "openrgb", index: f.index, leds: f.leds } : { host: f.host, name: f.name, leds: f.leds, force: true }), "Device added").then(() => b.replaceWith("added")).catch(() => {}); });
     } catch {} finally { $("#d-scan").disabled = false; }
   };
@@ -780,20 +801,22 @@ function settingsPage(el) {
   const st = app.state, s = st.settings, admin = unlocked();
   const ambOpts = `${opt("off", "Off (dark when nothing plays)", s.ambient === "off")}${st.effects.filter(e => e.tag === "calm").map(e => opt(e.id, e.name, e.id === s.ambient)).join("")}`;
   el.innerHTML = `${!admin ? panel("Settings are locked", "", "", `<div class="pb"><div class="row"><input id="u-pin" type="password" inputmode="numeric" placeholder="PIN" style="max-width:160px"><button class="btn primary" id="u-go" type="button">Unlock</button></div></div>`) : ""}
-    ${panel("Lighting", "", "", `<div class="pb controls">
-      <div class="field"><label for="s-amb">When nothing plays</label><select id="s-amb">${ambOpts}</select><span class="help">Also used as a soft floor so quiet songs never turn the room dark.</span></div>
+    ${panel("Lighting", "How the room moves with the music", "", `<div class="pb"><div class="setlist">
+      <div class="setrow wide"><span><b>Punch</b><small>How hard the whole room pumps on each kick in a drop.</small></span><div class="ctl"><div><label for="s-punch">Punch</label><output id="s-punch-o">${Math.round((s.punch ?? 0.7) * 100)}%</output></div><input type="range" id="s-punch" min="0" max="1" step="0.05" value="${s.punch ?? 0.7}"></div></div>
+      <div class="setrow wide"><span><b>Drama</b><small>How much brighter drops are than calm parts, with a dip just before each drop.</small></span><div class="ctl"><div><label for="s-dyn">Drama</label><output id="s-dyn-o">${Math.round((s.dynamics ?? 0.8) * 100)}%</output></div><input type="range" id="s-dyn" min="0" max="1" step="0.05" value="${s.dynamics ?? 0.8}"></div></div>
+      <div class="setrow wide"><span><b>Stereo</b><small>With a stereo source (this computer's sound, a song played here), the side of the room a hit came from lights up more. Mono sources and rooms with no width are unchanged.</small></span><div class="ctl"><select id="s-stereo" aria-label="Stereo">${opt("off", "Off", s.stereo === "off")}${opt("subtle", "Subtle", (s.stereo || "subtle") === "subtle")}${opt("strong", "Strong", s.stereo === "strong")}</select></div></div>
+      <label class="setrow" title="With Automatic colours, each chord has its own shade of the palette; the colour steps on the bar line when the chord changes"><span><b>Chord colours</b><small>Colours step with the song's chords, on the bar line.</small></span><input type="checkbox" id="s-chordc" ${s.chordColours !== false ? "checked" : ""}></label>
+      <label class="setrow"><span><b>Vary drops</b><small>A colour flip or a mirror every 2 bars, so long drops stay fresh.</small></span><input type="checkbox" id="s-vary" ${s.variations !== false ? "checked" : ""}></label>
+      <label class="setrow"><span><b>Flash on drops</b><small>A white hit the moment a drop lands.</small></span><input type="checkbox" id="s-dropf" ${s.dropFlash ? "checked" : ""}></label>
+      <label class="setrow"><span><b>Live pads countdown</b><small>"Drop in 4 · 3 · 2 · 1" on the Live pads page, before a known or predicted drop.</small></span><input type="checkbox" id="s-dropcd" ${s.dropCountdown !== false ? "checked" : ""}></label>
+      <label class="setrow"><span><b>Photosensitive-safe mode</b><small>At most 3 flashes a second.</small></span><input type="checkbox" id="s-safe" ${s.safe ? "checked" : ""}></label>
+    </div></div>`, "span-12")}
+    ${panel("When nothing plays", "Idle light and performance", "", `<div class="pb controls">
+      <div class="field"><label for="s-amb">Ambient effect</label><select id="s-amb">${ambOpts}</select><span class="help">Also used as a soft floor so quiet songs never turn the room dark.</span></div>
       <div class="field"><label for="s-idleb">Idle brightness <output id="s-idleb-o">${Math.round(s.idleBrightness * 100)}%</output></label><input type="range" id="s-idleb" min="0" max="1" step="0.05" value="${s.idleBrightness}"></div>
-      <div class="field"><label for="s-idlea">Go idle after <output id="s-idlea-o">${s.idleAfterSec} s</output> of silence</label><input type="range" id="s-idlea" min="2" max="60" step="1" value="${s.idleAfterSec}"></div>
+      <div class="field"><label for="s-idlea">Go idle after <output id="s-idlea-o">${s.idleAfterSec} s</output></label><input type="range" id="s-idlea" min="2" max="60" step="1" value="${s.idleAfterSec}"><span class="help">Of silence.</span></div>
       <div class="field"><label for="s-fps">Frame rate <output id="s-fps-o">${s.fps} fps</output></label><input type="range" id="s-fps" min="20" max="90" step="5" value="${s.fps}"><span class="help">Lower it on a Raspberry Pi Zero or busy Wi-Fi.</span></div>
       <div class="field"><label for="s-perf">Performance</label><select id="s-perf">${opt("auto", "Automatic", (s.performance || "auto") === "auto")}${opt("full", "Full", s.performance === "full")}${opt("lite", "Low power (small computers)", s.performance === "lite")}</select><span class="help">Low power: at most 30 fps, a lighter preview and fewer updates. Automatic picks it on a Raspberry Pi Zero or Pi 3, or when this computer can't keep up.</span><span class="help" id="s-perf-st"></span></div>
-      <label class="check"><input type="checkbox" id="s-safe" ${s.safe ? "checked" : ""}> Photosensitive-safe mode (at most 3 flashes a second)</label>
-      <label class="check"><input type="checkbox" id="s-dropf" ${s.dropFlash ? "checked" : ""}> Flash on drops</label>
-      <div class="field"><label for="s-punch">Punch <output id="s-punch-o">${Math.round((s.punch ?? 0.7) * 100)}%</output></label><input type="range" id="s-punch" min="0" max="1" step="0.05" value="${s.punch ?? 0.7}"><span class="help">How hard the whole room pumps on each kick in a drop.</span></div>
-      <div class="field"><label for="s-dyn">Drama <output id="s-dyn-o">${Math.round((s.dynamics ?? 0.8) * 100)}%</output></label><input type="range" id="s-dyn" min="0" max="1" step="0.05" value="${s.dynamics ?? 0.8}"><span class="help">How much brighter drops are than calm parts, with a dip just before each drop.</span></div>
-      <label class="check"><input type="checkbox" id="s-vary" ${s.variations !== false ? "checked" : ""}> Vary drops every 2 bars (colour flip, mirror)</label>
-      <label class="check" title="With Automatic colours, each chord has its own shade of the palette; the colour steps on the bar line when the chord changes"><input type="checkbox" id="s-chordc" ${s.chordColours !== false ? "checked" : ""}> Chord colours (colours step with the song's chords)</label>
-      <div class="field"><label for="s-stereo">Stereo</label><select id="s-stereo">${opt("off", "Off", s.stereo === "off")}${opt("subtle", "Subtle", (s.stereo || "subtle") === "subtle")}${opt("strong", "Strong", s.stereo === "strong")}</select><span class="help">With a stereo source (this computer's sound, a song played here), the side of the room a hit came from lights up more. Mono sources and rooms with no width are unchanged.</span></div>
-      <label class="check"><input type="checkbox" id="s-dropcd" ${s.dropCountdown !== false ? "checked" : ""}> Show drop countdown (on the Live pads page: "Drop in 4 · 3 · 2 · 1")</label>
     </div>`, "span-12")}
     ${panel("Integrations", "", "", `<div class="pb controls">
       <label class="check"><input type="checkbox" id="s-sync" ${s.audioSync ? "checked" : ""}> Send WLED audio sync (lets WLED's own sound effects react too)</label>
@@ -837,7 +860,7 @@ function settingsPage(el) {
     </div>`, "span-6")}
     ${panel("About", "", "", `<div class="pb stack"><p>Tempolight ${esc(st.version)}, MIT licence. <a href="https://tempolight.pages.dev/docs/" target="_blank" rel="noopener">Documentation</a> · <a href="https://github.com/D4RKGEEK/tempolight" target="_blank" rel="noopener">Source</a>.</p>
       <p class="muted">The old single-page playground is at <a href="/playground">/playground</a>.</p>
-      <div class="row"><button class="btn" id="s-upd" type="button">${DEMO ? "Always up to date" : "Check for updates"}</button><button class="btn primary" id="s-updgo" type="button" hidden>Update now</button><button class="btn" id="s-wizard" type="button">Run setup again</button>${st.canQuit ? '<button class="btn" id="s-quit" type="button">Quit Tempolight</button>' : ""}<button class="btn danger" id="s-reset" type="button">Reset everything</button></div>
+      <div class="row"><button class="btn" id="s-upd" type="button">${DEMO ? "Always up to date" : "Check for updates"}</button><button class="btn primary" id="s-updgo" type="button" hidden>Update now</button><button class="btn" id="s-wizard" type="button">Run setup again</button><button class="btn" id="s-claude" type="button">Set up with Claude</button>${st.canQuit ? '<button class="btn" id="s-quit" type="button">Quit Tempolight</button>' : ""}<button class="btn danger" id="s-reset" type="button">Reset everything</button></div>
       <div id="s-updmsg" class="faint" style="font-size:13px" aria-live="polite"></div></div>`, "span-6")}`;
   if (!admin) {
     $$("#page input:not(#u-pin), #page select, #page button:not(#u-go)").forEach(x => x.disabled = true);
@@ -878,6 +901,7 @@ function settingsPage(el) {
   if ($("#s-relock")) $("#s-relock").onclick = () => { app.token = null; store.set("token", null); ws.sock?.close(); refreshState().then(route); };
   if (DEMO) $("#s-upd").disabled = true;
   $("#s-wizard").onclick = () => openWizard();
+  $("#s-claude").onclick = () => import("/claude-setup.js").then(m => m.openClaudeSetup()).catch(() => toast("Setting up with Claude isn't available in this version", true));
   if ($("#s-wifi")) { const sec = $("#s-wifi").closest("section"); sec.hidden = true; // only on the Raspberry Pi image, where the Wi-Fi setup service runs
     api("GET", "/api/wifi").then(w => { if (!w || !w.available) return; sec.hidden = false;
       $("#s-wifistate").textContent = w.mode === "hotspot" ? `The setup hotspot ${w.hotspot} is open.` : w.ssid ? `Connected to ${w.ssid}.` : "Not on Wi-Fi (Ethernet, or not connected)."; }).catch(() => {});
@@ -915,12 +939,26 @@ export function route() {
   const el = $("#page"); el.innerHTML = ""; app.page = fn(el) || {};
   if (app.status) app.page.onStatus?.(app.status);
   $("#side").classList.remove("open");
+  const sub = (location.hash.match(/^#\/\w+\/(\w+)/) || [])[1], sel = ANCHORS[name]?.[sub]; if (sel) spotlight(sel);
+}
+// deep links from Home's "What's new" card: #/settings/punch scrolls to that setting and makes it glow once
+const ANCHORS = { music: { sync: "#m-sync", library: "#lib, #lib-demo" }, effects: { variety: "#e-var" },
+  settings: { lighting: "#s-punch", punch: "#s-punch", drama: "#s-dyn", chords: "#s-chordc", stereo: "#s-stereo", countdown: "#s-dropcd" } };
+function spotlight(sel, tries = 30) {
+  const el = $(sel); if (!el) { if (tries > 0) setTimeout(() => spotlight(sel, tries - 1), 100); return; }
+  const box = el.closest(".setrow, .field, .panel") || el;
+  box.scrollIntoView({ block: "center", behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  box.classList.remove("spot"); void box.offsetWidth; box.classList.add("spot"); setTimeout(() => box.classList.remove("spot"), 2000);
 }
 
 async function boot() {
-  const th = store.get("theme"); if (th) document.documentElement.dataset.theme = th;
-  $("#theme").onclick = () => { const dark = matchMedia("(prefers-color-scheme: dark)").matches, cur = document.documentElement.dataset.theme || (dark ? "dark" : "light"), nx = cur === "dark" ? "light" : "dark"; document.documentElement.dataset.theme = nx; store.set("theme", nx); };
+  // dark unless light was chosen: Tempolight is mostly used in a dark room
+  const setTheme = t => { document.documentElement.dataset.theme = t; const m = $("#theme-color"); if (m) m.content = t === "light" ? "#f8f4ee" : "#0f0d0b"; };
+  setTheme(store.get("theme") === "light" ? "light" : "dark");
+  $("#theme").onclick = () => { const nx = document.documentElement.dataset.theme === "light" ? "dark" : "light"; setTheme(nx); store.set("theme", nx); };
   $("#menu").onclick = () => $("#side").classList.toggle("open");
+  $("#side-close").onclick = () => $("#side").classList.remove("open");
+  addEventListener("keydown", e => { if (e.key === "Escape" && $("#side").classList.contains("open")) $("#side").classList.remove("open"); });
   $("#power").onclick = () => act(() => api("POST", "/api/power", { on: $("#power").getAttribute("aria-checked") !== "true" })).catch(() => {});
   $("#bri").oninput = e => $("#bri-out").textContent = e.target.value + "%";
   $("#bri").onchange = e => act(() => api("POST", "/api/brightness", { value: e.target.value / 100 })).catch(() => {});
