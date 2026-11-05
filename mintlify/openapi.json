@@ -6669,6 +6669,78 @@
         "x-tempolight-source": "packages/server/src/core.js"
       }
     },
+    "/api/song/map": {
+      "get": {
+        "tags": [
+          "Music"
+        ],
+        "summary": "Get the playing song's map",
+        "description": "The map of what plays now: its loudness, sections (repeats share a label), drops and bars, and where it is. Known ahead for a song played here, a remembered song a music app plays, or one song memory recognised. A song heard live that Tempolight doesn't know gets a map made as it is heard (`growing: true`). `source: null` when nothing plays.\n\n**Access:** open to everyone who can reach Tempolight.",
+        "operationId": "getSongMap",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SongMap"
+                },
+                "example": {
+                  "source": "song",
+                  "id": "m9x2q1",
+                  "name": "One More Time",
+                  "playing": true,
+                  "growing": false,
+                  "pos": 42.5,
+                  "dur": 320.4,
+                  "env": [
+                    0.12,
+                    0.4,
+                    0.38
+                  ],
+                  "envStep": 0.67,
+                  "sections": [
+                    {
+                      "t0": 0,
+                      "t1": 30.1,
+                      "bar0": 0,
+                      "bar1": 16,
+                      "label": "A",
+                      "state": "calm"
+                    },
+                    {
+                      "t0": 30.1,
+                      "t1": 60.2,
+                      "bar0": 16,
+                      "bar1": 32,
+                      "label": "B",
+                      "state": "build"
+                    }
+                  ],
+                  "drops": [
+                    60.2
+                  ],
+                  "bars": [
+                    {
+                      "t0": 0,
+                      "state": "calm",
+                      "energy": 0.31
+                    }
+                  ],
+                  "phrase": {
+                    "len": 8,
+                    "first": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-tempolight-area": "open",
+        "x-tempolight-source": "packages/server/src/core.js"
+      }
+    },
     "/api/songs": {
       "get": {
         "tags": [
@@ -6763,6 +6835,102 @@
           }
         ],
         "x-tempolight-area": "admin",
+        "x-tempolight-source": "packages/server/src/core.js"
+      }
+    },
+    "/api/songs/{id}/map": {
+      "get": {
+        "tags": [
+          "Music"
+        ],
+        "summary": "Get a song's map",
+        "description": "The map of a remembered song: its loudness, sections, drops and bars (`pos` is `null`).\n\n**Access:** open to everyone who can reach Tempolight.",
+        "operationId": "getSongsByIdMap",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A song id (`m…`).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SongMap"
+                },
+                "example": {
+                  "source": "song",
+                  "id": "m9x2q1",
+                  "name": "One More Time",
+                  "playing": true,
+                  "growing": false,
+                  "pos": 42.5,
+                  "dur": 320.4,
+                  "env": [
+                    0.12,
+                    0.4,
+                    0.38
+                  ],
+                  "envStep": 0.67,
+                  "sections": [
+                    {
+                      "t0": 0,
+                      "t1": 30.1,
+                      "bar0": 0,
+                      "bar1": 16,
+                      "label": "A",
+                      "state": "calm"
+                    },
+                    {
+                      "t0": 30.1,
+                      "t1": 60.2,
+                      "bar0": 16,
+                      "bar1": 32,
+                      "label": "B",
+                      "state": "build"
+                    }
+                  ],
+                  "drops": [
+                    60.2
+                  ],
+                  "bars": [
+                    {
+                      "t0": 0,
+                      "state": "calm",
+                      "energy": 0.31
+                    }
+                  ],
+                  "phrase": {
+                    "len": 8,
+                    "first": 0
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "That song isn't remembered"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-tempolight-area": "open",
         "x-tempolight-source": "packages/server/src/core.js"
       }
     },
@@ -10462,6 +10630,242 @@
           ]
         }
       },
+      "SongMap": {
+        "type": "object",
+        "description": "A song's map, for the Music page: its loudness, sections, drops and bars.",
+        "properties": {
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "song",
+              "memory",
+              "live",
+              null
+            ],
+            "description": "`song`: played here; `memory`: a remembered song (asked for by id, a music app plays it, or song memory recognised it); `live`: heard live and not known, made as it is heard; `null`: nothing plays."
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The remembered song's id."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "playing": {
+            "type": "boolean"
+          },
+          "growing": {
+            "type": "boolean",
+            "description": "A live map: it grows as the song is heard."
+          },
+          "pos": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Where the song is now, in seconds (`null` for a song asked for by id)."
+          },
+          "dur": {
+            "type": "number",
+            "description": "Seconds (a live map: heard so far)."
+          },
+          "env": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "description": "Loudness 0-1, at most 480 values."
+          },
+          "envStep": {
+            "type": "number",
+            "description": "Seconds per `env` value."
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "t0": {
+                  "type": "number"
+                },
+                "t1": {
+                  "type": "number"
+                },
+                "bar0": {
+                  "type": "integer"
+                },
+                "bar1": {
+                  "type": "integer"
+                },
+                "label": {
+                  "type": "string",
+                  "description": "`A`, `B`, …: repeats share a label (a live map: one per part)."
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "calm",
+                    "build",
+                    "drop"
+                  ]
+                }
+              }
+            }
+          },
+          "drops": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "When the drops come, in seconds."
+          },
+          "bars": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "t0": {
+                  "type": "number"
+                },
+                "state": {
+                  "type": "string"
+                },
+                "energy": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              }
+            },
+            "description": "Empty for a live map."
+          },
+          "phrase": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "The phrase grid: phrases of `len` bars from bar `first`.",
+            "properties": {
+              "len": {
+                "type": "integer"
+              },
+              "first": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "example": {
+          "source": "song",
+          "id": "m9x2q1",
+          "name": "One More Time",
+          "playing": true,
+          "growing": false,
+          "pos": 42.5,
+          "dur": 320.4,
+          "env": [
+            0.12,
+            0.4,
+            0.38
+          ],
+          "envStep": 0.67,
+          "sections": [
+            {
+              "t0": 0,
+              "t1": 30.1,
+              "bar0": 0,
+              "bar1": 16,
+              "label": "A",
+              "state": "calm"
+            },
+            {
+              "t0": 30.1,
+              "t1": 60.2,
+              "bar0": 16,
+              "bar1": 32,
+              "label": "B",
+              "state": "build"
+            }
+          ],
+          "drops": [
+            60.2
+          ],
+          "bars": [
+            {
+              "t0": 0,
+              "state": "calm",
+              "energy": 0.31
+            }
+          ],
+          "phrase": {
+            "len": 8,
+            "first": 0
+          }
+        }
+      },
+      "Sync": {
+        "type": "object",
+        "description": "How locked on the beat it is (the Music page's meter). Eased over about a second; `locked` from 65, and it stays locked down to 50.",
+        "properties": {
+          "score": {
+            "type": "integer",
+            "description": "0 to 100.",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "locked",
+              "finding",
+              "none"
+            ],
+            "description": "`none`: nothing to follow (not hearing)."
+          },
+          "hint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One plain sentence: why, or what to do.",
+            "example": "Too quiet — turn it up or move the mic closer"
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "song",
+              "memory",
+              "djlink",
+              "midiclock",
+              "link",
+              "live",
+              "metronome",
+              null
+            ],
+            "description": "Where the beat comes from."
+          }
+        },
+        "example": {
+          "score": 92,
+          "state": "locked",
+          "hint": null,
+          "source": "live"
+        }
+      },
       "SongShow": {
         "type": "object",
         "properties": {
@@ -11863,6 +12267,9 @@
                 "type": "null"
               }
             ]
+          },
+          "sync": {
+            "$ref": "#/components/schemas/Sync"
           },
           "nowPlaying": {
             "type": [
