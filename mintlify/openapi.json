@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Tempolight API",
-    "version": "0.3.0",
+    "version": "0.4.0",
     "description": "Everything the web app does goes through this API, so anything else can do it too: scripts, Home Assistant, a Stream Deck, a lighting desk. It is plain HTTP with JSON bodies on the same port as the web app (8080 by default).\n\n**Auth.** Without a PIN lock every call works for everyone who can reach the port. With one, admin calls need an unlock token from `POST /api/unlock`, sent as the `x-tempolight-token` header (or `?token=`); guest-area calls work without one when that area is allowed in Settings.\n\n**Origin rule.** Calls that change something are refused with 403 when a browser sends them from another website. Scripts and apps send no `Origin` and aren't affected. To send requests from the Try it panel of the docs site, an admin turns on **Integrations → Docs site → Let the docs site try API calls** (`PATCH /api/integrations/docs`).\n\n**Errors** answer `{\"error\": \"<a sentence for people>\"}` with a 4xx or 5xx status.\n\n**Live data** (status 4 times a second, LED previews, browser audio, the song clock) goes over one WebSocket at `/ws`, which OpenAPI can't describe: see the [WebSocket](/websocket) page.",
     "license": {
       "name": "MIT",
@@ -238,7 +238,7 @@
                   "$ref": "#/components/schemas/Backup"
                 },
                 "example": {
-                  "tempolight": "0.3.0",
+                  "tempolight": "0.4.0",
                   "savedAt": "2026-11-04T12:00:00.000Z",
                   "data": {
                     "devices": [],
@@ -1908,7 +1908,7 @@
                 },
                 "example": {
                   "ok": true,
-                  "version": "0.3.0",
+                  "version": "0.4.0",
                   "uptime": 3600,
                   "fps": 60,
                   "leds": 240
@@ -5625,7 +5625,7 @@
                 ]
               },
               "example": {
-                "tempolight": "0.3.0",
+                "tempolight": "0.4.0",
                 "savedAt": "2026-11-04T12:00:00.000Z",
                 "data": {
                   "devices": [],
@@ -13455,7 +13455,7 @@
         ],
         "example": {
           "ok": true,
-          "version": "0.3.0",
+          "version": "0.4.0",
           "uptime": 3600,
           "fps": 60,
           "leds": 240
@@ -14397,7 +14397,7 @@
           "data"
         ],
         "example": {
-          "tempolight": "0.3.0",
+          "tempolight": "0.4.0",
           "savedAt": "2026-11-04T12:00:00.000Z",
           "data": {
             "devices": [],

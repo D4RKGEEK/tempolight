@@ -250,7 +250,7 @@ export const operations = {
   "GET /api/backup": { tag: "Backup & updates", summary: "Download a backup", res: "Backup",
     description: "Everything except the PIN, as one JSON file. It includes saved passwords and tokens: keep it private." },
   "POST /api/restore": { tag: "Backup & updates", summary: "Restore a backup", body: { anyOf: [R("Backup"), loose("A backup's `data`.")] }, res: OK, errors: { 400: "That doesn't look like a Tempolight backup" },
-    bodyExample: { tempolight: "0.3.0", savedAt: "2026-11-04T12:00:00.000Z", data: { devices: [], room: { name: "My room", shapes: [], zones: [] }, scenes: [] } },
+    bodyExample: { tempolight: "0.4.0", savedAt: "2026-11-04T12:00:00.000Z", data: { devices: [], room: { name: "My room", shapes: [], zones: [] }, scenes: [] } },
     description: "Replaces everything with a backup file (or its `data`). The current PIN is kept." },
   "POST /api/reset": { tag: "Backup & updates", summary: "Reset to defaults", res: OK, description: "Back to the defaults: devices, room, scenes, schedules and settings." },
   "GET /api/update": { tag: "Backup & updates", summary: "Check for an update", res: "Update",

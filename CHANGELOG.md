@@ -5,6 +5,16 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-11-05
+
+### A redesigned app
+- Four screens instead of ten pages: **Stage** (your room big and live, the song bar with the song map and sync, the look, Punch and Drama, the pads and a huge drop countdown), **Songs** (how it hears music, and every song it knows in one list), **Looks** (a gallery where every effect is a live mini room, saved looks, how it chooses) and **Lights** (your lights as cards with their timing, the room, finding and adding lights), plus **More** (Settings, Schedules, Home and sleep, Integrations, Set up with Claude). A bottom tab bar on phones.
+- New full-screen room editor and show editor, a setup wizard where the room lights up as you go (with three tips at the end), a phone remote with big pads, and new guest request and OBS pages.
+- Old addresses (#/music, #/settings, …) open the new screens; the old pages stay under More → The classic pages.
+- A new homepage at tempolight.pages.dev (the online demo moved to /demo/), a new docs site design, a feature tour, and **Set up with Claude**: one prompt that installs and sets up Tempolight for you (also in the wizard and Settings → About). /llms.txt for AI assistants.
+- Looks are spread over your library, so similar songs no longer all get the same effect.
+- Fixed: the docs and the app gave the Bluetooth timing advice the wrong way round (late sound needs about -150 to -250 ms).
+
 ### Sync score and song map
 - Music page → **In sync**: a live meter (Locked / Finding the beat / Not hearing) with the tempo, a beat-1 light and one plain hint ("Too quiet — turn it up or move the mic closer", "No drums — following the melody", "Following the song's beat map", "Beat from DJ Link"…), and the playing song's map: its loudness, sections (repeats share a letter) coloured calm / build-up / drop, the drops, a moving playhead and the next drop; for a song heard live that isn't known, the map grows as it plays. The look and **Not this one** / **Keep** sit under it. Home's status line has a small sync dot. API: `sync` in `/api/status`, `GET /api/song/map`, `GET /api/songs/:id/map`.
 ### Chord colours and stereo
@@ -161,7 +171,8 @@ versions follow [Semantic Versioning](https://semver.org/).
 - Room layouts, WLED segments, DDP output, WLED audio-sync packets.
 - Browser playground.
 
-[Unreleased]: https://github.com/D4RKGEEK/tempolight/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/D4RKGEEK/tempolight/compare/v0.4.0...HEAD
+[0.4.0]: https://github.com/D4RKGEEK/tempolight/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/D4RKGEEK/tempolight/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/D4RKGEEK/tempolight/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/D4RKGEEK/tempolight/releases/tag/v0.1.0

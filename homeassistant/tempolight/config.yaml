@@ -1,7 +1,7 @@
 # Home Assistant add-on: Tempolight. Built on the Home Assistant machine from this folder's Dockerfile, which downloads
 # the Tempolight release tagged v<version>. Bump `version` with each Tempolight release (it must have a matching tag).
 name: Tempolight
-version: "0.3.0"
+version: "0.4.0"
 slug: tempolight
 description: Music-reactive lighting for WLED that understands the song (beats, build-ups, drops and mood)
 url: https://github.com/D4RKGEEK/tempolight

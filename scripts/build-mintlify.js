@@ -45,7 +45,7 @@ const META = {
   install: { icon: "download", sidebarTitle: "Install" },
   "guides/first-run": { icon: "play", sidebarTitle: "Your first show" },
   "setup-with-claude": { icon: "sparkles", sidebarTitle: "Set up with Claude" },
-  "guides/what-you-can-do": { icon: "list-checks", sidebarTitle: "What you can do" },
+  "guides/what-you-can-do": { icon: "map", sidebarTitle: "What you can do" },
   "guides/overview": { icon: "map", sidebarTitle: "All guides" },
   "guides/connect-lights": { icon: "lightbulb" },
   "guides/room-and-zones": { icon: "layout-grid" },

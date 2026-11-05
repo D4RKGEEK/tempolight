@@ -13,7 +13,7 @@ body:
     id: version
     attributes:
       label: Tempolight version
-      description: Shown next to the logo in the app (for example v0.3.0).
+      description: Shown next to the logo in the app (for example v0.4.0).
     validations:
       required: true
   - type: dropdown
