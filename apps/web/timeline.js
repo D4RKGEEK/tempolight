@@ -2,12 +2,16 @@
 // clock: loudness with the song's parts and drops, effect blocks, colour blocks, one-shot cues and brightness
 // keyframes, on the song's beat grid. Plays along with the song in this browser (or a recognised song), previews
 // unsaved changes on the lights, and saves with PUT /api/songs/:id/show.
-import { app, api, act, toast, esc, panel, opt, createPreview, $, $$, guestOk } from "/app.js";
+import { app, api, act, toast, esc, opt, createPreview, $, $$, guestOk } from "/app.js";
+import { icon, segmented, bindSegmented, emptyState } from "/v2/shell.js";
+import { enterEditor, edTop, EI } from "/v2/editor.js";
 
-const LANES = [["ruler", 22, ""], ["song", 58, "Song"], ["fx", 46, "Effects"], ["col", 30, "Colours"], ["cue", 34, "Cues"], ["bri", 46, "Brightness"]];
+const LANES = [["ruler", 26, ""], ["song", 84, "Song"], ["fx", 56, "Effects"], ["col", 38, "Colours"], ["cue", 42, "Cues"], ["bri", 54, "Brightness"]];
 const TOP = {}, HT = {}; let H = 0; for (const [k, h] of LANES) { TOP[k] = H; HT[k] = h; H += h; }
 const PART = { calm: "#5b8cff", silent: "#5b8cff", build: "#f5b83d", drop: "#ff4f8b" }; // fallbacks for the --calm, --build and --drop tokens
 const CUES = { flash: ["F", "Flash"], strobe: ["S", "Strobe"], blackout: ["B", "Blackout"], build: ["↑", "Build-up"], drop: ["↓", "Drop"] };
+const PART_NAME = { calm: "Calm", silent: "Calm", build: "Build-up", drop: "Drop" };
+const LANE_IC = { song: "music", fx: "sparkle", col: "sliders", cue: "bolt", bri: "sliders" };
 const CUE_BEATS = { flash: 0, strobe: 4, blackout: 2, build: 16, drop: 16 };
 const MIN = 0.05, r3 = v => Math.round(v * 1000) / 1000, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const clone = o => JSON.parse(JSON.stringify(o));
@@ -21,14 +25,16 @@ export function timelinePage(el) {
   const id = decodeURIComponent((location.hash.match(/^#\/timeline\/([^/?]+)/) || [])[1] || ""), hash = location.hash, A = app.audio, st = app.state;
   const fxName = Object.fromEntries(st.effects.map(e => [e.id, e.name])), fxTag = Object.fromEntries(st.effects.map(e => [e.id, e.tag]));
   let src = null, doc = null, saved = "", undo = [], redo = [], sel = null, pps = 20, cursor = 0, snap = "beat", follow = true, live = true;
-  let alive = true, raf = 0, dirtyDraw = true, gesture = null, draftTimer = 0, draftSent = false, lastUser = 0, prev = null, envB = null;
+  let ro = null, mo = null, zoomed = false, alive = true, raf = 0, dirtyDraw = true, gesture = null, draftTimer = 0, draftSent = false, lastUser = 0, prev = null, envB = null;
 
-  el.innerHTML = `<div class="callout span-12" id="tl-msg">Loading the show…</div>`;
-  if (!id) { el.innerHTML = `<div class="callout span-12">Pick a song to edit on the <a href="#/music">Music page</a>.</div>`; return {}; }
+  const leave = enterEditor(el, "show");
+  const shell = (title, body) => `<div class="ed tl">${edTop({ back: "#/songs", backLabel: "Back to Songs", eyebrow: "Show editor", title: `<h1>${title}</h1>` })}<div class="tl-msg">${body}</div></div>`;
+  el.innerHTML = shell("Loading the show", `<div class="ui-skel tl-skel" id="tl-msg" aria-label="Loading the show"><i></i><i></i><i></i></div>`);
+  if (!id) { el.innerHTML = shell("Show editor", emptyState({ title: "Pick a song first", text: "Open a remembered song on the Songs screen and choose Edit the show.", action: '<a class="btn primary" href="#/songs">Open Songs</a>' })); return { destroy: leave }; }
 
   api("GET", `/api/songs/${encodeURIComponent(id)}/show`).then(r => { if (!alive) return; src = r; doc = { show: r.show, colors: r.colors || [], cues: r.cues || [], bright: r.bright || [] }; saved = JSON.stringify(doc);
     try { envB = Uint8Array.from(atob(r.env || ""), c => c.charCodeAt(0)); } catch { envB = new Uint8Array(0); } build(); })
-    .catch(e => { if (alive) el.innerHTML = `<div class="callout err span-12">${e.status === 404 ? "That song isn't remembered any more." : esc(e.message)} <a href="#/music">Back to Music</a></div>`; });
+    .catch(e => { if (alive) el.innerHTML = shell("Show editor", emptyState({ title: e.status === 404 ? "That song isn't remembered any more" : "Couldn't open the show", text: e.status === 404 ? "Play it again and Tempolight learns it again." : e.message, action: '<a class="btn primary" href="#/songs">Back to Songs</a>' })); });
 
   // ---------------------------------------------------------------- grid and snapping
   const dur = () => src.dur || 1;
@@ -44,31 +50,46 @@ export function timelinePage(el) {
 
   // ---------------------------------------------------------------- page
   function build() {
-    const canEdit = guestOk("effects");
-    el.innerHTML = `
-      ${panel(`Show: ${esc(src.name)}`, `<span id="tl-state"></span>`, `<a class="btn" href="#/music">Music</a><button class="btn" id="tl-reset" type="button">Reset to automatic</button><button class="btn primary" id="tl-save" type="button" disabled>Save</button>`, `
-        <div class="tl-bar">
-          <div class="grp"><button class="btn primary" id="tl-play" type="button" aria-label="Play or pause (space)">Play</button><span class="tl-time" id="tl-time">0:00.000</span><span class="faint" id="tl-src" style="font-size:13px"></span></div>
-          <div class="sep"></div>
-          <div class="grp"><button class="btn sm" id="tl-undo" type="button" title="Undo (Ctrl+Z)" disabled>Undo</button><button class="btn sm" id="tl-redo" type="button" title="Redo (Ctrl+Shift+Z)" disabled>Redo</button></div>
-          <div class="sep"></div>
-          <div class="grp"><label class="faint" for="tl-snap" style="font-size:13px">Snap</label><select id="tl-snap">${opt("off", "Off", snap === "off")}${opt("beat", "Beats", snap === "beat")}${opt("bar", "Bars", snap === "bar")}</select>
-            <button class="btn sm" id="tl-zout" type="button" aria-label="Zoom out">−</button><button class="btn sm" id="tl-zin" type="button" aria-label="Zoom in">+</button><button class="btn sm" id="tl-zfit" type="button">Fit</button>
-            <label class="check" style="font-size:13px"><input type="checkbox" id="tl-follow" checked> Follow</label></div>
-          <div class="sep"></div>
-          <div class="grp"><button class="btn sm" id="tl-split" type="button" title="Split the block at the playhead">Split</button><button class="btn sm" id="tl-dup" type="button">Duplicate</button><button class="btn sm" id="tl-del" type="button">Delete</button></div>
-          <div class="sep"></div>
-          <div class="grp"><span class="faint" style="font-size:13px">Add at playhead:</span>${Object.entries(CUES).map(([k, [, n]]) => `<button class="btn sm" data-add="${k}" type="button">${n}</button>`).join("")}<button class="btn sm" data-add="color" type="button">Colour</button><button class="btn sm" data-add="key" type="button">Brightness</button></div>
+    const canEdit = guestOk("effects"), b = x => `<button class="tl-ib" type="button" ${x}</button>`;
+    const meta = [src.bpm ? `${Math.round(src.bpm)} BPM` : "", fmtS(dur()), src.drops?.length ? `${src.drops.length} drop${src.drops.length === 1 ? "" : "s"}` : ""].filter(Boolean).join(" · ");
+    el.innerHTML = `<div class="ed tl">
+      ${edTop({ back: "#/songs", backLabel: "Back to Songs", eyebrow: "Show editor", title: `<h1>${esc(src.name)}</h1>`,
+        after: `<span class="tl-meta mono">${esc(meta)}</span><span class="tl-state" id="tl-state"></span>`,
+        actions: `<button class="btn" id="tl-reset" type="button" title="Throw away the hand edits and make a new automatic show">${EI.reset}<span class="ed-lbl">Reset to automatic</span></button>` })}
+      <div class="tl-main">
+        ${canEdit ? "" : `<div class="tl-locked">${icon("info")}Tempolight is locked: guests can't change shows. Unlock it in Settings to save.</div>`}
+        <div class="tl-top">
+          <div class="tl-frame"><div class="tl-stage" id="tl-stage"></div>
+            <div class="tl-now" id="tl-now"></div>
+            <label class="tl-livet"><input type="checkbox" id="tl-live" checked> Preview changes on the lights</label></div>
+          <section class="tl-inspector" aria-labelledby="tl-selname"><header class="tl-insp-h"><span class="ed-eyebrow">Selected</span><h2 id="tl-selname">Nothing</h2></header><div class="tl-insp-b" id="tl-insp"></div></section>
         </div>
-        <div class="tl-wrap"><div class="tl-labels">${LANES.map(([k, h, n]) => `<div style="height:${h}px">${n}</div>`).join("")}</div>
-          <div class="tl-scroll" id="tl-sc" tabindex="0" aria-label="Show timeline"><div class="tl-inner" id="tl-in"><canvas id="tl-cv"></canvas><div class="tl-lanes" id="tl-lanes">${LANES.map(([k, h]) => `<div class="tl-lane" data-lane="${k}" style="top:${TOP[k]}px;height:${h}px"></div>`).join("")}</div></div></div></div>
-        <div class="tl-help"><kbd>Space</kbd> play/pause · <kbd>←</kbd><kbd>→</kbd> nudge (Shift: a bar) · <kbd>Del</kbd> delete · <kbd>Ctrl</kbd>+wheel or pinch to zoom · double-click a lane to add · drag block edges to resize · Shift while dragging: no snap</div>`, "span-12")}
-      ${panel("Selected", `<span id="tl-selname">Nothing</span>`, "", `<div class="pb" id="tl-insp"></div>`, "span-8")}
-      ${panel("Live preview", "", `<label class="check" style="font-size:13px"><input type="checkbox" id="tl-live" checked> Preview changes on the lights</label>`, `<div class="stage" id="tl-stage"></div><p class="faint pb" style="font-size:13px;padding-top:8px">While the song plays, the lights play your unsaved version; it is kept only when you save.</p>`, "span-4")}
-      ${canEdit ? "" : `<div class="callout err span-12">Tempolight is locked: guests can't change shows. Unlock it in Settings to save.</div>`}`;
+        <section class="tl-desk" aria-label="The show">
+          <div class="tl-bar">
+            <div class="grp tl-transport"><button class="tl-play" id="tl-play" type="button" aria-label="Play or pause (space)">${icon("play")}<span class="tl-sr">Play</span></button>
+              <div class="tl-clock"><span class="tl-time" id="tl-time">0:00.000</span><span class="tl-src" id="tl-src"></span></div></div>
+            <i class="sep"></i>
+            <div class="grp">${b(`id="tl-undo" title="Undo (Ctrl+Z)" aria-label="Undo" disabled>${EI.undo}`)}${b(`id="tl-redo" title="Redo (Ctrl+Shift+Z)" aria-label="Redo" disabled>${EI.redo}`)}</div>
+            <i class="sep"></i>
+            <div class="grp"><span class="tl-lbl">Snap</span>${segmented("tl-snap", [{ value: "off", label: "Off" }, { value: "beat", label: "Beat" }, { value: "bar", label: "Bar" }], snap, { label: "Snap to" })}</div>
+            <div class="grp tl-right"><div class="tl-zoom">${b(`id="tl-zout" aria-label="Zoom out">${EI.minus}`)}${b(`id="tl-zin" aria-label="Zoom in">${EI.plus}`)}<button class="tl-ib tl-fit" id="tl-zfit" type="button">Fit</button></div>
+              <label class="check tl-follow"><input type="checkbox" id="tl-follow" checked> Follow</label></div>
+          </div>
+          <div class="tl-tools">
+            <div class="grp tl-adds"><span class="tl-lbl">Add at playhead</span>${Object.entries(CUES).map(([k, [, n]]) => `<button class="tl-chip c-${k}" data-add="${k}" type="button"><i></i>${n}</button>`).join("")}<button class="tl-chip c-color" data-add="color" type="button"><i></i>Colour</button><button class="tl-chip c-key" data-add="key" type="button"><i></i>Brightness</button></div>
+            <div class="grp tl-right">${b(`id="tl-split" title="Split the block at the playhead">${EI.split}<span>Split</span>`)}${b(`id="tl-dup" title="Duplicate (Ctrl+D)">${EI.copy}<span>Duplicate</span>`)}${b(`id="tl-del" title="Delete (Del)">${EI.trash}<span>Delete</span>`)}</div>
+          </div>
+          <div class="tl-wrap"><div class="tl-labels">${LANES.map(([k, h, n]) => `<div class="tl-ll${k === "ruler" ? " r" : ""}" style="height:${h}px">${n ? `${icon(LANE_IC[k])}<span>${n}</span>` : ""}</div>`).join("")}</div>
+            <div class="tl-scroll" id="tl-sc" tabindex="0" aria-label="Show timeline"><div class="tl-inner" id="tl-in"><canvas id="tl-cv"></canvas><div class="tl-lanes" id="tl-lanes">${LANES.map(([k, h]) => `<div class="tl-lane" data-lane="${k}" style="top:${TOP[k]}px;height:${h}px"></div>`).join("")}</div></div></div></div>
+        </section>
+      </div>
+      <div class="tl-savebar"><span class="tl-barmsg" id="tl-barmsg"></span><button class="btn" id="tl-discard" type="button" disabled>Discard</button><button class="btn primary" id="tl-save" type="button" disabled>Save show</button></div>
+    </div>`;
     prev = createPreview($("#tl-stage"));
     const sc = $("#tl-sc");
-    pps = Math.max(2, (sc.clientWidth - 8) / dur()); if (pps < 12) pps = Math.min(12, pps * 3); // start a little zoomed in on long songs
+    const fitPps = () => { pps = Math.max(2, (sc.clientWidth - 8) / dur()); if (pps < 12) pps = Math.min(12, pps * 3); }; // start a little zoomed in on long songs
+    fitPps(); let w0 = sc.clientWidth; ro = new ResizeObserver(() => { if (sc.clientWidth === w0) return; w0 = sc.clientWidth; if (!zoomed) fitPps(); layout(); render(); }); ro.observe(sc);
+    mo = new MutationObserver(() => { dirtyDraw = true; }); mo.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
     wire(); layout(); render(); insp(); state(); loop();
     addEventListener("keydown", onKey); addEventListener("beforeunload", onUnload); addEventListener("resize", layout);
   }
@@ -82,7 +103,9 @@ export function timelinePage(el) {
   function doRedo() { if (!redo.length) return; undo.push(JSON.stringify(doc)); restore(redo.pop()); }
   function state() {
     const d = isDirty(); $("#tl-save").disabled = !d; $("#tl-undo").disabled = !undo.length; $("#tl-redo").disabled = !redo.length;
-    $("#tl-state").innerHTML = d ? '<span class="tl-dirty">Unsaved changes</span>' : src.edited || JSON.parse(saved).cues.length ? "Edited by hand" : "Automatic";
+    $("#tl-state").innerHTML = d ? '<span class="ui-pill warn"><i></i>Unsaved changes</span>' : src.edited || JSON.parse(saved).cues.length ? '<span class="ui-pill accent"><i></i>Edited by hand</span>' : '<span class="ui-pill"><i></i>Automatic</span>';
+    $("#tl-discard").disabled = !d; $(".tl-savebar").classList.toggle("dirty", d);
+    $("#tl-barmsg").innerHTML = d ? `<b>Unsaved changes</b><span>${live ? "They play on the lights while the song plays." : "They are kept only when you save."}</span>` : "<b>All changes saved</b><span>The show plays the next time this song plays.</span>";
   }
   const body = () => ({ show: doc.show, colors: doc.colors, cues: doc.cues, bright: doc.bright });
   async function save() {
@@ -90,6 +113,7 @@ export function timelinePage(el) {
     const r = await act(() => api("PUT", `/api/songs/${encodeURIComponent(id)}/show`, body()), "Show saved").catch(() => null); if (!r) return;
     doc = { show: r.show, colors: r.colors, cues: r.cues, bright: r.bright }; saved = JSON.stringify(doc); src.edited = true; draftSent = false; sel = null; changed();
   }
+  function discard() { if (!isDirty()) return; begin(); doc = JSON.parse(saved); sel = null; changed(); }
   async function reset() {
     if (!confirm("Throw away your changes and make a new automatic show for this song?")) return;
     const r = await act(() => api("DELETE", `/api/songs/${encodeURIComponent(id)}/show`), "A new automatic show").catch(() => null); if (!r) return;
@@ -130,46 +154,60 @@ export function timelinePage(el) {
     cv.style.width = sc.clientWidth + "px"; cv.style.height = H + "px"; cv.width = Math.round(sc.clientWidth * dpr); cv.height = Math.round(H * dpr); dirtyDraw = true; }
   function draw() {
     const sc = $("#tl-sc"), cv = $("#tl-cv"); if (!sc || !cv) return; const c = cv.getContext("2d"), dpr = cv.width / Math.max(1, sc.clientWidth), w = sc.clientWidth;
-    const css = getComputedStyle(document.documentElement), V0 = k => css.getPropertyValue(k).trim(), TOK = { "--panel-2": "--sunk", "--panel": "--surface", "--line": "--hair", "--line-2": "--hair", "--muted": "--text-2", "--faint": "--text-3" }, V = k => (TOK[k] && V0(TOK[k])) || V0(k), PT = st => V0("--" + (st === "silent" ? "calm" : st)) || PART[st] || PART.calm, x0 = sc.scrollLeft, X = t => t * pps - x0, t0 = x0 / pps, t1 = (x0 + w) / pps;
+    const css = getComputedStyle(cv), V = k => css.getPropertyValue(k).trim(), PT = st => V("--" + (st === "silent" ? "calm" : st)) || PART[st] || PART.calm, x0 = sc.scrollLeft, X = t => t * pps - x0, t0 = x0 / pps, t1 = (x0 + w) / pps;
     c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, H);
-    c.fillStyle = V("--panel-2"); c.fillRect(0, 0, w, H);
-    for (const k of ["fx", "cue"]) { c.fillStyle = V("--panel"); c.fillRect(0, TOP[k], w, HT[k]); }
-    c.fillStyle = V("--line-2"); for (const [k] of LANES) c.fillRect(0, TOP[k] + HT[k] - 1, w, 1);
-    // song parts under the loudness
-    for (const b of src.bars || []) { if (b.t1 < t0 || b.t0 > t1) continue; c.fillStyle = PT(b.state); c.globalAlpha = 0.24; c.fillRect(X(b.t0), TOP.song, (b.t1 - b.t0) * pps, HT.song - 1); }
+    c.fillStyle = V("--sunk"); c.fillRect(0, 0, w, H);
+    for (const k of ["fx", "cue"]) { c.fillStyle = V("--lane"); c.fillRect(0, TOP[k], w, HT[k]); }
+    c.fillStyle = V("--hair"); for (const [k] of LANES) c.fillRect(0, TOP[k] + HT[k] - 1, w, 1);
+    // the song: its parts as colour bands, the loudness in the colour of its part, the part names on top
+    const bars = src.bars || [], stAt = t => { for (const b of bars) if (t >= b.t0 && t < b.t1) return b.state; return "calm"; };
+    for (const b of bars) { if (b.t1 < t0 || b.t0 > t1) continue; c.fillStyle = PT(b.state); c.globalAlpha = 0.13; c.fillRect(X(b.t0), TOP.song, (b.t1 - b.t0) * pps, HT.song - 1); }
     c.globalAlpha = 1;
-    if (envB && envB.length) { const mid = TOP.song + HT.song / 2, amp = HT.song / 2 - 3; c.fillStyle = V("--muted"); c.beginPath(); c.moveTo(X(t0), mid);
-      const dt = Math.max(0.1, 1 / pps); for (let t = Math.floor(t0 * 10) / 10; t <= t1 + dt; t += dt) { const i = Math.round(t * 10); let v = 0; for (let j = i; j < i + Math.max(1, Math.round(dt * 10)); j++) v = Math.max(v, envB[j] || 0); c.lineTo(X(t), mid - (v / 255) * amp); }
-      for (let t = t1 + dt; t >= Math.floor(t0 * 10) / 10 - dt; t -= dt) { const i = Math.round(t * 10); let v = 0; for (let j = i; j < i + Math.max(1, Math.round(dt * 10)); j++) v = Math.max(v, envB[j] || 0); c.lineTo(X(t), mid + (v / 255) * amp); }
-      c.closePath(); c.globalAlpha = 0.75; c.fill(); c.globalAlpha = 1; }
+    if (envB && envB.length) { const mid = TOP.song + HT.song / 2 + 7, amp = HT.song / 2 - 13, dt = Math.max(0.1, 3 / pps), wpx = Math.max(1, dt * pps - (dt * pps >= 3 ? 1 : 0));
+      c.globalAlpha = 0.92; for (let t = Math.floor(t0 * 10) / 10; t <= t1 + dt; t += dt) { const i = Math.round(t * 10); let v = 0; for (let j = i; j < i + Math.max(1, Math.round(dt * 10)); j++) v = Math.max(v, envB[j] || 0);
+        const hh = Math.max(0.75, (v / 255) * amp); c.fillStyle = PT(stAt(t)); c.fillRect(X(t), mid - hh, wpx, hh * 2); }
+      c.globalAlpha = 1; }
+    c.font = "600 11px " + V("--sans"); let runS = null, runT = 0;
+    const label = (st, a, z) => { const xa = Math.max(X(a), 0) + 8, xz = X(z); if (xz - xa < 54) return; c.fillStyle = PT(st); c.fillText(PART_NAME[st] || st, xa, TOP.song + 15); };
+    for (const b of bars) { if (b.state !== runS) { if (runS != null) label(runS, runT, b.t0); runS = b.state; runT = b.t0; } } if (runS != null) label(runS, runT, dur());
     // beat and bar lines
     if (src.P > 0) { const kb = Math.floor((t0 - src.off) / src.P) - 1, ke = Math.ceil((t1 - src.off) / src.P) + 1, showBeats = src.P * pps >= 7, showBars = src.P * 4 * pps >= 10;
       for (let k = kb; k <= ke; k++) { const bar = (((k - src.barOff) % 4) + 4) % 4 === 0; if (!(bar ? showBars : showBeats)) continue; const x = Math.round(X(beatT(k))) + 0.5;
-        c.fillStyle = V(bar ? "--line" : "--line-2"); c.globalAlpha = bar ? 1 : 0.9; c.fillRect(x, TOP.song, 1, H - TOP.song);
-        if (bar && src.P * 16 * pps >= 60 && ((k - src.barOff) / 4) % (src.P * 4 * pps < 40 ? 4 : 1) === 0) { c.fillStyle = V("--faint"); c.font = "10px " + V("--mono"); c.fillText(String((k - src.barOff) / 4 + 1), x + 3, TOP.song + 10); } }
-      c.globalAlpha = 1; }
-    // ruler
-    c.fillStyle = V("--panel"); c.fillRect(0, 0, w, HT.ruler - 1); const stp = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60].find(s => s * pps >= 64) || 120;
-    c.fillStyle = V("--faint"); c.font = "10.5px " + V("--mono");
-    for (let t = Math.floor(t0 / stp) * stp; t <= t1; t += stp) { const x = Math.round(X(t)) + 0.5; c.fillRect(x, 12, 1, HT.ruler - 13); c.fillText(stp < 1 ? `${fmtS(t)}.${String(Math.round((t % 1) * 100)).padStart(2, "0")}` : fmtS(t), x + 3, 11); }
+        c.fillStyle = V(bar ? "--grid-bar" : "--hair"); c.fillRect(x, TOP.fx, 1, H - TOP.fx); }
+      c.fillStyle = V("--text-3"); c.font = "500 10px " + V("--mono"); // bar numbers under the times
+      for (let k = kb; k <= ke; k++) { if ((((k - src.barOff) % 4) + 4) % 4 !== 0 || !(src.P * 16 * pps >= 60)) continue; const n = (k - src.barOff) / 4; if (n % (src.P * 4 * pps < 40 ? 4 : 1)) continue;
+        const x = Math.round(X(beatT(k))) + 0.5; c.fillRect(x, HT.ruler - 6, 1, 5); c.fillText(String(n + 1), x + 3, HT.ruler - 2); } }
+    // ruler (times)
+    const stp = [0.1, 0.25, 0.5, 1, 2, 5, 10, 15, 30, 60].find(s => s * pps >= 72) || 120;
+    c.fillStyle = V("--text-2"); c.font = "500 10.5px " + V("--mono");
+    for (let t = Math.floor(t0 / stp) * stp; t <= t1; t += stp) { const x = Math.round(X(t)) + 0.5; c.fillRect(x, 0, 1, 12); c.fillText(stp < 1 ? `${fmtS(t)}.${String(Math.round((t % 1) * 100)).padStart(2, "0")}` : fmtS(t), x + 4, 10); }
     // drops
-    c.fillStyle = PT("drop"); for (const d of src.drops || []) { if (d < t0 - 1 || d > t1 + 1) continue; const x = X(d); c.fillRect(Math.round(x) - 1, TOP.song, 2, HT.song); c.beginPath(); c.moveTo(x - 5, TOP.song); c.lineTo(x + 5, TOP.song); c.lineTo(x, TOP.song + 7); c.fill(); }
+    c.fillStyle = PT("drop"); for (const d of src.drops || []) { if (d < t0 - 1 || d > t1 + 1) continue; const x = X(d); c.fillRect(Math.round(x) - 1, TOP.song, 2, HT.song); c.beginPath(); c.moveTo(x - 6, TOP.song); c.lineTo(x + 6, TOP.song); c.lineTo(x, TOP.song + 8); c.fill(); }
     // brightness curve
-    const by = v => TOP.bri + 5 + (1 - v) * (HT.bri - 11), keys = doc.bright; c.strokeStyle = V("--accent"); c.lineWidth = 1.5; c.setLineDash(keys.length ? [] : [4, 4]); c.beginPath();
-    if (!keys.length) { c.moveTo(0, by(1)); c.lineTo(w, by(1)); } else { c.moveTo(0, by(keys[0].v)); for (const k of keys) c.lineTo(X(k.t), by(k.v)); c.lineTo(w, by(keys.at(-1).v)); }
-    c.stroke(); c.setLineDash([]); if (keys.length) { c.lineTo(w, TOP.bri + HT.bri - 1); c.lineTo(0, TOP.bri + HT.bri - 1); c.closePath(); c.globalAlpha = 0.12; c.fillStyle = V("--accent"); c.fill(); c.globalAlpha = 1; }
+    const by = v => TOP.bri + 6 + (1 - v) * (HT.bri - 13), keys = doc.bright; c.strokeStyle = V("--accent"); c.lineWidth = 2; c.lineJoin = "round"; c.setLineDash(keys.length ? [] : [4, 5]); c.beginPath();
+    if (!keys.length) { c.globalAlpha = 0.55; c.moveTo(0, by(1)); c.lineTo(w, by(1)); } else { c.moveTo(0, by(keys[0].v)); for (const k of keys) c.lineTo(X(k.t), by(k.v)); c.lineTo(w, by(keys.at(-1).v)); }
+    c.stroke(); c.globalAlpha = 1; c.setLineDash([]); if (keys.length) { c.lineTo(w, TOP.bri + HT.bri - 1); c.lineTo(0, TOP.bri + HT.bri - 1); c.closePath(); c.globalAlpha = 0.14; c.fillStyle = V("--accent"); c.fill(); c.globalAlpha = 1; }
     // playhead
-    const ph = playhead(), px = Math.round(X(ph)) + 0.5; c.fillStyle = V("--text"); c.fillRect(px - 0.5, 0, 2, H); c.beginPath(); c.moveTo(px - 6, 0); c.lineTo(px + 6, 0); c.lineTo(px, 8); c.fill();
+    const ph = playhead(), px = Math.round(X(ph)) + 0.5; c.fillStyle = V("--accent"); c.globalAlpha = 0.22; c.fillRect(px - 2.5, 0, 6, H); c.globalAlpha = 1; c.fillRect(px - 0.5, 0, 2, H);
+    c.beginPath(); c.moveTo(px - 6, 0); c.lineTo(px + 7, 0); c.lineTo(px + 7, 8); c.lineTo(px + 0.5, 14); c.lineTo(px - 6, 8); c.closePath(); c.fill();
   }
   function loop() {
     if (!alive) return; raf = requestAnimationFrame(loop); if (!src || !$("#tl-sc")) return;
     const p = playing(); if (p) { cursor = r3(playhead()); dirtyDraw = true;
       const sc = $("#tl-sc"), x = cursor * pps; if (follow && !gesture && performance.now() - lastUser > 1500 && (x < sc.scrollLeft || x > sc.scrollLeft + sc.clientWidth * 0.85)) sc.scrollLeft = x - sc.clientWidth * 0.2; }
     const tm = $("#tl-time"); tm.textContent = fmt(cursor);
-    const pb = $("#tl-play"), want = mine() && A.state.song.playing ? "Pause" : "Play"; if (pb.textContent !== want) pb.textContent = want;
+    const pb = $("#tl-play"), want = mine() && A.state.song.playing ? "Pause" : "Play"; if (pb.textContent !== want) { pb.innerHTML = `${icon(want === "Pause" ? "pause" : "play")}<span class="tl-sr">${want}</span>`; pb.classList.toggle("on", want === "Pause"); }
+    nowLine();
     const sl = mine() ? "" : app.status?.recognised?.id === id ? "Following the song live" : queued() >= 0 || src.name === "Tempolight demo track" ? "" : "Not loaded here: Play asks for the file", se = $("#tl-src");
     if (se.textContent !== sl && !(sl === "" && se.textContent === "Loading the song…" && !mine())) se.textContent = sl;
     if (dirtyDraw) { dirtyDraw = false; draw(); }
+  }
+
+  let nowKey = "";
+  function nowLine() { // what plays at the playhead, over the preview
+    const t = cursor, b = doc.show.find(x => t >= x.t0 && t < x.t1) || doc.show.at(-1), cb = doc.colors.find(x => t >= x.t0 && t < x.t1), part = b?.part || "calm";
+    const cs = cb ? (cb.colors || src.palettes[cb.palette]) : null, k = `${b?.effect}|${part}|${cs}`; if (k === nowKey) return; nowKey = k; const box = $("#tl-now"); if (!box || !b) return;
+    box.innerHTML = `<span class="tl-now-p" style="--pc:var(--${part === "silent" ? "calm" : part})">${PART_NAME[part] || part}</span><b>${esc(fxName[b.effect] || b.effect)}</b>${cs ? `<span class="tl-sw" style="background:linear-gradient(90deg,${cs[0]},${cs[1]})"></span>` : ""}`;
   }
 
   // ---------------------------------------------------------------- items
@@ -180,7 +218,7 @@ export function timelinePage(el) {
     lane("col").innerHTML = doc.colors.map((b, i) => { const [a, z] = b.colors || src.palettes[b.palette] || ["#888888", "#888888"];
       return `<div class="tl-it tl-col${S(b)}" data-i="${i}" style="left:${b.t0 * pps}px;width:${Math.max(3, (b.t1 - b.t0) * pps)}px;background:linear-gradient(90deg,${a},${z})" title="${esc(b.palette || "Custom colours")} · ${fmt(b.t0)}–${fmt(b.t1)}"><span class="h l" data-edge="l"></span>${(b.t1 - b.t0) * pps > 40 ? esc(b.palette || "custom") : ""}<span class="h r" data-edge="r"></span></div>`; }).join("");
     lane("cue").innerHTML = doc.cues.map((c, i) => { const len = (c.beats ?? CUE_BEATS[c.type]) * P * pps;
-      return `<div class="tl-it tl-cue ${c.type}${S(c)}" data-i="${i}" style="left:${c.t * pps}px;width:${Math.max(10, len)}px" title="${CUES[c.type][1]} at ${fmt(c.t)}${c.type !== "flash" ? ` for ${c.beats ?? CUE_BEATS[c.type]} beats` : ""}">${len ? `<b style="width:${len}px"></b>` : ""}<i${c.color ? ` style="background:${c.color}"` : ""}>${CUES[c.type][0]}</i></div>`; }).join("");
+      return `<div class="tl-it tl-cue ${c.type}${S(c)}" data-i="${i}" style="left:${c.t * pps}px;width:${Math.max(10, len)}px" title="${CUES[c.type][1]} at ${fmt(c.t)}${c.type !== "flash" ? ` for ${c.beats ?? CUE_BEATS[c.type]} beats` : ""}">${len ? `<b style="width:${len}px"></b>` : ""}<i${c.color ? ` style="background:${c.color}"` : ""}>${CUES[c.type][0]}</i>${len > 70 ? `<span>${CUES[c.type][1]}</span>` : ""}</div>`; }).join("");
     lane("bri").innerHTML = doc.bright.map((k, i) => `<div class="tl-it tl-key${S(k)}" data-i="${i}" style="left:${k.t * pps}px;top:${5 + (1 - k.v) * (HT.bri - 11)}px" title="${Math.round(k.v * 100)}% at ${fmt(k.t)}"></div>`).join("");
     dirtyDraw = true;
   }
@@ -250,8 +288,9 @@ export function timelinePage(el) {
   // ---------------------------------------------------------------- inspector for what's selected
   function insp() {
     const box = $("#tl-insp"); if (!box) return; const P = src.P > 0 ? src.P : 0.5;
-    if (!sel) { $("#tl-selname").textContent = "Nothing"; box.innerHTML = `<p class="muted">Tap a block, cue or keyframe to change it. Drag blocks to move them, drag their edges to resize. Double-click (or double-tap) an empty spot in a lane to add something there.</p>
-      <p class="faint" style="font-size:13px;margin-top:8px">${doc.show.length} effect blocks · ${doc.colors.length} colour blocks · ${doc.cues.length} cues · ${doc.bright.length} brightness keyframes · ${Math.round(src.bpm)} BPM</p>`; return; }
+    if (!sel) { $("#tl-selname").textContent = "Nothing selected"; box.innerHTML = `<p class="tl-intro">Click a block, cue or keyframe to change it. Drag blocks to move them and their edges to resize. Double-click an empty spot in a lane to add something there.</p>
+      <div class="tl-counts"><span><b>${doc.show.length}</b>effects</span><span><b>${doc.colors.length}</b>colours</span><span><b>${doc.cues.length}</b>cues</span><span><b>${doc.bright.length}</b>keyframes</span></div>
+      <div class="tl-keys"><span><kbd>Space</kbd>play or pause</span><span><kbd>←</kbd><kbd>→</kbd>nudge, Shift a bar</span><span><kbd>Del</kbd>delete</span><span><kbd>Ctrl</kbd><kbd>Z</kbd>undo</span><span><kbd>Ctrl</kbd>+wheel zoom</span><span><kbd>Shift</kbd>drag without snap</span></div>`; return; }
     const it = sel.item, num = (k, label, v, stp = 0.001, extra = "") => `<div class="field"><label for="ti-${k}">${label}</label><input type="number" id="ti-${k}" data-k="${k}" step="${stp}" value="${v}" ${extra}></div>`;
     if (sel.lane === "fx") {
       $("#tl-selname").textContent = `Effect block · ${fxName[it.effect] || it.effect}`;
@@ -293,14 +332,14 @@ export function timelinePage(el) {
   function wire() {
     const sc = $("#tl-sc"), inner = $("#tl-in"), tAt = x => (x - inner.getBoundingClientRect().left) / pps, yAt = y => y - inner.getBoundingClientRect().top;
     $("#tl-save").onclick = save; $("#tl-reset").onclick = reset; $("#tl-undo").onclick = doUndo; $("#tl-redo").onclick = doRedo; $("#tl-play").onclick = togglePlay;
-    $("#tl-snap").onchange = e => { snap = e.target.value; }; $("#tl-follow").onchange = e => { follow = e.target.checked; };
-    $("#tl-live").onchange = e => { live = e.target.checked; sendDraft(); };
+    bindSegmented(el, "tl-snap", v => { snap = v; }); $("#tl-follow").onchange = e => { follow = e.target.checked; }; $("#tl-discard").onclick = discard;
+    $("#tl-live").onchange = e => { live = e.target.checked; sendDraft(); state(); };
     $("#tl-zin").onclick = () => zoom(1.6, sc.clientWidth / 2); $("#tl-zout").onclick = () => zoom(1 / 1.6, sc.clientWidth / 2);
-    $("#tl-zfit").onclick = () => { pps = Math.max(1, (sc.clientWidth - 8) / dur()); layout(); render(); sc.scrollLeft = 0; };
+    $("#tl-zfit").onclick = () => { zoomed = false; pps = Math.max(1, (sc.clientWidth - 8) / dur()); layout(); render(); sc.scrollLeft = 0; };
     $("#tl-split").onclick = split; $("#tl-dup").onclick = duplicate; $("#tl-del").onclick = remove;
     $$("[data-add]").forEach(b => b.onclick = () => addAt(b.dataset.add, cursor));
     sc.addEventListener("scroll", () => { dirtyDraw = true; lastUser = performance.now(); }, { passive: true });
-    function zoom(f, x) { const t = (sc.scrollLeft + x) / pps; pps = clamp(pps * f, Math.max(0.5, (sc.clientWidth - 8) / dur() * 0.9), 600); layout(); render(); sc.scrollLeft = t * pps - x; dirtyDraw = true; }
+    function zoom(f, x) { zoomed = true; const t = (sc.scrollLeft + x) / pps; pps = clamp(pps * f, Math.max(0.5, (sc.clientWidth - 8) / dur() * 0.9), 600); layout(); render(); sc.scrollLeft = t * pps - x; dirtyDraw = true; }
     sc.addEventListener("wheel", e => { if (!e.ctrlKey && !e.metaKey) return; e.preventDefault(); zoom(Math.exp(-e.deltaY * 0.0025), e.clientX - sc.getBoundingClientRect().left); }, { passive: false });
     let pinch = null; // two fingers: zoom around their middle
     sc.addEventListener("touchstart", e => { if (e.touches.length === 2) { const [a, b] = e.touches; pinch = { d: Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY), p: pps }; gesture = null; } }, { passive: true });
@@ -358,7 +397,7 @@ export function timelinePage(el) {
     canLeave() { return !isDirty() || confirm("Leave the show editor without saving your changes?"); },
     onChanged(w) { if (w.has("songs") && src && !isDirty()) api("GET", `/api/songs/${encodeURIComponent(id)}/show`).then(r => { if (!alive || isDirty()) return; src = { ...src, ...r }; doc = { show: r.show, colors: r.colors, cues: r.cues, bright: r.bright }; saved = JSON.stringify(doc); sel = null; changed(); }).catch(() => {}); },
     onAudio() { dirtyDraw = true; },
-    destroy() { alive = false; cancelAnimationFrame(raf); clearTimeout(draftTimer); clearInterval(keepDraft); prev?.destroy(); removeEventListener("keydown", onKey); removeEventListener("beforeunload", onUnload); removeEventListener("resize", layout);
+    destroy() { leave(); alive = false; cancelAnimationFrame(raf); clearTimeout(draftTimer); clearInterval(keepDraft); prev?.destroy(); removeEventListener("keydown", onKey); removeEventListener("beforeunload", onUnload); removeEventListener("resize", layout); ro?.disconnect(); mo?.disconnect();
       if (draftSent) api("DELETE", `/api/songs/${encodeURIComponent(id)}/show/draft`).catch(() => {}); },
   };
 }
