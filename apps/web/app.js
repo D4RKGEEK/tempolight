@@ -598,10 +598,10 @@ function livePage(el) {
   const cdShow = () => { const box = $("#l-drop"); if (!box) return; const left = cd.at == null ? null : (cd.at - performance.now()) / 1000;
     if (left == null || left > 8 || left < -0.6) { box.hidden = true; return; }
     const n = Math.max(0, Math.ceil(left)); box.hidden = false; box.classList.toggle("now", n === 0);
-    $("#l-drop-l").textContent = n === 0 ? "" : "Drop in"; $("#l-drop-n").textContent = n === 0 ? "Drop!" : String(n);
+    $("#l-drop-l").textContent = n === 0 ? "" : "Drop in"; $("#l-drop-n").textContent = n === 0 ? "Drop" : String(n);
     $$("#l-drop i").forEach(i => i.classList.toggle("on", Number(i.dataset.n) === n)); };
   const cdStatus = m => { const d = m.drop, on = app.state?.settings?.dropCountdown !== false;
-    cd.at = on && d && d.next != null && d.conf >= 0.5 && d.next <= 8 ? performance.now() + d.next * 1000 : (cd.at != null && performance.now() - cd.at < 600 && performance.now() >= cd.at ? cd.at : null); // (keeps "Drop!" a moment)
+    cd.at = on && d && d.next != null && d.conf >= 0.5 && d.next <= 8 ? performance.now() + d.next * 1000 : (cd.at != null && performance.now() - cd.at < 600 && performance.now() >= cd.at ? cd.at : null); // (keeps "Drop" a moment)
     if (cd.at != null && !cd.timer) cd.timer = setInterval(() => { cdShow(); if (cd.at == null || performance.now() - cd.at > 600) { clearInterval(cd.timer); cd.timer = null; cdShow(); } }, 100);
     cdShow(); };
   const send = a => { if (ws.open) ws.send({ type: "action", action: a }); else api("POST", "/api/action", a).catch(e => toast(e.message, true)); };
