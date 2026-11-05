@@ -47,6 +47,16 @@ export function buildDocs({ out = path.join(ROOT, "dist/site/docs"), quiet = fal
     const source = /Generated from (docs\/\S+?) by/.exec(body)?.[1] || `mintlify/${slug}.mdx`;
     pages.set(slug, { slug, url: url(slug), title: data.title || slug, sidebarTitle: data.sidebarTitle || data.title || slug, description: data.description || "", icon: data.icon, mode: data.mode, body, source });
   }
+  // "Set up with Claude" (docs/setup-with-claude.md) gets a prominent place in the sidebar and on the home page. It is
+  // written separately: when mintlify/ has it but docs.json doesn't list it yet, it is read here; when it is missing,
+  // the entries are simply left out.
+  const CLAUDE = "setup-with-claude";
+  if (!pages.has(CLAUDE) && existsSync(path.join(SRC, CLAUDE + ".mdx"))) {
+    const { data, body } = frontMatter(readFileSync(path.join(SRC, CLAUDE + ".mdx"), "utf8"));
+    const source = /Generated from (docs\/\S+?) by/.exec(body)?.[1] || `mintlify/${CLAUDE}.mdx`;
+    pages.set(CLAUDE, { slug: CLAUDE, url: url(CLAUDE), title: data.title || "Set up with Claude", sidebarTitle: data.sidebarTitle || data.title || "Set up with Claude", description: data.description || "", icon: data.icon || "sparkles", mode: data.mode, body, source });
+  }
+  const claude = pages.get(CLAUDE);
   const api = createApiRenderer({ spec, md: s => render(s, ctx()).html, icon });
   const knownPaths = new Set([...[...pages.values()].map(p => p.url), `${API_BASE}/`, ...api.model.tags.map(t => t.url), ...api.model.ops.map(o => o.url)]);
 
@@ -64,6 +74,7 @@ export function buildDocs({ out = path.join(ROOT, "dist/site/docs"), quiet = fal
     warnings.push(`a link to ${href} goes to no page`); return `${DOCS}${p}/` + (hash ? "#" + hash : "");
   }
   function ctx() { return { link, icon }; }
+  const topLinks = [{ label: "Docs", href: `${DOCS}/`, key: "docs" }, { label: "API", href: `${API_BASE}/`, key: "api" }, { label: "Demo", href: SITE + "/", key: "demo" }, { label: "GitHub", href: REPO, key: "github", ext: true }];
 
   // the sidebar of each tab: groups of pages, and the API reference's tags (the "openapi" group)
   const tabs = cfg.navigation.tabs.map((t, ti) => ({ ...t, index: ti, slug: t.tab.toLowerCase(), groups: t.groups.map(g => g.openapi ? { group: g.group, api: true } : { group: g.group, pages: (g.pages || []).filter(s => pages.has(s)) }) }));
@@ -72,35 +83,49 @@ export function buildDocs({ out = path.join(ROOT, "dist/site/docs"), quiet = fal
     if (g.api) { order.push({ url: `${API_BASE}/`, title: "API reference", tab: t, group: g.group }); for (const tg of api.model.tags) { order.push({ url: tg.url, title: tg.name, tab: t, group: g.group }); for (const o of tg.ops) order.push({ url: o.url, title: o.title, tab: t, group: g.group, tag: tg }); } }
     else for (const s of g.pages) { const p = pages.get(s); if (!p.tab) { p.tab = t; p.group = g.group; order.push({ url: p.url, title: p.sidebarTitle, tab: t, group: g.group, page: p }); } }
   }
+  if (claude && !claude.tab) { const t = startTabOf(), k = order.findIndex(x => x.url === `${DOCS}/`);
+    claude.tab = t; claude.group = t.groups[0]?.group || "Get started"; order.splice(k + 1, 0, { url: claude.url, title: claude.sidebarTitle, tab: t, group: claude.group, page: claude }); }
+  function startTabOf() { return tabs.find(t => t.groups.some(g => g.pages?.includes("index"))) || tabs[0]; }
   const startTab = tabs.find(t => t.groups.some(g => g.pages?.includes("index"))) || tabs[0];
 
   function sidebar(tab, current) {
     const item = (href, label, ic, extra = "") => `<a class="nav-item${href === current ? " active" : ""}" href="${href}"${href === current ? ' aria-current="page"' : ""}>${ic ? icon(ic, "ic") : ""}<span>${label}</span>${extra}</a>`;
-    const anchors = (cfg.navigation.global?.anchors || []).map(a => `<a class="nav-anchor" href="${esc(a.href)}" target="_blank" rel="noopener"><span class="nav-anchor-icon">${icon(a.icon, "ic")}</span><span>${esc(a.anchor)}</span></a>`).join("");
+    const sections = tabs.map(t => { const first = order.find(x => x.tab === t); return `<a class="nav-section${t === tab ? " active" : ""}" href="${first ? first.url : `${DOCS}/`}"${t === tab ? ' aria-current="true"' : ""}>${icon(t.icon, "ic")}<span>${esc(t.tab)}</span></a>`; }).join("");
+    const claudeCard = claude ? `<a class="nav-claude${current === claude.url ? " active" : ""}" href="${claude.url}"${current === claude.url ? ' aria-current="page"' : ""}><span class="nav-claude-icon">${icon("sparkles", "ic")}</span><span class="nav-claude-text"><span class="nav-claude-title">${esc(claude.sidebarTitle)}</span><span class="nav-claude-sub">Paste one prompt and let Claude do the setup</span></span>${icon("arrow-right", "ic nav-claude-arrow")}</a>` : "";
+    const mobileLinks = `<div class="nav-mobile">${topLinks.map(l => `<a class="nav-mobile-link" href="${l.href}"${l.ext ? ' target="_blank" rel="noopener"' : ""}>${esc(l.label)}</a>`).join("")}</div>`;
     const groups = tab.groups.map((g, gi) => {
       let inner;
       if (g.api) inner = item(`${API_BASE}/`, "Overview", "book-open") + api.model.tags.map(tg => {
         const open = current.startsWith(tg.url);
         return `<details class="nav-sub"${open ? " open" : ""}><summary class="nav-item${current === tg.url ? " active" : ""}">${icon(tg.icon, "ic")}<a href="${tg.url}">${esc(tg.name)}</a>${icon("chevron-right", "ic chev")}</summary><div class="nav-sub-items">${tg.ops.map(o => item(o.url, esc(o.title), null, "").replace("<span>", api.methodPill(o.method, "sm") + "<span>")).join("")}</div></details>`;
       }).join("");
-      else inner = g.pages.map(s => { const p = pages.get(s); return item(p.url, esc(p.sidebarTitle), p.icon); }).join("");
+      else inner = g.pages.filter(s => s !== CLAUDE).map(s => { const p = pages.get(s); return item(p.url, esc(p.sidebarTitle), p.icon); }).join("");
       return `<div class="nav-group"><button class="nav-group-title" type="button" aria-expanded="true" aria-controls="ng-${tab.index}-${gi}">${esc(g.group)}${icon("chevron-down", "ic chev")}</button><div class="nav-group-items" id="ng-${tab.index}-${gi}">${inner}</div></div>`;
     }).join("");
-    return `<div class="nav-anchors">${anchors}</div>${groups}`;
+    return `${mobileLinks}<nav class="nav-sections" aria-label="Sections">${sections}</nav>${claudeCard}${groups}`;
   }
 
   // ---------------------------------------------------------------- the page around the content
-  const logo = (cls = "") => `<a class="logo ${cls}" href="${DOCS}/" aria-label="Tempolight docs home"><img class="logo-dark" src="${DOCS}${cfg.logo.dark}" alt="Tempolight" width="123" height="28"><img class="logo-light" src="${DOCS}${cfg.logo.light}" alt="Tempolight" width="123" height="28"><span class="logo-docs">Docs</span></a>`;
-  const primary = cfg.navbar?.primary, github = (cfg.navbar?.links || []).find(l => l.type === "github")?.href || REPO;
+  const mark = `<svg class="logo-mark" viewBox="0 0 24 24" aria-hidden="true"><rect x="1.5" y="10" width="3" height="4" rx="1.5"/><rect x="6" y="7" width="3" height="10" rx="1.5"/><rect x="10.5" y="3" width="3" height="18" rx="1.5"/><rect x="15" y="7" width="3" height="10" rx="1.5"/><rect x="19.5" y="10" width="3" height="4" rx="1.5"/></svg>`;
+  const logo = (cls = "", docsLabel = true) => `<a class="logo ${cls}" href="${DOCS}/" aria-label="Tempolight docs home">${mark}<span class="logo-word">Tempolight</span>${docsLabel ? `<span class="logo-docs">Docs</span>` : ""}</a>`;
+  const github = (cfg.navbar?.links || []).find(l => l.type === "github")?.href || REPO;
+  const primary = { label: "Open the live demo", href: SITE + "/" };
+  const FONTS = "https://fonts.googleapis.com/css2?family=Google+Sans+Code:wght@400..600&family=Google+Sans+Flex:wght@400..700&display=swap";
   const assetV = createHash("sha256").update(readFileSync(path.join(ASSETS, "docs.css"))).update(readFileSync(path.join(ASSETS, "docs.js"))).update(JSON.stringify(cfg.colors || {})).digest("hex").slice(0, 10);
   function layout(o) {
     const { title, description = cfg.description, href, tab, content, toc = [], prevNext, edit, kind = "page", mermaid } = o;
     const full = href === `${DOCS}/` ? `${cfg.name} documentation` : `${title} · ${cfg.name} docs`;
-    const tabsHtml = tabs.map(t => { const first = order.find(x => x.tab === t); return `<a class="tab${t === tab ? " active" : ""}" href="${first ? first.url : "#"}"${t === tab ? ' aria-current="true"' : ""}>${icon(t.icon, "ic")}<span>${esc(t.tab)}</span></a>`; }).join("");
-    const tocHtml = toc.length ? `<aside class="toc" aria-label="On this page"><div class="toc-inner"><div class="toc-title">${icon("text", "ic")}On this page</div><nav>${toc.map(h => `<a class="toc-l${h.depth}" href="#${h.id}" data-id="${h.id}">${esc(h.text)}</a>`).join("")}</nav></div></aside>` : "";
+    const here = href.startsWith(API_BASE + "/") ? "api" : "docs";
+    const linksHtml = topLinks.map(l => `<a class="top-link${l.key === here ? " active" : ""}" href="${l.href}"${l.key === here ? ' aria-current="true"' : ""}${l.ext ? ' target="_blank" rel="noopener"' : ""}>${esc(l.label)}</a>`).join("");
+    const tocHtml = toc.length ? `<aside class="toc" aria-label="On this page"><div class="toc-inner"><div class="toc-title">On this page</div><nav>${toc.map(h => `<a class="toc-l${h.depth}" href="#${h.id}" data-id="${h.id}">${esc(h.text)}</a>`).join("")}</nav></div></aside>` : "";
     const pn = prevNext ? `<nav class="pager" aria-label="Previous and next pages">${prevNext[0] ? `<a class="pager-prev" href="${prevNext[0].url}"><span class="pager-label">${icon("arrow-left", "ic")}Previous</span><span class="pager-title">${esc(prevNext[0].title)}</span></a>` : "<span></span>"}${prevNext[1] ? `<a class="pager-next" href="${prevNext[1].url}"><span class="pager-label">Next${icon("arrow-right", "ic")}</span><span class="pager-title">${esc(prevNext[1].title)}</span></a>` : "<span></span>"}</nav>` : "";
-    const foot = kind === "404" ? "" : `<div class="page-foot"><div class="feedback" data-feedback><span>Was this page helpful?</span><button type="button" data-fb="yes">${icon("thumbs-up", "ic")}Yes</button><button type="button" data-fb="no">${icon("thumbs-down", "ic")}No</button><span class="feedback-thanks" hidden>Thanks for telling us.</span><a class="feedback-issue" hidden href="${REPO}/issues/new?title=${encodeURIComponent("Docs: " + title)}&body=${encodeURIComponent(`Page: ${SITE}${href}\n\nWhat was missing or wrong?\n`)}" target="_blank" rel="noopener">Tell us what was missing ${icon("arrow-up-right", "ic")}</a></div>${edit ? `<a class="edit" href="${REPO}/edit/main/${edit}" target="_blank" rel="noopener">${icon("pencil", "ic")}Edit on GitHub</a>` : ""}</div>${pn}
-      <footer class="site-foot"><div class="site-foot-row">${logo("logo-sm")}<div class="site-foot-links"><a href="${SITE}/about/">About</a><a href="${SITE}">Online demo</a><a href="${REPO}/releases">Releases</a><a href="${github}" target="_blank" rel="noopener" aria-label="GitHub">${icon("github", "ic")}</a></div></div><p>Tempolight is free and open source (MIT). These docs are built from <a href="${REPO}/tree/main/docs" target="_blank" rel="noopener">docs/</a> in the repository.</p></footer>`;
+    const foot = kind === "404" ? "" : `<div class="page-foot"><div class="feedback" data-feedback><span>Was this page helpful?</span><button type="button" data-fb="yes">${icon("thumbs-up", "ic")}Yes</button><button type="button" data-fb="no">${icon("thumbs-down", "ic")}No</button><span class="feedback-thanks" hidden>Thanks for telling us.</span><a class="feedback-issue" hidden href="${REPO}/issues/new?title=${encodeURIComponent("Docs: " + title)}&body=${encodeURIComponent(`Page: ${SITE}${href}\n\nWhat was missing or wrong?\n`)}" target="_blank" rel="noopener">Tell us what was missing ${icon("arrow-up-right", "ic")}</a></div>${edit ? `<a class="edit" href="${REPO}/edit/main/${edit}" target="_blank" rel="noopener">${icon("pencil", "ic")}Edit this page on GitHub</a>` : ""}</div>${pn}`;
+    const firstOf = t => order.find(x => x.tab === t)?.url || `${DOCS}/`;
+    const siteFoot = `<footer class="site-foot"><div class="site-foot-inner"><div class="site-foot-brand">${logo("logo-foot", false)}<p>Music-reactive lighting that understands the song. Free and open source under the MIT licence.</p></div>
+      <div class="site-foot-cols"><div><h2>Docs</h2>${tabs.map(t => `<a href="${firstOf(t)}">${esc(t.tab === "Start" ? "Get started" : t.tab)}</a>`).join("")}${claude ? `<a href="${claude.url}">${esc(claude.sidebarTitle)}</a>` : ""}</div>
+      <div><h2>Build</h2><a href="${API_BASE}/">API reference</a>${pages.has("websocket") ? `<a href="${url("websocket")}">WebSocket API</a>` : ""}${pages.has("architecture") ? `<a href="${url("architecture")}">Architecture</a>` : ""}</div>
+      <div><h2>Project</h2><a href="${SITE}/">Live demo</a><a href="${github}" target="_blank" rel="noopener">GitHub</a><a href="${REPO}/releases" target="_blank" rel="noopener">Releases</a><a href="${SITE}/about/">About</a></div></div></div>
+      <p class="site-foot-note">These docs are built from <a href="${REPO}/tree/main/docs" target="_blank" rel="noopener">docs/</a> in the repository.</p></footer>`;
     const ogImage = `${SITE}${DOCS}/images/home-dark.png`;
     return `<!doctype html>
 <html lang="en" data-kind="${kind}">
@@ -112,37 +137,38 @@ export function buildDocs({ out = path.join(ROOT, "dist/site/docs"), quiet = fal
 <link rel="canonical" href="${SITE}${href}">
 <meta property="og:type" content="website"><meta property="og:site_name" content="${esc(cfg.name)} docs"><meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${SITE}${href}"><meta property="og:image" content="${ogImage}">
 <meta name="twitter:card" content="summary_large_image"><meta name="twitter:title" content="${esc(title)}"><meta name="twitter:description" content="${esc(description)}"><meta name="twitter:image" content="${ogImage}">
-<meta name="theme-color" content="${cfg.background?.color?.dark || "#111317"}" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="${cfg.background?.color?.light || "#ffffff"}" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f0d0b" media="(prefers-color-scheme: dark)"><meta name="theme-color" content="#f8f4ee" media="(prefers-color-scheme: light)">
 <link rel="icon" href="${DOCS}${cfg.favicon}" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="${FONTS}">
 <link rel="stylesheet" href="${DOCS}/assets/docs.css?v=${assetV}">
-<script>try{var t=localStorage.getItem("tl-docs-theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: light)").matches?"light":"${cfg.appearance?.default === "light" ? "light" : "dark"}";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}</script>
+<script>try{var t=localStorage.getItem("tl-docs-theme");if(t!=="light"&&t!=="dark")t=matchMedia("(prefers-color-scheme: light)").matches?"light":"dark";document.documentElement.dataset.theme=t}catch(e){document.documentElement.dataset.theme="dark"}</script>
 <script type="module" src="${DOCS}/assets/docs.js?v=${assetV}"></script>
 </head>
 <body>
 <a class="skip" href="#content">Skip to content</a>
 <header class="top">
-  <div class="top-row">
-    <button class="icon-btn menu-btn" type="button" aria-label="Open the menu" aria-expanded="false" aria-controls="sidebar" data-menu>${icon("menu", "ic")}</button>
-    ${logo()}
-    <button class="search-btn" type="button" data-search aria-label="Search the docs">${icon("search", "ic")}<span class="search-btn-text">Search the docs…</span><kbd class="kbd"><span data-mod>Ctrl</span> K</kbd></button>
-    <div class="top-actions">
-      <button class="icon-btn search-icon-btn" type="button" data-search aria-label="Search">${icon("search", "ic")}</button>
-      <a class="top-link" href="${github}" target="_blank" rel="noopener" aria-label="Tempolight on GitHub">${icon("github", "ic")}<span>GitHub</span></a>
+  <div class="top-bar">
+    <div class="top-start">${logo()}<nav class="top-links" aria-label="Site">${linksHtml}</nav></div>
+    <div class="top-end">
+      <button class="search-btn" type="button" data-search aria-label="Search the docs">${icon("search", "ic")}<span class="search-btn-text">Search</span><kbd class="kbd"><span data-mod>Ctrl</span>K</kbd></button>
+      <button class="icon-btn search-icon-btn" type="button" data-search aria-label="Search the docs">${icon("search", "ic")}</button>
       <button class="icon-btn theme-btn" type="button" data-theme-toggle aria-label="Switch between dark and light">${icon("sun", "ic sun")}${icon("moon", "ic moon")}</button>
-      ${primary ? `<a class="btn btn-primary top-cta" href="${esc(primary.href)}">${esc(primary.label)}${icon("arrow-up-right", "ic")}</a>` : ""}
+      <a class="btn btn-primary top-cta" href="${esc(primary.href)}">${esc(primary.label)}</a>
+      <button class="icon-btn menu-btn" type="button" aria-label="Open the menu" aria-expanded="false" aria-controls="sidebar" data-menu>${icon("menu", "ic open")}${icon("x", "ic close")}</button>
     </div>
   </div>
-  <nav class="tabs" aria-label="Sections">${tabsHtml}</nav>
 </header>
 <div class="scrim" data-scrim hidden></div>
 <div class="layout${toc.length ? " has-toc" : ""}">
-  <aside class="sidebar" id="sidebar" aria-label="Pages"><nav class="sidebar-inner">${sidebar(tab, href)}</nav></aside>
+  <aside class="sidebar" id="sidebar" aria-label="Pages"><div class="sidebar-inner">${sidebar(tab, href)}<a class="btn btn-primary nav-mobile-cta" href="${esc(primary.href)}">${esc(primary.label)}</a></div></aside>
   <main class="main" id="content">
     <article class="article">${content}</article>
     ${foot}
   </main>
   ${tocHtml}
 </div>
+${siteFoot}
 <div class="search" data-search-modal hidden role="dialog" aria-modal="true" aria-label="Search the docs">
   <div class="search-panel">
     <div class="search-input">${icon("search", "ic")}<input type="search" placeholder="Search the docs…" aria-label="Search" autocomplete="off" spellcheck="false" data-search-input><kbd class="kbd">Esc</kbd></div>
@@ -168,7 +194,12 @@ ${mermaid ? `<script type="application/json" id="mermaid-src">${JSON.stringify({
     // the description is often the first paragraph itself (build-mintlify.js takes it from there): don't show it twice
     const norm = x => plainText(x).replace(/\s+/g, " ").trim().toLowerCase(), firstP = /^<p>([\s\S]*?)<\/p>/.exec(r.html)?.[1] || "";
     const lead = p.description && !norm(firstP).startsWith(norm(p.description).slice(0, 80)) ? p.description : "";
-    const content = frame ? `<div class="frame-page">${r.html}</div>` : header(p.group, p.title, lead) + `<div class="prose">${r.html}</div>`;
+    let html = r.html;
+    if (p.slug === "index" && claude) { // the "Set up with Claude" band, under the hero
+      const band = `<a class="tl-claude" href="${claude.url}"><span class="tl-claude-icon">${icon("sparkles", "ic")}</span><span class="tl-claude-text"><span class="tl-claude-title">${esc(claude.title)}</span><span class="tl-claude-sub">${esc(claude.description || "Paste one prompt into Claude and it installs Tempolight, finds your lights and plays the first song with you.")}</span></span><span class="tl-claude-go">Get the setup prompt${icon("arrow-right", "ic")}</span></a>`;
+      const at = html.indexOf('<h2 class="tl-h2">'); html = at >= 0 ? html.slice(0, at) + band + html.slice(at) : band + html;
+    }
+    const content = frame ? `<div class="frame-page">${html}</div>` : header(p.group, p.title, lead) + `<div class="prose">${r.html}</div>`;
     write(p.url, layout({ title: p.title, description: p.description, href: p.url, tab: p.tab, content, toc: frame ? [] : r.headings.filter(h => h.depth >= 2 && h.depth <= 3), prevNext: neighbours(p.url), edit: p.source, kind: frame ? "home" : "page", mermaid: r.mermaid }));
     search.push({ t: p.title, u: p.url, g: `${p.tab.tab} · ${p.group}`, d: p.description, s: r.sections.map(s => [s.heading, s.id, s.text.slice(0, 600)]) });
   }

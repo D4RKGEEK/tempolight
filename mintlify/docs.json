@@ -73,9 +73,9 @@
             "group": "Get started",
             "pages": [
               "index",
+              "setup-with-claude",
               "overview",
               "install",
-              "setup-with-claude",
               "guides/first-run",
               "guides/what-you-can-do",
               "getting-started"
