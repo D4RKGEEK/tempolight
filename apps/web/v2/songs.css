@@ -105,7 +105,7 @@
 .sg-more { border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
 .sg-more > summary { list-style: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 16px; padding: 20px 24px; cursor: pointer; border-radius: var(--r-card); }
 .sg-more > summary::-webkit-details-marker { display: none; }
-.sg-more > summary span { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
+.sg-more > summary span { color: var(--text); font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
 .sg-more > summary small { grid-row: 2; font-size: 14px; color: var(--text-2); }
 .sg-more > summary .sg-i { grid-row: 1 / span 2; grid-column: 2; color: var(--text-2); transition: transform var(--t-out) var(--ease); }
 .sg-more[open] > summary .sg-i { transform: rotate(90deg); }
@@ -135,7 +135,7 @@
 .sg-url { font-size: 13px; color: var(--text-3); overflow-wrap: anywhere; }
 .sg-qempty { color: var(--text-3); font-size: 14px; padding: 8px 0; list-style: none; }
 
-/* ---------------------------------------------------------------- sheets (content, and the local sheet when the shell has none) */
+/* ---------------------------------------------------------------- sheet content (the sheet itself: ui.css) */
 .sg-sheet { display: flex; flex-direction: column; gap: 20px; min-width: 0; }
 .sg-sheet .hear-choices { display: none; }
 .sg-sheet .panel { background: none; box-shadow: none; border-radius: 0; overflow: visible; }
@@ -162,8 +162,10 @@
 .sg-meta { font-size: 13px; color: var(--text-3); white-space: nowrap; }
 .sg-queue { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; background: var(--hair); border-radius: 16px; overflow: hidden; }
 .sg-queue li { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: var(--sunk); }
-.sg-queue li.now .sg-qn { color: var(--label); }
+.sg-queue li.now .sg-queue .sg-link { color: var(--text-2); font-size: 13.5px; }
+.sg-qn { color: var(--label); }
 .sg-queue .sg-play { width: 34px; height: 34px; }
+.sg-queue .sg-link { color: var(--text-2); font-size: 13.5px; }
 .sg-qn { flex: 1; min-width: 0; font-size: 15px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sg-queue li.sg-qempty { padding: 18px 16px; }
 .sg-nowcard { display: flex; flex-direction: column; gap: 10px; padding: 18px; border-radius: 20px; background: var(--sunk); box-shadow: inset 0 0 0 1px var(--hair); }
@@ -195,19 +197,6 @@
 .sg-dacts { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; padding-top: 4px; }
 .sg-dacts .sg-ghost { margin-left: auto; }
 .sg-dacts .btn .sg-i { width: 16px; height: 16px; fill: currentColor; stroke-width: 1.2; }
-
-.sg-scrim { position: fixed; inset: 0; z-index: 60; background: rgb(8 6 4 / 0); transition: background var(--t-out) var(--ease); }
-.sg-scrim.open { background: rgb(8 6 4 / .5); }
-.sg-side { position: absolute; top: 12px; right: 12px; bottom: 12px; width: min(480px, calc(100vw - 24px)); display: flex; flex-direction: column; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-lift), 0 40px 90px -30px rgb(0 0 0 / .7);
-  transform: translateX(calc(100% + 24px)); transition: transform .28s var(--ease-out-expo); outline: none; overflow: hidden; }
-.sg-side.wide { width: min(600px, calc(100vw - 24px)); }
-.sg-scrim.open .sg-side { transform: none; }
-.sg-side-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 20px 20px 4px 24px; }
-.sg-side-head h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.03em; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.sg-x { flex: none; width: 40px; height: 40px; border: 0; border-radius: 12px; display: grid; place-items: center; background: var(--sunk); color: var(--text-2); cursor: pointer; }
-.sg-x:hover { color: var(--text); }
-.sg-x svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; }
-.sg-side > .sg-sheet { flex: 1; overflow-y: auto; padding: 16px 24px 28px; overscroll-behavior: contain; }
 
 /* ---------------------------------------------------------------- narrower */
 @media (max-width: 1240px) {
@@ -246,15 +235,11 @@
   .sg-list { border-radius: 20px; }
   .sg-opt { flex-wrap: wrap; }
   .sg-opt > .sg-req-body { flex-direction: column; }
-  .sg-side, .sg-side.wide { top: auto; left: 0; right: 0; bottom: 0; width: 100%; max-height: 92vh; max-height: 92dvh; border-radius: 24px 24px 0 0; transform: translateY(100%); padding-bottom: env(safe-area-inset-bottom); }
-  .sg-side-head { padding: 18px 16px 2px 20px; }
-  .sg-side-head::before { content: ""; position: absolute; top: 7px; left: 50%; width: 40px; height: 4px; margin-left: -20px; border-radius: 2px; background: var(--hair); }
-  .sg-side > .sg-sheet { padding: 14px 20px 28px; }
   .sg-pathrow { flex-direction: column; }
   .sg-dacts .sg-ghost { margin-left: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .sg-card, .sg-play, .sg-side, .sg-scrim, .sg-level i, .sg-bar > i { transition: none !important; }
+  .sg-card, .sg-play, .sg-level i, .sg-bar > i { transition: none !important; }
   .sg-eq i, .sg-skel { animation: none !important; }
   .sg-card:hover { transform: none; }
 }

@@ -7,6 +7,7 @@
 import { app, api, act, toast, esc, $, $$, unlocked, guestOk, guestUrl, fmtTime, refreshState, DEMO } from "/app.js";
 import { hearLine } from "/hearline.js";
 import { PART_NAME } from "/songmap.js";
+import { openSheet } from "/v2/shell.js";
 
 // ---------------------------------------------------------------- the stylesheet, inserted once
 function loadCss() {
@@ -14,40 +15,14 @@ function loadCss() {
   const l = document.createElement("link"); l.id = "v2-songs-css"; l.rel = "stylesheet"; l.href = "/v2/songs.css"; document.head.appendChild(l);
 }
 
-// ---------------------------------------------------------------- the sheet: the shell's (apps/web/v2/shell.js), else a local one
-let shellSheet = null;
-const shellReady = import("/v2/shell.js").then(m => { if (typeof m.openSheet === "function") shellSheet = m.openSheet; }).catch(() => {});
-let openOne = null; // only one sheet at a time
-/** {el (the sheet), body (where the content goes), close()} */
+// ---------------------------------------------------------------- the sheet (apps/web/v2/shell.js), one at a time
+let openOne = null;
+/** {el (the sheet), body (our content), close()} */
 function sheet({ title, html, onClose, wide = false }) {
-  openOne?.close(); let closed = false;
+  openOne?.close(); let closed = false, s = null;
   const done = () => { if (closed) return; closed = true; if (openOne === s) openOne = null; onClose?.(); };
-  let s;
-  if (shellSheet) {
-    const r = shellSheet({ title, body: `<div class="sg-sheet${wide ? " wide" : ""}">${html}</div>`, onClose: done });
-    const body = r.el.querySelector(".sg-sheet") || r.el;
-    s = { el: r.el, body, close: () => { r.close(); done(); } };
-  } else {
-    const back = document.createElement("div"); back.className = "sg-scrim";
-    back.innerHTML = `<aside class="sg-side${wide ? " wide" : ""}" role="dialog" aria-modal="true" aria-label="${esc(title)}" tabindex="-1">
-      <header class="sg-side-head"><h2>${esc(title)}</h2><button class="sg-x" type="button" aria-label="Close"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18"/></svg></button></header>
-      <div class="sg-sheet">${html}</div></aside>`;
-    document.body.appendChild(back);
-    const side = back.querySelector(".sg-side"), prevFocus = document.activeElement;
-    const key = e => {
-      if (e.key === "Escape") { e.preventDefault(); close(); return; }
-      if (e.key !== "Tab") return; // focus stays in the sheet
-      const f = [...side.querySelectorAll('button, [href], input, select, textarea, summary, [tabindex]:not([tabindex="-1"])')].filter(x => !x.disabled && x.offsetParent !== null);
-      if (!f.length) return; const first = f[0], last = f[f.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); } else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
-    };
-    const close = () => { if (closed) return; removeEventListener("keydown", key, true); back.classList.remove("open"); setTimeout(() => back.remove(), 220); prevFocus?.focus?.({ preventScroll: true }); done(); };
-    addEventListener("keydown", key, true);
-    back.addEventListener("pointerdown", e => { if (e.target === back) close(); });
-    back.querySelector(".sg-x").onclick = close;
-    requestAnimationFrame(() => { back.classList.add("open"); side.focus({ preventScroll: true }); });
-    s = { el: side, body: back.querySelector(".sg-sheet"), close };
-  }
+  const r = openSheet({ title, wide, body: `<div class="sg-sheet">${html}</div>`, onClose: done });
+  s = { el: r.el, body: r.el.querySelector(".sg-sheet") || r.body, close: () => { r.close(); done(); } };
   openOne = s; return s;
 }
 
@@ -137,7 +112,7 @@ export function render(el) {
     if (id === "mic") return mode === "mic" ? ["live", "Listening"] : act === "mic" ? ["on", "Chosen"] : ["", "Off"];
     if (id === "spotify") { if (DEMO) return ["", "Not in the demo"]; if (!sp || sp.on === false) return ["", "Off"];
       if (sp.track) return [sp.track.playing ? "live" : "on", sp.track.playing ? (sp.mode === "learning" ? `Learning ${sp.learn?.pct ?? 0}%` : "Following") : "Paused"];
-      return ["on", sp.connected ? "Connected" : "On"]; }
+      return ["on", sp.connected ? "Connected" : "Ready"]; }
     if (id === "files") { const n = A?.state.queue.length || 0; return mode === "song" ? ["live", A.state.song?.playing ? "Playing" : "Paused"] : A?.state.analysing ? ["warn", "Analysing"] : n ? ["on", plural(n, "song")] : ["", "Nothing added"]; }
     return ["", ""];
   }
@@ -155,7 +130,7 @@ export function render(el) {
     });
     const l = hearLine(m), line = $("#sg-line", root);
     line.className = `sg-line ${l.ok === true ? "ok" : l.ok === false ? "bad" : ""}`;
-    line.innerHTML = `<i class="sg-dot"></i>${esc(l.text || "Not listening")}${l.ok === false && l.why ? ` <span class="sg-why">${esc(l.why)}</span>` : ""}`;
+    line.innerHTML = `<i class="sg-dot"></i>${esc((l.text || "Not listening").replace(/ ✓/g, ""))}${l.ok === false && l.why ? ` <span class="sg-why">${esc(l.why)}</span>` : ""}`;
   }
   $$(".sg-card", root).forEach(c => c.onclick = () => openCard(c.dataset.card));
 
@@ -349,7 +324,7 @@ export function render(el) {
   // ---------------------------------------------------------------- a song's detail
   function openDetail(it) {
     sheetKind = "detail";
-    const s = sheet({ title: it.name, wide: true, onClose: () => { detail = null; sheetKind = null; },
+    const s = sheet({ title: it.name, onClose: () => { detail = null; sheetKind = null; },
       html: `<p class="sg-dmeta">${[srcText(it), it.bpm ? `${Math.round(it.bpm)} BPM` : "", it.songKey, it.dur ? fmtTime(it.dur) : "", it.drops != null ? plural(it.drops, "drop") : ""].filter(Boolean).map(esc).join(" · ")}</p>
         ${it.file ? `<p class="sg-file mono">${esc(it.file)}</p>` : ""}
         <div class="sg-map" id="sg-map"><canvas aria-label="The song's map: its parts and drops" role="img"></canvas><p class="sg-mapnote" id="sg-mapnote">${it.id ? "Loading the map" : "The map appears once the song has been played and remembered."}</p></div>
@@ -364,8 +339,9 @@ export function render(el) {
     const fb = B.querySelector("#sg-d-forget"); if (fb) fb.onclick = async () => { if (await forget(it)) s.close(); };
     const nx = B.querySelector("#sg-lknext"), kp = B.querySelector("#sg-lkkeep"); nx.disabled = kp.disabled = !lookOk;
     const showLook = r => { it.look = { ...it.look, main: r.main, palette: r.palette, locked: !!r.locked, label: r.label };
-      B.querySelector("#sg-lk").textContent = r.label || lookLabel(it.look); kp.setAttribute("aria-pressed", String(!!r.locked)); kp.textContent = r.locked ? "Kept" : "Keep this look";
-      const why = Array.isArray(r.why) ? r.why.filter(x => typeof x === "string") : []; B.querySelector("#sg-lkwhy").textContent = why.join(" · "); };
+      const lm = String(r.label || "").match(/^(.*?) \((.*)\)$/); // "Kick Shockwave · Fire (fast four-on-the-floor)": the reason goes below
+      B.querySelector("#sg-lk").textContent = lm ? lm[1] : r.label || lookLabel(it.look); kp.setAttribute("aria-pressed", String(!!r.locked)); kp.textContent = r.locked ? "Kept" : "Keep this look";
+      const why = Array.isArray(r.why) ? r.why.filter(x => typeof x === "string") : []; B.querySelector("#sg-lkwhy").textContent = lm ? cap(lm[2]) : why.join(" · "); };
     nx.onclick = () => act(() => api("POST", "/api/song/look/next", { id: it.id })).then(r => { showLook(r); toast(`Look: ${r.label}`); refreshLater(); }).catch(() => {});
     kp.onclick = () => { const kept = kp.getAttribute("aria-pressed") === "true"; act(() => api("POST", "/api/song/look/keep", { id: it.id, keep: !kept }), kept ? "The look can change again" : "Look kept for this song").then(r => { showLook(r); refreshLater(); }).catch(() => {}); };
     if (it.id) loadMap(it, B);
@@ -414,9 +390,9 @@ export function render(el) {
   raf = requestAnimationFrame(tick);
   // #/songs/hear (the top bar's Hearing chip): open the active way's set-up
   const sub = (location.hash.match(/^#\/songs\/(\w+)/) || [])[1];
-  if (sub === "hear") shellReady.then(() => { if (alive) openCard(activeCard(app.status) || "computer"); });
-  else if (sub === "folder" || sub === "library") shellReady.then(() => { if (alive) openFolder(); });
-  else if (sub === "spotify") shellReady.then(() => { if (alive) openSpotify(); });
+  if (sub === "hear") setTimeout(() => { if (alive) openCard(activeCard(app.status) || "computer"); }, 0);
+  else if (sub === "folder" || sub === "library") setTimeout(() => { if (alive) openFolder(); }, 0);
+  else if (sub === "spotify") setTimeout(() => { if (alive) openSpotify(); }, 0);
 
   let lastNow = null;
   return {
