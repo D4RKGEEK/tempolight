@@ -33,14 +33,14 @@ const midiHelp = open => `<details class="hear-midi"${open ? " open" : ""}><summ
 export function mountHearing(el, { bare = false, onFixTiming = null } = {}) {
   if (!el) return null;
   const inner = `<div class="hearline big" id="hr-line" aria-live="polite"></div>
-    <div class="callout warn" id="hr-bt" hidden><b>Bluetooth speakers play late — fix the timing.</b> <span id="hr-btname"></span> <button class="btn sm primary" id="hr-btfix" type="button">Fix the timing</button></div>
+    <div class="callout warn" id="hr-bt" hidden><b>Bluetooth speakers play late: fix the timing.</b> <span id="hr-btname"></span> <button class="btn sm primary" id="hr-btfix" type="button">Fix the timing</button></div>
     <div class="hear-choices" role="radiogroup" aria-label="How Tempolight hears your music">
       <button class="hear-choice" type="button" role="radio" data-hc="computer"><b>This computer's sound</b><small id="hr-csub">Records what this computer plays. After set-up, just play Spotify: no browser tab, no microphone.</small><span class="badge acc" data-rec="computer" hidden>Recommended</span></button>
       <button class="hear-choice" type="button" role="radio" data-hc="mic"><b>Microphone</b><small>Listens in this browser tab, which must stay open. Starts by itself when Spotify plays a song Tempolight hasn't learned.</small><span class="badge acc" data-rec="mic" hidden>Recommended</span></button>
       <button class="hear-choice" type="button" role="radio" data-hc="pi"><b>Raspberry Pi / Linux: automatic</b><small>A Pi or Linux box next to the speakers, with a USB sound card or microphone. Starts at every boot.</small><span class="badge acc" data-rec="pi" hidden>Recommended</span></button>
     </div>
     <div id="hr-detail" class="stack"></div>
-    <p class="faint" style="font-size:12.5px">Step-by-step for Mac, Windows, Linux and Raspberry Pi: <a href="${GUIDE}" target="_blank" rel="noopener">How Tempolight hears your music</a>.</p>`;
+    <p class="faint" style="font-size:13px">Step-by-step for Mac, Windows, Linux and Raspberry Pi: <a href="${GUIDE}" target="_blank" rel="noopener">How Tempolight hears your music</a>.</p>`;
   const t = document.createElement("template");
   t.innerHTML = bare ? `<div class="hear stack" id="hear">${inner}</div>` : `<section class="panel span-12 hear" id="hear"><header><h2>How should Tempolight hear your music?</h2><span class="sub" id="hr-sub"></span></header><div class="pb stack">${inner}</div></section>`;
   const root = t.content.firstElementChild; if (bare) { el.innerHTML = ""; el.appendChild(root); } else el.replaceWith(root);
@@ -84,7 +84,7 @@ export function mountHearing(el, { bare = false, onFixTiming = null } = {}) {
           <div class="row">${on ? `<span class="badge live"><i></i>Listening to ${esc(v.device || "this computer")} on the server</span><button class="btn sm" id="hr-off" type="button">Stop</button>` : `<button class="btn primary" id="hr-use" type="button" ${v.source && admin ? "" : "disabled"}>${view.platform === "linux" ? "Listen to this computer" : "Turn on listening"}</button>`}
             <button class="btn" id="hr-check" type="button">Check again</button></div>
           ${v.why && !on ? `<p class="callout warn">${esc(v.why)}</p>` : ""}
-          ${on ? `<p class="faint" style="font-size:12.5px">Remembered: it starts by itself when Tempolight starts. Now just play Spotify.</p>` : `<p class="faint" style="font-size:12.5px">${view.platform === "darwin" ? "macOS asks once whether Terminal (or Tempolight) may use the microphone: allow it, that's how Tempolight reads BlackHole. " : ""}Once it's on, just play your music: no browser tab and no microphone needed.</p>`}
+          ${on ? `<p class="faint" style="font-size:13px">Remembered: it starts by itself when Tempolight starts. Now just play Spotify.</p>` : `<p class="faint" style="font-size:13px">${view.platform === "darwin" ? "macOS asks once whether Terminal (or Tempolight) may use the microphone: allow it, that's how Tempolight reads BlackHole. " : ""}Once it's on, just play your music: no browser tab and no microphone needed.</p>`}
           ${view.platform === "win32" && !v.source ? `<button class="btn" id="hr-tomic" type="button">Use the microphone instead</button>` : ""}`; }
     } else if (c === "mic") {
       const on = method() === "mic", mode = app.audio?.state.mode;

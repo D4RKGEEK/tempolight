@@ -12,7 +12,7 @@ export function dmxPanels() {
   return panel("DMX fixtures", `<span id="x-st">Pars, moving heads, strobes, lasers and fog over Art-Net or sACN</span>`, `<label class="check"><input type="checkbox" id="x-on" ${s.enabled ? "checked" : ""}> DMX output on</label>`, `<div class="pb stack">
     <div class="row"><input id="x-host" placeholder="DMX node address, e.g. 192.168.1.60" style="max-width:260px" aria-label="DMX node address"><select id="x-proto" aria-label="DMX protocol" style="max-width:150px">${opt("artnet", "Art-Net", true)}${opt("e131", "sACN (E1.31)")}</select>
       <input id="x-univ" type="number" min="0" max="63999" placeholder="Universe" style="width:110px" aria-label="Universe"><input id="x-name" placeholder="Name (optional)" style="max-width:180px" aria-label="Name"><button class="btn primary" id="x-add" type="button">Add universe</button></div>
-    <p class="faint" style="font-size:12.5px">Each DMX device is one universe on an Art-Net or sACN node (Art-Net counts universes from 0, sACN from 1). Every fixture is a point in the room, so the effects colour pars and moving heads like LEDs: drag the points on the Room page. Moving heads move on the beat and brighten on drops. Set your DMX node to <b>blackout when the signal is lost</b> (not “hold last look”), so nothing stays on if Tempolight stops.</p>
+    <p class="faint" style="font-size:13px">Each DMX device is one universe on an Art-Net or sACN node (Art-Net counts universes from 0, sACN from 1). Every fixture is a point in the room, so the effects colour pars and moving heads like LEDs: drag the points on the Room page. Moving heads move on the beat and brighten on drops. Set your DMX node to <b>blackout when the signal is lost</b> (not “hold last look”), so nothing stays on if Tempolight stops.</p>
     <div class="controls">
       <label class="check"><input type="checkbox" id="x-las" ${s.lasers ? "checked" : ""}> Lasers (only during drops)</label>
       <label class="check"><input type="checkbox" id="x-fog" ${s.fog ? "checked" : ""}> Fog machine</label>
@@ -30,7 +30,7 @@ function fixtureRow(d, f) {
   return `<tr><td><input value="${esc(f.name)}" data-xname="${d.id}:${f.id}" style="width:140px" aria-label="Fixture name"></td><td>${esc(KIND[f.kind] || f.kind)}<br><span class="faint mono" style="font-size:11px">${esc(f.profile)}</span></td>
     <td class="num"><input type="number" min="1" max="512" value="${f.address}" data-xaddr="${d.id}:${f.id}" style="width:70px" aria-label="DMX address"></td>
     <td>${f.kind === "head" ? `<select data-xmove="${d.id}:${f.id}" aria-label="Movement">${MOVES.map(([v, l]) => opt(v, l, (f.pattern || "circle") === v)).join("")}</select>${f.pattern === "point" ? ` <input placeholder="x, y" value="${f.target ? f.target.join(", ") : ""}" data-xtgt="${d.id}:${f.id}" style="width:70px" title="Where in the room (16 × 9, y = 0 at the top)" aria-label="Target">` : ""}` : '<span class="faint">–</span>'}</td>
-    <td class="mono" style="font-size:11.5px" data-xlive="${d.id}:${f.id}">${liveCells(f)}</td><td><button class="btn sm danger" data-xdel="${d.id}:${f.id}" type="button">Remove</button></td></tr>`;
+    <td class="mono" style="font-size:12.5px" data-xlive="${d.id}:${f.id}">${liveCells(f)}</td><td><button class="btn sm danger" data-xdel="${d.id}:${f.id}" type="button">Remove</button></td></tr>`;
 }
 const liveCells = f => (f.live || []).map(c => `<span title="${esc(c.type)}" style="display:inline-block;min-width:66px">${c.n} ${esc(c.type)} <b>${c.value}</b></span>`).join(" ");
 

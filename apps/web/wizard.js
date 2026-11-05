@@ -19,12 +19,13 @@ const I = { // icons, 24 x 24 strokes
   lock: "M6 11h12v10H6zM8.5 11V7.5a3.5 3.5 0 0 1 7 0V11", mic: "M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zM5 11a7 7 0 0 0 14 0M12 18v3",
   ear: "M6 9a6 6 0 0 1 12 0c0 3-2 4-3 5.5S14 18 12 19.5a2.5 2.5 0 0 1-4-1M9 9a3 3 0 0 1 6 0c0 1.5-1.5 2-1.5 3.5",
   x: "M6 6l12 12M18 6L6 18", back: "M15 5l-7 7 7 7", next: "M9 5l7 7-7 7", search: "M10.5 17a6.5 6.5 0 1 0 0-13 6.5 6.5 0 0 0 0 13zM20 20l-4.8-4.8",
+  chat: "M4 5h16v11H9l-5 4zM8 9.5h8M8 12.5h5",
 };
 const ic = (n, cls = "") => `<svg class="ic ${cls}" viewBox="0 0 24 24" aria-hidden="true"><path d="${I[n]}"/></svg>`;
 const STEPS = [
   { id: "lights", icon: "lights", title: "Find your lights" },
   { id: "room", icon: "room", title: "Pick your room" },
-  { id: "hear", icon: "ear", title: "How should Tempolight hear your music?" },
+  { id: "hear", icon: "ear", title: "Choose how Tempolight hears your music" },
   { id: "timing", icon: "timing", title: "Fix the timing" },
   { id: "song", icon: "music", title: "Play a test song" },
   { id: "done", icon: "done", title: "All set" },
@@ -91,7 +92,8 @@ function stepLights(el) {
       <button class="wz-tile" id="wz-manual" type="button">${ic("plus")}<b>Type an address</b><small>From the WLED app</small></button>
     </div>
     <div class="wz-ip" id="wz-ipbox" hidden><input id="wz-ip" inputmode="decimal" autocomplete="off" placeholder="192.168.1.42" aria-label="IP address"><button class="wz-btn primary" id="wz-ipadd" type="button">Add</button></div>
-    <p class="wz-have" id="wz-have"></p>`;
+    <p class="wz-have" id="wz-have"></p>
+    <button class="wz-claude" id="wz-claude" type="button"><span class="wz-cmark">${ic("chat")}</span><span><b>Let Claude set it up</b><small>Copy a prompt for Claude Code or the Claude app, and it walks through every step with you</small></span>${ic("next")}</button>`;
   const have = () => { const d = app.state.devices; $("#wz-have").innerHTML = d.length ? `${ic("done", "ok")} ${d.length} light${d.length > 1 ? "s" : ""} ready: ${d.map(x => esc(x.name)).join(", ")}` : ""; setNext(d.length > 0); };
   const added = async () => { await refreshState(); await loadLayout(); have(); };
   let found = [];
@@ -116,6 +118,7 @@ function stepLights(el) {
   }
   $("#wz-virtual").onclick = async () => { $("#wz-virtual").disabled = true;
     try { if (!app.state.devices.some(d => d.virtual)) await act(() => api("POST", "/api/devices", { virtual: true, name: "Virtual room" })); await added(); show(1); } catch {} finally { if ($("#wz-virtual")) $("#wz-virtual").disabled = false; } };
+  $("#wz-claude").onclick = () => import("/claude-setup.js").then(m => m.openClaudeSetup()).catch(e => toast(e.message, true));
   $("#wz-manual").onclick = () => { $("#wz-ipbox").hidden = false; $("#wz-ip").focus(); };
   const addIp = async () => { const host = $("#wz-ip").value.trim(); if (!host) return $("#wz-ip").focus();
     try { await act(() => api("POST", "/api/devices", { host }), "Light added"); $("#wz-ip").value = ""; await added(); }
@@ -218,7 +221,7 @@ function stepDone(el) {
   const locked = app.state.locked;
   el.innerHTML = `<p class="wz-say">Your lights now follow the music.</p>
     <div class="wz-pin">${ic("lock")}<div><b>Lock the settings?</b><small>Guests can still pick effects</small></div></div>
-    ${locked ? `<p class="wz-result ok">${ic("done", "ok")} Locked with a PIN</p>` : `<div class="wz-ip"><input id="wz-pin" type="password" inputmode="numeric" autocomplete="new-password" maxlength="8" placeholder="PIN (4–8 digits)" aria-label="PIN, optional"><button class="wz-btn" id="wz-lock" type="button">Lock</button></div><p class="wz-result" id="wz-pinmsg"></p>`}`;
+    ${locked ? `<p class="wz-result ok">${ic("done", "ok")} Locked with a PIN</p>` : `<div class="wz-ip"><input id="wz-pin" type="password" inputmode="numeric" autocomplete="new-password" maxlength="8" placeholder="PIN, 4 to 8 digits" aria-label="PIN, optional"><button class="wz-btn" id="wz-lock" type="button">Lock</button></div><p class="wz-result" id="wz-pinmsg"></p>`}`;
   setNext(true, "Start the show");
   if ($("#wz-lock")) $("#wz-lock").onclick = async () => {
     const pin = $("#wz-pin").value.trim(); if (!/^\d{4,8}$/.test(pin)) { $("#wz-pinmsg").textContent = "4 to 8 digits"; $("#wz-pinmsg").className = "wz-result warn"; return; }

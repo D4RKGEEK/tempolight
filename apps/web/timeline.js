@@ -6,7 +6,7 @@ import { app, api, act, toast, esc, panel, opt, createPreview, $, $$, guestOk } 
 
 const LANES = [["ruler", 22, ""], ["song", 58, "Song"], ["fx", 46, "Effects"], ["col", 30, "Colours"], ["cue", 34, "Cues"], ["bri", 46, "Brightness"]];
 const TOP = {}, HT = {}; let H = 0; for (const [k, h] of LANES) { TOP[k] = H; HT[k] = h; H += h; }
-const PART = { calm: "#4a6fa5", silent: "#4a6fa5", build: "#c58a1d", drop: "#c8366e" };
+const PART = { calm: "#5b8cff", silent: "#5b8cff", build: "#f5b83d", drop: "#ff4f8b" }; // fallbacks for the --calm, --build and --drop tokens
 const CUES = { flash: ["F", "Flash"], strobe: ["S", "Strobe"], blackout: ["B", "Blackout"], build: ["↑", "Build-up"], drop: ["↓", "Drop"] };
 const CUE_BEATS = { flash: 0, strobe: 4, blackout: 2, build: 16, drop: 16 };
 const MIN = 0.05, r3 = v => Math.round(v * 1000) / 1000, clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -48,23 +48,23 @@ export function timelinePage(el) {
     el.innerHTML = `
       ${panel(`Show: ${esc(src.name)}`, `<span id="tl-state"></span>`, `<a class="btn" href="#/music">Music</a><button class="btn" id="tl-reset" type="button">Reset to automatic</button><button class="btn primary" id="tl-save" type="button" disabled>Save</button>`, `
         <div class="tl-bar">
-          <div class="grp"><button class="btn primary" id="tl-play" type="button" aria-label="Play or pause (space)">Play</button><span class="tl-time" id="tl-time">0:00.000</span><span class="faint" id="tl-src" style="font-size:12px"></span></div>
+          <div class="grp"><button class="btn primary" id="tl-play" type="button" aria-label="Play or pause (space)">Play</button><span class="tl-time" id="tl-time">0:00.000</span><span class="faint" id="tl-src" style="font-size:13px"></span></div>
           <div class="sep"></div>
           <div class="grp"><button class="btn sm" id="tl-undo" type="button" title="Undo (Ctrl+Z)" disabled>Undo</button><button class="btn sm" id="tl-redo" type="button" title="Redo (Ctrl+Shift+Z)" disabled>Redo</button></div>
           <div class="sep"></div>
-          <div class="grp"><label class="faint" for="tl-snap" style="font-size:12px">Snap</label><select id="tl-snap">${opt("off", "Off", snap === "off")}${opt("beat", "Beats", snap === "beat")}${opt("bar", "Bars", snap === "bar")}</select>
+          <div class="grp"><label class="faint" for="tl-snap" style="font-size:13px">Snap</label><select id="tl-snap">${opt("off", "Off", snap === "off")}${opt("beat", "Beats", snap === "beat")}${opt("bar", "Bars", snap === "bar")}</select>
             <button class="btn sm" id="tl-zout" type="button" aria-label="Zoom out">−</button><button class="btn sm" id="tl-zin" type="button" aria-label="Zoom in">+</button><button class="btn sm" id="tl-zfit" type="button">Fit</button>
-            <label class="check" style="font-size:12px"><input type="checkbox" id="tl-follow" checked> Follow</label></div>
+            <label class="check" style="font-size:13px"><input type="checkbox" id="tl-follow" checked> Follow</label></div>
           <div class="sep"></div>
           <div class="grp"><button class="btn sm" id="tl-split" type="button" title="Split the block at the playhead">Split</button><button class="btn sm" id="tl-dup" type="button">Duplicate</button><button class="btn sm" id="tl-del" type="button">Delete</button></div>
           <div class="sep"></div>
-          <div class="grp"><span class="faint" style="font-size:12px">Add at playhead:</span>${Object.entries(CUES).map(([k, [, n]]) => `<button class="btn sm" data-add="${k}" type="button">${n}</button>`).join("")}<button class="btn sm" data-add="color" type="button">Colour</button><button class="btn sm" data-add="key" type="button">Brightness</button></div>
+          <div class="grp"><span class="faint" style="font-size:13px">Add at playhead:</span>${Object.entries(CUES).map(([k, [, n]]) => `<button class="btn sm" data-add="${k}" type="button">${n}</button>`).join("")}<button class="btn sm" data-add="color" type="button">Colour</button><button class="btn sm" data-add="key" type="button">Brightness</button></div>
         </div>
         <div class="tl-wrap"><div class="tl-labels">${LANES.map(([k, h, n]) => `<div style="height:${h}px">${n}</div>`).join("")}</div>
           <div class="tl-scroll" id="tl-sc" tabindex="0" aria-label="Show timeline"><div class="tl-inner" id="tl-in"><canvas id="tl-cv"></canvas><div class="tl-lanes" id="tl-lanes">${LANES.map(([k, h]) => `<div class="tl-lane" data-lane="${k}" style="top:${TOP[k]}px;height:${h}px"></div>`).join("")}</div></div></div></div>
         <div class="tl-help"><kbd>Space</kbd> play/pause · <kbd>←</kbd><kbd>→</kbd> nudge (Shift: a bar) · <kbd>Del</kbd> delete · <kbd>Ctrl</kbd>+wheel or pinch to zoom · double-click a lane to add · drag block edges to resize · Shift while dragging: no snap</div>`, "span-12")}
       ${panel("Selected", `<span id="tl-selname">Nothing</span>`, "", `<div class="pb" id="tl-insp"></div>`, "span-8")}
-      ${panel("Live preview", "", `<label class="check" style="font-size:12.5px"><input type="checkbox" id="tl-live" checked> Preview changes on the lights</label>`, `<div class="stage" id="tl-stage"></div><p class="faint pb" style="font-size:12.5px;padding-top:8px">While the song plays, the lights play your unsaved version; it is kept only when you save.</p>`, "span-4")}
+      ${panel("Live preview", "", `<label class="check" style="font-size:13px"><input type="checkbox" id="tl-live" checked> Preview changes on the lights</label>`, `<div class="stage" id="tl-stage"></div><p class="faint pb" style="font-size:13px;padding-top:8px">While the song plays, the lights play your unsaved version; it is kept only when you save.</p>`, "span-4")}
       ${canEdit ? "" : `<div class="callout err span-12">Tempolight is locked: guests can't change shows. Unlock it in Settings to save.</div>`}`;
     prev = createPreview($("#tl-stage"));
     const sc = $("#tl-sc");
@@ -130,13 +130,13 @@ export function timelinePage(el) {
     cv.style.width = sc.clientWidth + "px"; cv.style.height = H + "px"; cv.width = Math.round(sc.clientWidth * dpr); cv.height = Math.round(H * dpr); dirtyDraw = true; }
   function draw() {
     const sc = $("#tl-sc"), cv = $("#tl-cv"); if (!sc || !cv) return; const c = cv.getContext("2d"), dpr = cv.width / Math.max(1, sc.clientWidth), w = sc.clientWidth;
-    const css = getComputedStyle(document.documentElement), V = k => css.getPropertyValue(k).trim(), x0 = sc.scrollLeft, X = t => t * pps - x0, t0 = x0 / pps, t1 = (x0 + w) / pps;
+    const css = getComputedStyle(document.documentElement), V0 = k => css.getPropertyValue(k).trim(), TOK = { "--panel-2": "--sunk", "--panel": "--surface", "--line": "--hair", "--line-2": "--hair", "--muted": "--text-2", "--faint": "--text-3" }, V = k => (TOK[k] && V0(TOK[k])) || V0(k), PT = st => V0("--" + (st === "silent" ? "calm" : st)) || PART[st] || PART.calm, x0 = sc.scrollLeft, X = t => t * pps - x0, t0 = x0 / pps, t1 = (x0 + w) / pps;
     c.setTransform(dpr, 0, 0, dpr, 0, 0); c.clearRect(0, 0, w, H);
     c.fillStyle = V("--panel-2"); c.fillRect(0, 0, w, H);
     for (const k of ["fx", "cue"]) { c.fillStyle = V("--panel"); c.fillRect(0, TOP[k], w, HT[k]); }
     c.fillStyle = V("--line-2"); for (const [k] of LANES) c.fillRect(0, TOP[k] + HT[k] - 1, w, 1);
     // song parts under the loudness
-    for (const b of src.bars || []) { if (b.t1 < t0 || b.t0 > t1) continue; c.fillStyle = PART[b.state] || PART.calm; c.globalAlpha = 0.28; c.fillRect(X(b.t0), TOP.song, (b.t1 - b.t0) * pps, HT.song - 1); }
+    for (const b of src.bars || []) { if (b.t1 < t0 || b.t0 > t1) continue; c.fillStyle = PT(b.state); c.globalAlpha = 0.24; c.fillRect(X(b.t0), TOP.song, (b.t1 - b.t0) * pps, HT.song - 1); }
     c.globalAlpha = 1;
     if (envB && envB.length) { const mid = TOP.song + HT.song / 2, amp = HT.song / 2 - 3; c.fillStyle = V("--muted"); c.beginPath(); c.moveTo(X(t0), mid);
       const dt = Math.max(0.1, 1 / pps); for (let t = Math.floor(t0 * 10) / 10; t <= t1 + dt; t += dt) { const i = Math.round(t * 10); let v = 0; for (let j = i; j < i + Math.max(1, Math.round(dt * 10)); j++) v = Math.max(v, envB[j] || 0); c.lineTo(X(t), mid - (v / 255) * amp); }
@@ -153,7 +153,7 @@ export function timelinePage(el) {
     c.fillStyle = V("--faint"); c.font = "10.5px " + V("--mono");
     for (let t = Math.floor(t0 / stp) * stp; t <= t1; t += stp) { const x = Math.round(X(t)) + 0.5; c.fillRect(x, 12, 1, HT.ruler - 13); c.fillText(stp < 1 ? `${fmtS(t)}.${String(Math.round((t % 1) * 100)).padStart(2, "0")}` : fmtS(t), x + 3, 11); }
     // drops
-    c.fillStyle = V("--accent"); for (const d of src.drops || []) { if (d < t0 - 1 || d > t1 + 1) continue; const x = X(d); c.fillRect(Math.round(x) - 1, TOP.song, 2, HT.song); c.beginPath(); c.moveTo(x - 5, TOP.song); c.lineTo(x + 5, TOP.song); c.lineTo(x, TOP.song + 7); c.fill(); }
+    c.fillStyle = PT("drop"); for (const d of src.drops || []) { if (d < t0 - 1 || d > t1 + 1) continue; const x = X(d); c.fillRect(Math.round(x) - 1, TOP.song, 2, HT.song); c.beginPath(); c.moveTo(x - 5, TOP.song); c.lineTo(x + 5, TOP.song); c.lineTo(x, TOP.song + 7); c.fill(); }
     // brightness curve
     const by = v => TOP.bri + 5 + (1 - v) * (HT.bri - 11), keys = doc.bright; c.strokeStyle = V("--accent"); c.lineWidth = 1.5; c.setLineDash(keys.length ? [] : [4, 4]); c.beginPath();
     if (!keys.length) { c.moveTo(0, by(1)); c.lineTo(w, by(1)); } else { c.moveTo(0, by(keys[0].v)); for (const k of keys) c.lineTo(X(k.t), by(k.v)); c.lineTo(w, by(keys.at(-1).v)); }
@@ -251,7 +251,7 @@ export function timelinePage(el) {
   function insp() {
     const box = $("#tl-insp"); if (!box) return; const P = src.P > 0 ? src.P : 0.5;
     if (!sel) { $("#tl-selname").textContent = "Nothing"; box.innerHTML = `<p class="muted">Tap a block, cue or keyframe to change it. Drag blocks to move them, drag their edges to resize. Double-click (or double-tap) an empty spot in a lane to add something there.</p>
-      <p class="faint" style="font-size:12.5px;margin-top:8px">${doc.show.length} effect blocks · ${doc.colors.length} colour blocks · ${doc.cues.length} cues · ${doc.bright.length} brightness keyframes · ${Math.round(src.bpm)} BPM</p>`; return; }
+      <p class="faint" style="font-size:13px;margin-top:8px">${doc.show.length} effect blocks · ${doc.colors.length} colour blocks · ${doc.cues.length} cues · ${doc.bright.length} brightness keyframes · ${Math.round(src.bpm)} BPM</p>`; return; }
     const it = sel.item, num = (k, label, v, stp = 0.001, extra = "") => `<div class="field"><label for="ti-${k}">${label}</label><input type="number" id="ti-${k}" data-k="${k}" step="${stp}" value="${v}" ${extra}></div>`;
     if (sel.lane === "fx") {
       $("#tl-selname").textContent = `Effect block · ${fxName[it.effect] || it.effect}`;
@@ -274,7 +274,7 @@ export function timelinePage(el) {
       $("#tl-selname").textContent = `Cue · ${CUES[it.type][1]}`;
       box.innerHTML = `<div class="tl-insp"><div class="field"><label for="ti-type">Cue</label><select id="ti-type">${Object.entries(CUES).map(([k, [, n]]) => opt(k, n, k === it.type)).join("")}</select></div>${num("t", "At (s)", it.t)}
         ${it.type === "flash" ? `<div class="field"><label for="ti-col">Flash colour</label><input type="color" id="ti-col" value="${it.color || "#ffffff"}"></div>` : num("beats", `Lasts (beats, ${(P * (it.beats ?? CUE_BEATS[it.type])).toFixed(2)} s)`, it.beats ?? CUE_BEATS[it.type], 0.25, 'min="0.25" max="128"')}</div>
-        <p class="faint" style="font-size:12.5px;margin-top:8px">${{ flash: "A single flash of colour on top of everything, exactly at this time.", strobe: "The whole room strobes in sixteenth notes.", blackout: "Everything goes dark.", build: "The music is treated as a build-up: build effects and rising energy until it ends.", drop: "The drop hits here: a flash and the drop's energy." }[it.type]}</p>`;
+        <p class="faint" style="font-size:13px;margin-top:8px">${{ flash: "A single flash of colour on top of everything, exactly at this time.", strobe: "The whole room strobes in sixteenth notes.", blackout: "Everything goes dark.", build: "The music is treated as a build-up: build effects and rising energy until it ends.", drop: "The drop hits here: a flash and the drop's energy." }[it.type]}</p>`;
       $("#ti-type").onchange = e => { begin(); it.type = e.target.value; if (it.type === "flash") { delete it.beats; it.color = it.color || "#ffffff"; } else { delete it.color; it.beats = CUE_BEATS[it.type]; } changed(); };
       const col = $("#ti-col"); if (col) col.onchange = e => { begin(); it.color = e.target.value; changed(); };
     } else {

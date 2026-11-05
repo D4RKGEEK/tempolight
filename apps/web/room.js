@@ -13,14 +13,14 @@ export function roomPage(el) {
     ${panel("Room", `<span id="r-sum"></span>`, `<button class="btn" id="r-discard" type="button" disabled>Discard</button><button class="btn primary" id="r-save" type="button" disabled>Save room</button>`,
       `<div class="stage" id="r-stage">${devs.length ? "" : '<div class="empty">Add a WLED controller on the Devices page first.</div>'}</div>`, "span-8")}
     ${panel("Start from a layout", "", "", `<div class="pb stack"><div class="field"><label for="r-preset">Preset</label><select id="r-preset">${st.presets.map(p => opt(p.id, p.name)).join("")}</select><span class="help" id="r-pdesc"></span></div>
-      <button class="btn" id="r-use" type="button"${devs.length ? "" : " disabled"}>Use this layout</button><p class="faint" style="font-size:12.5px">Replaces the shapes below. LED counts are fitted to your controllers; you can change every number afterwards.</p>
-      <a class="btn" href="#/map" id="r-map">Map with the camera…</a><p class="faint" style="font-size:12.5px">Or let a phone camera find where every LED really is.</p></div>`, "span-4")}
+      <button class="btn" id="r-use" type="button"${devs.length ? "" : " disabled"}>Use this layout</button><p class="faint" style="font-size:13px">Replaces the shapes below. LED counts are fitted to your controllers; you can change every number afterwards.</p>
+      <a class="btn" href="#/map" id="r-map">Map with the camera…</a><p class="faint" style="font-size:13px">Or let a phone camera find where every LED really is.</p></div>`, "span-4")}
     ${panel("Shapes", "Drag a shape in the picture to move it. LED numbers start at 0, like in WLED.", `<select id="r-newtype" style="width:auto">${Object.entries(TYPES).map(([k, v]) => opt(k, v)).join("")}</select><button class="btn" id="r-add" type="button"${devs.length ? "" : " disabled"}>Add shape</button>`,
       `<div class="tablewrap"><table><thead><tr><th>Name</th><th>Type</th><th>Controller</th><th class="num">First LED</th><th class="num">LEDs</th><th>Uses LEDs</th><th>Reverse</th><th>Zone</th><th></th></tr></thead><tbody id="r-rows"></tbody></table></div>
-       <div class="pb" id="r-geo" style="border-top:1px solid var(--line-2)"></div>`, "span-12")}
+       <div class="pb" id="r-geo" style="box-shadow:0 -1px 0 var(--hair)"></div>`, "span-12")}
     ${panel("Zones", "Give parts of the room their own effect, the ambient light, their own brightness, or switch them off", `<button class="btn" id="z-add" type="button">Add zone</button>`,
       `<div class="tablewrap"><table><thead><tr><th>Name</th><th>What it shows</th><th>Effect</th><th>Brightness</th><th></th></tr></thead><tbody id="z-rows"></tbody></table></div>
-       <p class="faint pb" style="padding-top:0;font-size:12.5px">Put shapes in a zone with the Zone column above, then save the room. Zone settings apply straight away.</p>`, "span-12")}
+       <p class="faint pb" style="padding-top:0;font-size:13px">Put shapes in a zone with the Zone column above, then save the room. Zone settings apply straight away.</p>`, "span-12")}
     ${panel("Controllers", "Which LEDs each controller drives", "", `<div class="tablewrap"><table><thead><tr><th>Controller</th><th class="num">LEDs</th><th>Used by shapes</th><th>Check</th><th></th></tr></thead><tbody id="r-devs"></tbody></table></div>`, "span-12")}`;
 
   const preview = devs.length ? createPreview($("#r-stage"), { outlines: true, selected: () => sel, layout: () => dirty ? L : app.layout, colors: () => dirty ? colors : app.frame }) : null;

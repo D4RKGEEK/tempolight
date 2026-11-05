@@ -7,27 +7,48 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Tempolight phone light</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@400..700&display=swap">
 <style>
-  :root { color-scheme: dark; }
-  html, body { margin: 0; height: 100%; background: #000; color: #fff; font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
-  #light { position: fixed; inset: 0; background: #000; }
-  #intro { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; background: radial-gradient(circle at 50% 35%, #2a1640, #000 70%); }
-  #intro h1 { font-size: 26px; margin: 0 0 8px; letter-spacing: -.01em; }
-  #intro p { margin: 0 auto 22px; max-width: 30ch; color: #c9c2d6; }
-  #go { font: inherit; font-weight: 650; font-size: 18px; color: #12051f; background: linear-gradient(135deg, #ffb35c, #ff5fa2 55%, #8a7bff); border: 0; border-radius: 999px; padding: 16px 34px; cursor: pointer; }
-  #go:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
-  #note { position: fixed; left: 0; right: 0; bottom: max(14px, env(safe-area-inset-bottom)); text-align: center; font-size: 13px; color: rgba(255,255,255,.55); pointer-events: none; text-shadow: 0 1px 3px #000; }
+  /* tokens from design/tokens.md (dark: the phone is a light in a dark room) */
+  :root { color-scheme: dark; --bg: #0f0d0b; --bg-deep: #0a0807; --surface: #17140f; --surface-2: #1e1a14; --sunk: #0b0a08;
+    --text: #f4efe8; --text-2: rgb(244 239 232 / .64); --text-3: rgb(244 239 232 / .42);
+    --hair: rgb(255 255 255 / .07); --ring: 0 0 0 1px rgb(255 255 255 / .06);
+    --accent: #ff8a1f; --accent-ink: #1a0e08; --label: #ffb366; --focus: #ffb366; --ok: #3ecf7a; --bad: #ff5c5c;
+    --shadow-card: var(--ring), 0 1px 2px rgb(0 0 0 / .3), 0 18px 40px -28px rgb(0 0 0 / .8);
+    --shadow-lift: 0 0 0 1px rgb(255 255 255 / .1), 0 1px 2px rgb(0 0 0 / .3), 0 24px 44px -26px rgb(0 0 0 / .9);
+    --sans: "Google Sans Flex", -apple-system, "Segoe UI", system-ui, sans-serif; --mono: "Google Sans Code", ui-monospace, Menlo, monospace;
+    --r-btn: 11px; --r-field: 11px; --r-card: 24px; --r-inner: 18px; --r-pill: 999px; --ease: cubic-bezier(.2,.8,.2,1); --t-in: .14s; --t-out: .2s; }
+  html, body { margin: 0; height: 100%; background: #000; color: var(--text); font: 16px/1.5 var(--sans); overflow: hidden; }
+  #light { position: fixed; inset: 0; background: #000; transition: background 40ms linear; }
+  #intro { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px 16px; text-align: center; background: radial-gradient(ellipse 80% 55% at 50% 30%, #2a1406 0%, var(--bg-deep) 62%, #000 100%); }
+  #intro .card { width: 100%; max-width: 380px; display: grid; justify-items: center; gap: 0; }
+  .lamp { width: 72px; height: 72px; border-radius: 50%; margin-bottom: 28px; background: radial-gradient(circle at 50% 45%, #fff3e0 0%, #ffb366 32%, var(--accent) 62%, rgb(255 138 31 / 0) 72%); box-shadow: 0 0 60px 12px rgb(255 138 31 / .35); animation: breathe 3.2s var(--ease) infinite alternate; }
+  @keyframes breathe { from { transform: scale(.92); opacity: .82; } to { transform: scale(1.04); opacity: 1; } }
+  #intro h1 { font-size: 40px; font-weight: 600; letter-spacing: -.04em; line-height: 1.04; margin: 0 0 12px; }
+  #intro p { margin: 0 auto 28px; max-width: 30ch; color: var(--text-2); font-size: 17px; }
+  #go { font: 500 17px var(--sans); letter-spacing: -.01em; color: var(--accent-ink); background: var(--accent); border: 0; border-radius: var(--r-btn); min-height: 56px; width: 100%; max-width: 320px; padding: 0 28px; cursor: pointer;
+    box-shadow: 0 1px 2px rgb(0 0 0 / .3), 0 16px 36px -16px var(--accent); transition: transform var(--t-out) var(--ease), filter var(--t-out) var(--ease); }
+  #go:hover { transform: translateY(-1px); filter: brightness(1.05); transition-duration: var(--t-in); }
+  #go:active { transform: translateY(1px) scale(.985); transition-duration: .09s; }
+  #go:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
+  #intro .alt { margin: 22px 0 0; font-size: 15px; }
+  .alt a { color: var(--label); text-underline-offset: 3px; }
+  #note { position: fixed; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom)); max-width: calc(100% - 32px); padding: 8px 14px; border-radius: var(--r-pill); background: rgb(10 8 7 / .7); box-shadow: var(--ring); text-align: center; font-size: 14px; color: var(--text-2); pointer-events: none; }
+  #note:empty { display: none; }
   .hidden { display: none !important; }
+  @media (prefers-reduced-motion: reduce) { .lamp { animation: none; } #go { transition: none; } }
 </style>
 </head>
 <body>
 <div id="light" aria-hidden="true"></div>
 <div id="intro">
-  <div>
+  <div class="card">
+    <span class="lamp" aria-hidden="true"></span>
     <h1>Be a light</h1>
     <p>Your screen joins the room's lights and changes colour with the music. Turn your brightness up and hold the phone up high.</p>
-    <button id="go" type="button">Start</button>
-    <p style="margin:18px 0 0"><a href="/request" style="color:#ffb35c">Request a song instead</a></p>
+    <button id="go" type="button">Turn my screen into a light</button>
+    <p class="alt"><a href="/request">Request a song instead</a></p>
   </div>
 </div>
 <div id="note" role="status"></div>
@@ -42,7 +63,7 @@ function connectServer() {
   const token = new URLSearchParams(location.search).get("token");
   sock = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws${token ? `?token=${encodeURIComponent(token)}` : ""}`);
   sock.binaryType = "arraybuffer";
-  sock.onopen = () => { sock.send(JSON.stringify({ type: "phone", on: true })); say("Connected. Enjoy the show!"); };
+  sock.onopen = () => { sock.send(JSON.stringify({ type: "phone", on: true })); say("Connected. Hold your phone up high."); };
   sock.onmessage = e => { if (typeof e.data === "string") return; const a = new Uint8Array(e.data); if (a[0] === 2) show(a[1], a[2], a[3]); };
   sock.onclose = () => { show(0, 0, 0); say("Lost the connection. Trying again…"); setTimeout(connectServer, 2000); };
 }

@@ -9,17 +9,19 @@
      Options in the address: ?preview=0 (no lights), ?np=0 (no "now playing"), ?corner=tl|tr|bl|br, ?scale=1.5,
      ?bg=1 (the dark room behind the lights instead of transparent). Read-only: it shows, it changes nothing. -->
 <style>
+  /* tokens from design/tokens.md (the background stays transparent for OBS) */
+  :root { --accent: #ff8a1f; --text: #f4efe8; --bg-deep: #0a0807; --sans: "Google Sans Flex", -apple-system, "Segoe UI", system-ui, sans-serif; --mono: "Google Sans Code", ui-monospace, Menlo, monospace; }
   html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
-  body { font: 600 22px/1.25 system-ui, -apple-system, "Segoe UI", sans-serif; color: #fff; }
-  body.bg { background: #0b0c10; }
+  body { font: 600 22px/1.25 var(--sans); color: var(--text); letter-spacing: -.015em; }
+  body.bg { background: var(--bg-deep); }
   #stage { position: absolute; inset: 0; }
   #stage canvas { width: 100%; height: 100%; display: block; }
-  #np { position: absolute; max-width: 46vw; padding: .55em .9em .6em; border-radius: .6em; background: rgba(10, 11, 15, .62); backdrop-filter: blur(6px);
-    display: flex; gap: .7em; align-items: center; transform-origin: left bottom; transition: opacity .4s; }
+  #np { position: absolute; max-width: 46vw; padding: .6em 1.1em .65em .8em; border-radius: 1.1em; background: rgb(10 8 7 / .72); box-shadow: 0 0 0 1px rgb(255 255 255 / .08), 0 .8em 2em -1em rgb(0 0 0 / .8);
+    display: flex; gap: .75em; align-items: center; transform-origin: left bottom; transition: opacity .4s; }
   #np[hidden] { display: flex !important; opacity: 0; }
-  #np .lamp { width: .7em; height: .7em; border-radius: 50%; background: #f5a524; box-shadow: 0 0 .7em #f5a524; flex: none; transition: transform .08s; }
-  #np .t { min-width: 0; } #np b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #np small { display: block; font-weight: 500; font-size: .68em; opacity: .78; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #np .lamp { width: .62em; height: .62em; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 .2em rgb(255 138 31 / .18), 0 0 .8em var(--accent); flex: none; transition: transform .08s; }
+  #np .t { min-width: 0; } #np b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #np small { display: block; font: 500 .62em/1.4 var(--mono); letter-spacing: 0; color: rgb(244 239 232 / .72); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tl { top: 4vh; left: 3vw; } .tr { top: 4vh; right: 3vw; transform-origin: right top !important; } .bl { bottom: 4vh; left: 3vw; } .br { bottom: 4vh; right: 3vw; transform-origin: right bottom !important; }
 </style>
 </head>
@@ -43,7 +45,7 @@ draw();
 function text(m) {
   const song = m.song?.name || (m.nowPlaying?.title ? (m.nowPlaying.artist ? `${m.nowPlaying.artist} – ${m.nowPlaying.title}` : m.nowPlaying.title) : null) || m.recognised?.name || null;
   const t = song || (m.source !== "idle" ? m.sourceLabel : null);
-  const sub = [m.effectName, m.bpm ? `${Math.round(m.bpm)} BPM` : null, m.part && m.part !== "idle" ? { build: "build-up", drop: "drop!" }[m.part] || null : null].filter(Boolean).join(" · ");
+  const sub = [m.effectName, m.bpm ? `${Math.round(m.bpm)} BPM` : null, m.part && m.part !== "idle" ? { build: "build-up", drop: "drop" }[m.part] || null : null].filter(Boolean).join(" · ");
   return { t, sub };
 }
 function onStatus(m) {
