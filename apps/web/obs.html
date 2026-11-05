@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Tempolight for OBS</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@400..700&family=Google+Sans+Code:wght@400;500&display=swap">
 <!-- An OBS browser source: Tempolight's live preview and what's playing, on a transparent background.
      Add it in OBS: Sources → + → Browser → URL http://<tempolight>/obs (1920 x 1080, or smaller).
      Options in the address: ?preview=0 (no lights), ?np=0 (no "now playing"), ?corner=tl|tr|bl|br, ?scale=1.5,
@@ -12,16 +13,16 @@
   /* tokens from design/tokens.md (the background stays transparent for OBS) */
   :root { --accent: #ff8a1f; --text: #f4efe8; --bg-deep: #0a0807; --sans: "Google Sans Flex", -apple-system, "Segoe UI", system-ui, sans-serif; --mono: "Google Sans Code", ui-monospace, Menlo, monospace; }
   html, body { margin: 0; height: 100%; background: transparent; overflow: hidden; }
-  body { font: 600 22px/1.25 var(--sans); color: var(--text); letter-spacing: -.015em; }
+  body { font: 600 22px/1.2 var(--sans); color: var(--text); letter-spacing: -.03em; -webkit-font-smoothing: antialiased; }
   body.bg { background: var(--bg-deep); }
   #stage { position: absolute; inset: 0; }
   #stage canvas { width: 100%; height: 100%; display: block; }
-  #np { position: absolute; max-width: 46vw; padding: .6em 1.1em .65em .8em; border-radius: 1.1em; background: rgb(10 8 7 / .72); box-shadow: 0 0 0 1px rgb(255 255 255 / .08), 0 .8em 2em -1em rgb(0 0 0 / .8);
+  #np { position: absolute; max-width: 46vw; padding: .7em 1.2em .75em .9em; border-radius: 1.1em; background: rgb(10 8 7 / .74); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1), 0 .8em 2em -1em rgb(0 0 0 / .8); -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
     display: flex; gap: .75em; align-items: center; transform-origin: left bottom; transition: opacity .4s; }
   #np[hidden] { display: flex !important; opacity: 0; }
   #np .lamp { width: .62em; height: .62em; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 .2em rgb(255 138 31 / .18), 0 0 .8em var(--accent); flex: none; transition: transform .08s; }
   #np .t { min-width: 0; } #np b { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  #np small { display: block; font: 500 .62em/1.4 var(--mono); letter-spacing: 0; color: rgb(244 239 232 / .72); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  #np small { display: block; margin-top: .2em; font: 400 .64em/1.4 var(--sans); letter-spacing: -.005em; color: rgb(244 239 232 / .66); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tl { top: 4vh; left: 3vw; } .tr { top: 4vh; right: 3vw; transform-origin: right top !important; } .bl { bottom: 4vh; left: 3vw; } .br { bottom: 4vh; right: 3vw; transform-origin: right bottom !important; }
 </style>
 </head>
