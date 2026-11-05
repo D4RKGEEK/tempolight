@@ -19,45 +19,31 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans+Code:wght@400..600&family=Google+Sans+Flex:wght@400..700&display=swap">
 <link rel="stylesheet" href="/style.css">
+<link rel="stylesheet" href="/v2/ui.css">
 </head>
 <body>
 <div class="demo-bar" id="demo-bar" hidden>Online demo with pretend WLED lights, running in your browser. <a href="https://github.com/D4RKGEEK/tempolight#install" target="_blank" rel="noopener">Install Tempolight</a> to drive real lights. <a href="/docs/">Docs</a></div>
-<div class="shell">
-  <aside class="side" id="side">
-    <div class="brand"><span class="lamp" id="lamp"></span>Tempolight<small id="ver"></small><button class="iconbtn side-close" id="side-close" type="button" aria-label="Close the menu"><svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
-    <nav aria-label="Main" id="nav">
-      <a href="#/home" data-page="home"><svg viewBox="0 0 24 24"><path d="M3 3h8v8H3zM13 3h8v5h-8zM13 10h8v11h-8zM3 13h8v8H3z"/></svg>Home</a>
-      <a href="#/music" data-page="music"><svg viewBox="0 0 24 24"><path d="M9 18V6l11-2v12"/><circle cx="6" cy="18" r="3"/><circle cx="17" cy="16" r="3"/></svg>Music</a>
-      <a href="#/effects" data-page="effects"><svg viewBox="0 0 24 24"><path d="M12 3l2.5 5.5L20 11l-5.5 2.5L12 19l-2.5-5.5L4 11l5.5-2.5z"/></svg>Effects<span class="count" id="c-effects"></span></a>
-      <a href="#/live" data-page="live"><svg viewBox="0 0 24 24"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg>Live pads</a>
-      <a href="#/scenes" data-page="scenes"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/><path d="M12 8v4l3 2"/></svg>Scenes &amp; schedules</a>
-      <a href="#/sleep" data-page="sleep"><svg viewBox="0 0 24 24"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z"/><path d="M15 3h4l-4 4h4"/></svg>Home &amp; sleep</a>
-      <div class="grp">Setup</div>
-      <a href="#/room" data-page="room"><svg viewBox="0 0 24 24"><path d="M3 5h18v14H3zM3 10h18M9 10v9"/></svg>Room</a>
-      <a href="#/devices" data-page="devices"><svg viewBox="0 0 24 24"><path d="M5 12a7 7 0 0 1 14 0M8.5 12a3.5 3.5 0 0 1 7 0M12 12v8"/></svg>Devices<span class="count" id="c-devices"></span></a>
-      <a href="#/integrations" data-page="integrations"><svg viewBox="0 0 24 24"><path d="M9 3v4M15 3v4M7 7h10v4a5 5 0 0 1-10 0zM12 16v5"/></svg>Integrations</a>
-      <a href="#/settings" data-page="settings"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/></svg>Settings<span class="count" id="c-lock"></span></a>
-    </nav>
-    <div class="host"><b id="host-name"></b><span class="mono" id="host-addr"></span></div>
-  </aside>
+<div class="shell v2shell">
+  <nav class="rail" id="side" aria-label="Main">
+    <a class="rail-brand" href="#/stage" title="Tempolight"><span class="lamp" id="lamp"></span><span class="rail-name">Tempolight</span></a>
+    <div class="rail-nav" id="nav"></div>
+    <div class="rail-host" title="Where Tempolight runs"><span class="dot" id="conn-dot"></span><b id="host-name"></b><span class="mono" id="host-addr"></span><small class="mono" id="ver"></small></div>
+  </nav>
   <div class="main">
     <header class="top">
-      <button class="iconbtn menu" id="menu" type="button" aria-label="Menu"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h16"/></svg></button>
-      <h1 class="title" id="title">Home</h1>
+      <a class="iconbtn back" id="back" href="#/more" hidden aria-label="Back"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></a>
+      <h1 class="title" id="title">Stage</h1>
+      <a class="hchip" id="hchip" href="#/songs/hear" data-state="idle" aria-label="How Tempolight hears music"><i aria-hidden="true"></i><span id="hchip-t">Not listening</span></a>
       <div class="master"><span>Lights</span><button class="switch" id="power" role="switch" aria-checked="true" aria-label="Lights on or off" type="button"></button></div>
       <div class="bright"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2"/></svg><input type="range" id="bri" min="0" max="100" aria-label="Brightness"><output id="bri-out" class="mono"></output></div>
       <button class="iconbtn" id="theme" type="button" aria-label="Switch light or dark theme"><svg viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg></button>
     </header>
     <main class="content" id="page" tabindex="-1"></main>
   </div>
+  <nav class="tabs" id="tabs" aria-label="Main"></nav>
 </div>
-<footer class="status" id="statusbar">
-  <span><span class="dot" id="conn-dot"></span><b id="conn">Connecting…</b></span>
-  <span>Source <b id="sb-source">–</b></span>
-  <span class="hide-sm">Effect <b id="sb-effect">–</b></span>
-  <span class="hide-sm">Tempo <b id="sb-bpm">–</b></span>
-  <span class="right"><span><b id="sb-fps">–</b> fps</span><span><b id="sb-leds">–</b> LEDs</span></span>
-</footer>
+<!-- the live status, for scripts and screen readers (v1's status bar; Stage shows it now) -->
+<div class="sr-status" id="statusbar" aria-hidden="true"><b id="conn">Connecting…</b><b id="sb-source">–</b><b id="sb-effect">–</b><b id="sb-bpm">–</b><b id="sb-fps">–</b><b id="sb-leds">–</b></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <script type="module" src="/app.js"></script>
 </body>
