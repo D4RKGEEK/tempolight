@@ -224,7 +224,8 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   const variety = () => data().show.variety || "one";
   const nudges = () => data().settings.effectNudge || {};
   function newLook(pre, name, rejected = []) {
-    const o = { prefs: data().settings.effectPrefs, nudge: nudges(), seed: name, available: fx.list.map(f => f.id) };
+    const used = {}; for (const e of data().songs) if (e.look?.main && e.name !== name) used[e.look.main] = (used[e.look.main] || 0) + 1; // spread looks over the library
+    const o = { prefs: data().settings.effectPrefs, nudge: nudges(), seed: name, available: fx.list.map(f => f.id), used };
     let lk = pickLook(pre, { ...o, exclude: rejected }); if (!lk && rejected.length) { rejected = []; lk = pickLook(pre, o); } // every one turned down: start again
     return lk ? { ...lk, rejected: [...rejected], locked: false } : null;
   }

@@ -13,7 +13,7 @@ import { RATINGS, AUTO, rating } from "./ratings.js";
 import { moodName } from "./tonal.js";
 
 /** Bump when pickLook() chooses differently, so looks stored with songs (and not kept by hand) are picked again. */
-export const LOOK_VERSION = 1;
+export const LOOK_VERSION = 2;
 export const VARIETIES = ["one", "parts", "show"];
 
 const clamp = (v, a = 0, b = 1) => Math.max(a, Math.min(b, v));
@@ -83,7 +83,7 @@ const fitPart = part => (r, c) => {
 /**
  * The look for a song.
  * @param {object} src a song analysis (preAnalyseCore / memoryAnalysis) or a character (songCharacter / characterOf)
- * @param {{prefs?:Record<string,number>, nudge?:Record<string,number>, exclude?:string[], seed?:string|number, available?:Iterable<string>}} [o]
+ * @param {{prefs?:Record<string,number>, nudge?:Record<string,number>, exclude?:string[], seed?:string|number, available?:Iterable<string>, used?:Record<string,number>}} [o]
  *   prefs: effect id -> 1 liked / -1 banned; nudge: id -> -1..1 (soft, from "Not this one" and "Keep"); exclude: effects
  *   rejected for this song; seed: the song's name or id; available: the effect ids that exist (all rated ones if not given)
  * @returns {{main:string, drop:string|null, build:string|null, calm:string, palette:string, params:{speed?:number, intensity?:number}, why:string[], v:number}|null}
@@ -93,8 +93,11 @@ export function pickLook(src, o = {}) {
   const avail = o.available ? new Set(o.available) : null, ex = new Set(o.exclude || []);
   const rnd = mulberry(hashStr(o.seed ?? `${Math.round(c.bpm)}:${c.style}`));
   const usable = id => !!rating(id) && (!avail || avail.has(id)) && prefs[id] !== -1 && !(c.drumless && rating(id).needsBeat);
+  // used: effect id -> how many other remembered songs already have it as their look, so a library doesn't end up
+  // with the same effect on every similar song (a soft push, at most 5 uses counted)
+  const used = o.used || {};
   const choose = (ids, score, k = 4) => {
-    const cand = [...new Set(ids)].filter(id => usable(id) && !ex.has(id)).map(id => ({ id, s: score(rating(id), c) + (prefs[id] === 1 ? 15 : 0) + 20 * clamp(nudge[id] || 0, -1, 1) }))
+    const cand = [...new Set(ids)].filter(id => usable(id) && !ex.has(id)).map(id => ({ id, s: score(rating(id), c) + (prefs[id] === 1 ? 15 : 0) + 20 * clamp(nudge[id] || 0, -1, 1) - 5 * Math.min(5, used[id] || 0) }))
       .sort((a, b) => b.s - a.s || (a.id < b.id ? -1 : 1)).slice(0, k);
     if (!cand.length) return null;
     const w = cand.map(x => Math.exp((x.s - cand[0].s) / 8)), sum = w.reduce((a, b) => a + b, 0); let u = rnd() * sum;
