@@ -165,6 +165,7 @@
               "internals/live-analyser",
               "internals/song-memory",
               "internals/director-and-effects",
+              "internals/effect-ratings",
               "internals/runtime-and-outputs",
               "internals/data-model",
               "internals/web-app",

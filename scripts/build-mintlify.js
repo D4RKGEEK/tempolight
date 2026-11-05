@@ -70,7 +70,7 @@ const META = {
   "internals/live-analyser": { icon: "audio-lines" },
   "internals/song-memory": { icon: "brain" },
   "internals/director-and-effects": { icon: "clapperboard" },
-  "internals/effect-ratings": { icon: "star", description: "How good every built-in effect is in drops, build-ups and calm parts, measured on synthetic songs (generated)." },
+  "internals/effect-ratings": { icon: "thumbs-up", description: "How good every built-in effect is in drops, build-ups and calm parts, measured on synthetic songs (generated)." },
   "internals/runtime-and-outputs": { icon: "cable" },
   "internals/data-model": { icon: "database" },
   "internals/web-app": { icon: "app-window" },

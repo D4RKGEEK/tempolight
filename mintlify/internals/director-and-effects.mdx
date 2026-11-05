@@ -105,12 +105,25 @@ An effect is an object in one of the `FX` arrays inside `createEffects()`:
 2. To have automatic mode use it, add its id to `POOLS` (`calm`, `build`, `drop`, used by `party`) and/or to the
    `low`/`mid`/`peak` pools of the other styles in `STYLES`.
 3. Run `npm run docs` to regenerate [docs/effects.md](/effects).
-4. Run `node --test packages/engine/test/engine.test.js`: *every effect renders finite colours* and *performance
+4. Run `node scripts/effect-score.js --write` (a few minutes) to rate it: `npm test` fails while
+   `packages/engine/src/ratings.js` is stale (see below).
+5. Run `node --test packages/engine/test/engine.test.js`: *every effect renders finite colours* and *performance
    budget* pick up the new one automatically.
 
 The per-effect settings (`PATCH /api/effects/:id {params}`) work on any effect without its help: the director
 renders it with `t * speed`, then applies a hue rotation and saturation as one 3 x 3 matrix, an intensity gain, and
 an optional left-right mirror (each LED takes its mirror image's colour).
+
+## Effect ratings
+
+[`ratings.js`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/engine/src/ratings.js) (generated) says how good every built-in effect is in a drop, a
+build-up and a calm part (0..100), with traits for matching effects to songs (`tempo` range, `energy`, `kickDriven`,
+`needsBeat`, `busy`), and `AUTO`: the curated picks per role, best first. `rating(id)` is `null` for custom effects.
+`scripts/effect-score.js` makes them by running each effect alone through the director on synthetic songs with a known
+beat (EDM at 128 and 150 BPM, pop, a ballad, hip-hop, half-time and drum and bass) and measuring kick contrast, beat
+sync, brightness, flicker, movement, use of the room and the build-up response, raw and with the feel layer.
+`--write` regenerates `ratings.js` and the table in [effect ratings](/internals/effect-ratings); `--check` (and
+`packages/engine/test/ratings.test.js`) only compares the effect ids and a hash of their sources, so it is cheap.
 
 ## Pools and styles
 
@@ -330,4 +343,5 @@ the targets that apply to them, and variety `one` changes effect at most twice a
 `looks.test.js` (what `pickLook()` picks, banned and rejected effects, a look's show against the live director, the
 live look),
 `timeline.test.js` (validation, lookups, the cue firer, cues in the director, a clock that jumps back) and
-`tonal.test.js` (mood colours). See [testing](/internals/testing).
+`tonal.test.js` (mood colours) and `ratings.test.js` (the effect ratings are up to date and keep their contract). See
+[testing](/internals/testing).
