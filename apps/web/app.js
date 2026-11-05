@@ -6,6 +6,7 @@ import { homeStrip, bindHomeStrip, updateHomeStrip } from "/homestrip.js";
 import { latencyChip, warnIcons, homeBadge, latencyPanel } from "/latency.js";
 import { hearLine, wantsAutoMic } from "/hearline.js";
 import { syncHtml, mountSongMap, syncView } from "/songmap.js";
+import { navHtml, shellRoute, shellStatus, isV2 } from "/v2/shell.js"; // the v2 rail, tabs and top bar (design/dashboard-v2.md)
 // Loaded the first time they are needed, so the first visit downloads only what the Home page uses: the Room, Camera
 // mapping, Show editor and Home & sleep pages, the DMX panels, the MIDI clock and the setup wizard (see lazyPage below;
 // sw.js keeps them all for offline use).
@@ -50,7 +51,7 @@ function connect() {
   s.onopen = () => { ws.open = true; setConn("Connected", "ok"); if (app.page?.preview) ws.send({ type: "preview", on: true }); if (app.audio?.state.mode) resendAudio(); };
   s.onclose = () => { ws.open = false; setConn("Reconnecting…", "err"); setTimeout(connect, 1500); };
   s.onmessage = e => {
-    if (typeof e.data !== "string") { const b = new Uint8Array(e.data); if (b[0] === 1) app.frame = b.subarray(1); return; }
+    if (typeof e.data !== "string") { const b = new Uint8Array(e.data); if (b[0] === 1) { app.frame = b.subarray(1); app.page?.onFrame?.(app.frame); } return; }
     const m = JSON.parse(e.data);
     if (m.type === "hello") { ws.id = m.id; onStatus(m); }
     else if (m.type === "status") onStatus(m);
@@ -75,7 +76,7 @@ function onStatus(m) {
   $("#sb-bpm").textContent = m.bpm ? `${m.bpm} BPM` : "–"; $("#sb-fps").textContent = m.fps; $("#sb-leds").textContent = m.leds;
   $("#power").setAttribute("aria-checked", m.power);
   const bri = $("#bri"); if (document.activeElement !== bri) { bri.value = Math.round(m.brightness * 100); $("#bri-out").textContent = bri.value + "%"; }
-  const off = m.devices.filter(d => d.online === false).length; const cd = $("#c-devices"); cd.textContent = off ? `${off} offline` : (m.devices.length || ""); cd.className = "count" + (off ? " warn" : "");
+  shellStatus(m);
   app.page?.onStatus?.(m); wizardStatus(m); autoMic(m);
 }
 // The microphone, when it was chosen as the way to hear music (hearing.js): started by itself when Spotify (or another
@@ -96,8 +97,7 @@ export function paintHearLine(el, m, { dot = false } = {}) {
   el.innerHTML = `${v ? `<a class="syncdot" href="#/music" data-state="${v.state}" title="${esc(v.title)}" aria-label="Sync: ${esc(v.title)}"></a>` : ""}<span>${esc(l.text)}</span>${l.fix ? ` <a href="#/music/hear" class="hear-fix">${l.ok === false ? "Fix" : "Set up"} →</a>` : ""}`;
 }
 function chrome() {
-  const st = app.state; $("#ver").textContent = "v" + st.version; $("#c-effects").textContent = st.effects.length;
-  $("#c-lock").textContent = st.locked ? (app.token ? "unlocked" : "locked") : "";
+  const st = app.state; $("#ver").textContent = "v" + st.version;
   $("#host-name").textContent = DEMO ? "Online demo" : location.hostname === "localhost" || location.hostname === "127.0.0.1" ? "This computer" : location.hostname;
   $("#host-addr").textContent = DEMO ? "runs in your browser" : location.host;
 }
@@ -923,27 +923,36 @@ function settingsPage(el) {
 function lazyPage(load, name) {
   return el => { const wait = {}; el.innerHTML = `<div class="callout span-12 faint">Loading…</div>`;
     load().then(m => { if (app.page !== wait) return; el.innerHTML = ""; const pg = m[name](el) || {}; app.page = pg; if (app.status) pg.onStatus?.(app.status); })
-      .catch(e => { if (app.page === wait) el.innerHTML = `<div class="callout err span-12">Couldn't load this page (${esc(e.message)}). Check the connection and reload.</div>`; });
+      .catch(e => { if (app.page !== wait) return;
+        if (/\/v2\//.test(String(load)) && navigator.onLine !== false) { el.innerHTML = `<div class="ui-card ui-empty"><h3>This screen is coming soon</h3><p>It is being rebuilt. Everything it will hold is still on the classic pages in More.</p><div class="ui-empty-a"><a class="btn primary" href="#/stage">Go to the stage</a><a class="btn" href="#/more">Open More</a></div></div>`; return; }
+        el.innerHTML = `<div class="callout err span-12">Couldn't load this page (${esc(e.message)}). Check the connection and reload.</div>`; });
     return wait; };
 }
 const roomPage = lazyPage(() => import("/room.js"), "roomPage"), mapPage = lazyPage(() => import("/mapper.js"), "mapPage");
-const PAGES = { home: ["Home", homePage], music: ["Music", musicPage], effects: ["Effects", effectsPage], live: ["Live pads", livePage], scenes: ["Scenes & schedules", scenesPage], sleep: ["Home & sleep", lazyPage(() => import("/homesleep.js"), "homeSleepPage")],
+// v2 screens (design/dashboard-v2.md): Stage and More here, Songs, Looks and Lights in their own modules. A screen
+// module that isn't there yet shows "coming soon" (lazyPage). The v1 pages below stay at their routes, reached from
+// the new screens and from More; their tab is lit by shell.js navOf().
+const PAGES = { stage: ["Stage", lazyPage(() => import("/v2/stage.js"), "render")], more: ["More", lazyPage(() => import("/v2/more.js"), "render")],
+  songs: ["Songs", lazyPage(() => import("/v2/songs.js"), "render")],
+  looks: ["Looks", lazyPage(() => import("/v2/looks.js"), "render")],
+  lights: ["Lights", lazyPage(() => import("/v2/lights.js"), "render")],
+  home: ["Home", homePage], music: ["Music", musicPage], effects: ["Effects", effectsPage], live: ["Live pads", livePage], scenes: ["Scenes & schedules", scenesPage], sleep: ["Home & sleep", lazyPage(() => import("/homesleep.js"), "homeSleepPage")],
   room: ["Room", el => unlocked() ? roomPage(el) : lockScreen(el, "Room setup")], map: ["Camera mapping", el => unlocked() ? mapPage(el) : lockScreen(el, "Room setup")], devices: ["Devices", devicesPage], settings: ["Settings", settingsPage], timeline: ["Show editor", lazyPage(() => import("/timeline.js"), "timelinePage")] };
 PAGES.integrations = ["Integrations", lazyPage(() => import("/integrations.js"), "integrationsPage")]; // Stream Deck, OBS, games, Twitch, Discord
 export function route() {
-  const name = (location.hash.match(/^#\/(\w+)/) || [])[1] || "home", [title, fn] = PAGES[name] || PAGES.home;
+  const name0 = (location.hash.match(/^#\/(\w+)/) || [])[1] || "stage", name = PAGES[name0] ? name0 : "stage", [title, fn] = PAGES[name];
   if (app.page?.canLeave && app.page.hash !== location.hash && !app.page.canLeave()) { history.replaceState(null, "", app.page.hash); return; } // unsaved changes: stay
   if (app.page?.destroy) app.page.destroy();
   if (app.page?.preview) ws.send({ type: "preview", on: false });
-  $$("#nav a").forEach(a => a.toggleAttribute("aria-current", a.dataset.page === ({ map: "room", timeline: "music" }[name] || name))); $("#title").textContent = title; document.title = `${title} · Tempolight`;
-  const el = $("#page"); el.innerHTML = ""; app.page = fn(el) || {};
+  shellRoute(name); $("#title").textContent = title; document.title = `${title} · Tempolight`;
+  const el = $("#page"); el.innerHTML = ""; el.toggleAttribute("data-v2", isV2(name)); app.page = fn(el) || {};
   if (app.status) app.page.onStatus?.(app.status);
-  $("#side").classList.remove("open");
+  scrollTo({ top: 0 });
   const sub = (location.hash.match(/^#\/\w+\/(\w+)/) || [])[1], sel = ANCHORS[name]?.[sub]; if (sel) spotlight(sel);
 }
 // deep links from Home's "What's new" card: #/settings/punch scrolls to that setting and makes it glow once
 const ANCHORS = { music: { sync: "#m-sync", library: "#lib, #lib-demo" }, effects: { variety: "#e-var" },
-  settings: { lighting: "#s-punch", punch: "#s-punch", drama: "#s-dyn", chords: "#s-chordc", stereo: "#s-stereo", countdown: "#s-dropcd" } };
+  settings: { lighting: "#s-punch", punch: "#s-punch", drama: "#s-dyn", chords: "#s-chordc", stereo: "#s-stereo", countdown: "#s-dropcd", about: "#s-upd" } };
 function spotlight(sel, tries = 30) {
   const el = $(sel); if (!el) { if (tries > 0) setTimeout(() => spotlight(sel, tries - 1), 100); return; }
   const box = el.closest(".setrow, .field, .panel") || el;
@@ -956,9 +965,7 @@ async function boot() {
   const setTheme = t => { document.documentElement.dataset.theme = t; const m = $("#theme-color"); if (m) m.content = t === "light" ? "#f8f4ee" : "#0f0d0b"; };
   setTheme(store.get("theme") === "light" ? "light" : "dark");
   $("#theme").onclick = () => { const nx = document.documentElement.dataset.theme === "light" ? "dark" : "light"; setTheme(nx); store.set("theme", nx); };
-  $("#menu").onclick = () => $("#side").classList.toggle("open");
-  $("#side-close").onclick = () => $("#side").classList.remove("open");
-  addEventListener("keydown", e => { if (e.key === "Escape" && $("#side").classList.contains("open")) $("#side").classList.remove("open"); });
+  $("#nav").innerHTML = $("#tabs").innerHTML = navHtml();
   $("#power").onclick = () => act(() => api("POST", "/api/power", { on: $("#power").getAttribute("aria-checked") !== "true" })).catch(() => {});
   $("#bri").oninput = e => $("#bri-out").textContent = e.target.value + "%";
   $("#bri").onchange = e => act(() => api("POST", "/api/brightness", { value: e.target.value / 100 })).catch(() => {});

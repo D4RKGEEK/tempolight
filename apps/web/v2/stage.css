@@ -1,0 +1,110 @@
+/* Stage (v2/stage.js): the live room as the hero, the now-playing bar on its bottom edge, then Look, Feel and Pads. */
+
+/* the stage keeps dark tokens in both themes: it is the dark room */
+.st-stage { --sunk: rgb(255 255 255 / .06); --text: #f4efe8; --text-2: rgb(244 239 232 / .66); --text-3: rgb(244 239 232 / .42); --hair: rgb(255 255 255 / .08);
+  --accent: #ff8a1f; --accent-ink: #1a0e08; --label: #ffb366; --ok: #3ecf7a; --warn: #f5b83d;
+  height: clamp(420px, calc(100vh - 290px), 640px); height: clamp(420px, calc(100dvh - 290px), 640px); }
+.st-room { position: absolute; left: 50%; top: 18px; bottom: 112px; aspect-ratio: 16 / 9; transform: translateX(-50%); max-width: calc(100% - 32px); z-index: 0; }
+.st-room canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+.st-stage::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; box-shadow: inset 0 0 120px 30px rgb(0 0 0 / .55); border-radius: inherit; }
+.st-nolights { position: absolute; inset: 0 0 120px; z-index: 3; display: grid; place-items: center; }
+.st-nolights .ui-empty p { color: rgb(244 239 232 / .66); }
+
+/* the now-playing bar */
+.st-np { gap: 12px; }
+.st-np-row { display: flex; align-items: center; gap: 20px; min-width: 0; }
+.st-song { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.st-song b { font-size: 26px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-song span { font-size: 14px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-transport { display: flex; align-items: center; gap: 8px; flex: none; }
+.st-tbtn { width: 48px; height: 48px; display: grid; place-items: center; border: 0; padding: 0; border-radius: 50%; background: #f4efe8; color: #1a0e08; flex: none;
+  transition: transform var(--t-out) var(--ease); }
+.st-tbtn .ui-ic { width: 20px; height: 20px; fill: currentColor; stroke: none; }
+.st-tbtn.sm { width: 40px; height: 40px; background: rgb(255 255 255 / .12); color: #f4efe8; }
+.st-tbtn.sm .ui-ic { fill: none; stroke: currentColor; stroke-width: 2; }
+.st-tbtn:hover { transform: scale(1.04); } .st-tbtn:active { transform: scale(.96); }
+.st-sync { flex: none; flex-wrap: nowrap; gap: 14px; height: 48px; padding: 0 16px 0 16px; border-radius: var(--r-pill); background: rgb(10 8 7 / .6); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1);
+  -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px); }
+.st-sync .sm-state { min-width: 0; font-size: 15px; gap: 9px; white-space: nowrap; }
+.st-sync .sm-dot { width: 8px; height: 8px; }
+.st-bpm { font-size: 13px; color: var(--text-3); white-space: nowrap; } .st-bpm b { font: 500 15px var(--mono); color: var(--text); font-variant-numeric: tabular-nums; }
+.st-sync .sm-beat { margin-left: 0; gap: 5px; }
+.st-sync .sm-beat i { width: 10px; height: 10px; } .st-sync .sm-beat i:first-child { width: 18px; height: 18px; line-height: 18px; font-size: 8.5px; }
+.st-hide { display: none; }
+.st-map { display: flex; flex-direction: column; gap: 6px; }
+.st-strip { height: 52px; border-radius: 12px; background: rgb(255 255 255 / .05); }
+.st-strip .sm-empty { font-size: 13px; }
+.st-foot { font-size: 12.5px; }
+.st-foot #sm-next.soon { color: #ff4f8b; font-weight: 600; }
+.st-foot #sm-part { text-align: center; }
+
+/* nothing playing: the bar asks for music */
+.st-np.idle .st-map, .st-np.idle .st-sync { display: none; }
+.st-start { display: flex; align-items: center; gap: 24px; flex-wrap: wrap; padding-top: 4px; }
+.st-start-t { flex: 1 1 260px; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.st-start-t b { font-size: 17px; font-weight: 600; }
+.st-start-t span { font-size: 14px; color: var(--text-2); }
+.st-start-a { display: flex; gap: 10px; flex-wrap: wrap; }
+.st-start-a .btn .ui-ic { width: 17px; height: 17px; }
+.st-start-a .btn.primary .ui-ic { fill: currentColor; stroke: none; }
+.st-np.idle { flex-direction: row; align-items: flex-end; gap: 24px; flex-wrap: wrap; }
+.st-np.idle .st-np-row { flex: 1 1 280px; }
+.st-np.idle .st-start { flex: 0 1 auto; padding: 0; }
+.st-np.idle .st-start-t { display: none; }
+
+/* the drop countdown: huge, over the room */
+.st-drop { position: absolute; z-index: 3; left: 50%; top: calc(50% - 56px); transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; gap: 0; pointer-events: none;
+  color: #fff; text-shadow: 0 0 60px rgb(255 79 139 / .8), 0 0 18px rgb(255 79 139 / .6); }
+.st-drop span { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; color: rgb(255 255 255 / .9); }
+.st-drop b { font: 600 clamp(120px, 22vh, 220px)/0.95 var(--mono); font-variant-numeric: tabular-nums; letter-spacing: -0.04em; }
+.st-drop.now b { font-family: var(--sans); color: #ff4f8b; }
+.st-drop b.tick { animation: st-tick .45s var(--ease-out-expo); }
+@keyframes st-tick { from { transform: scale(1.18); opacity: .4; } to { transform: none; opacity: 1; } }
+.st-stage:has(.st-drop:not([hidden]))::after { box-shadow: inset 0 0 140px 40px rgb(255 79 139 / .22); }
+
+/* the cards */
+.st-cards { grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr) minmax(0, 1.1fr); }
+.st-link { text-decoration: none; color: var(--text-3); } .st-link:hover { color: var(--text); }
+.st-look-main { display: flex; flex-direction: column; gap: 4px; }
+.st-look-main b { font-size: 28px; font-weight: 600; letter-spacing: -0.035em; line-height: 1.1; }
+.st-look-main span { font-size: 15px; color: var(--text-2); }
+.st-why { font-size: 14px; color: var(--text-3); min-height: 1.5em; margin-top: -6px; }
+#st-sw { min-height: 28px; }
+.st-look-a { display: flex; gap: 10px; flex-wrap: wrap; }
+.st-look-a .btn { flex: 1 1 auto; }
+.st-look-a .btn .ui-ic { width: 16px; height: 16px; }
+.st-var { display: flex; flex-direction: column; gap: 8px; margin-top: auto; }
+.st-var .ui-seg { display: flex; }
+.st-feel .ui-bigs + .ui-bigs { margin-top: -6px; }
+.st-toggles { display: flex; flex-direction: column; gap: 6px; }
+.st-padcard .ui-pads { flex: 1; grid-auto-rows: minmax(84px, 1fr); }
+
+@media (max-width: 1100px) { .st-cards { grid-template-columns: minmax(0, 1fr); } .st-stage { height: auto; aspect-ratio: auto; } }
+@media (max-width: 1100px) and (min-width: 761px) {
+  .st-stage { height: clamp(420px, 56vw, 560px); }
+}
+@media (max-width: 760px) {
+  .st-stage { height: auto; display: flex; flex-direction: column; }
+  .st-room { position: relative; left: auto; top: auto; bottom: auto; transform: none; width: 100%; max-width: none; aspect-ratio: 16 / 9; }
+  .st-stage::after { box-shadow: inset 0 0 60px 10px rgb(0 0 0 / .5); }
+  .st-nolights { position: relative; inset: auto; }
+  .st-np-row { flex-wrap: wrap; gap: 12px; }
+  .st-song { flex-basis: calc(100% - 110px); }
+  .st-song b { font-size: 20px; }
+  .st-sync { width: 100%; justify-content: space-between; height: 44px; }
+  .st-drop { top: 28%; } .st-drop b { font-size: 96px; } .st-drop span { font-size: 16px; }
+  .st-start-a { width: 100%; } .st-start-a .btn { flex: 1 1 100%; }
+  .st-look-main b { font-size: 24px; }
+  .ui-pads { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .ui-pad { min-height: 76px; padding: 10px 12px; } .ui-pad kbd { display: none; } .ui-pad span { font-size: 11.5px; }
+}
+@media (prefers-reduced-motion: reduce) { .st-drop b.tick { animation: none; } }
+
+/* (the v1 song map's phone grid doesn't apply to the stage's pill) */
+@media (max-width: 760px) {
+  .st-sync.sm-meter { display: flex; grid-template-areas: none; gap: 12px; }
+  .st-sync .sm-state { font-size: 15px; margin-right: auto; }
+  .st-strip.sm-map { height: 48px; }
+  .st-foot.sm-foot { grid-template-columns: auto 1fr auto; } .st-foot.sm-foot #sm-next { grid-column: auto; grid-row: auto; }
+  .st-np.idle { flex-direction: column; align-items: stretch; gap: 16px; } .st-np.idle .st-np-row { flex: none; }
+}

@@ -32,7 +32,7 @@ const go = async h => { await page.evaluate(x => { location.hash = "#/" + x; }, 
 const text = sel => page.textContent(sel);
 
 await step("opens in demo mode and finds the pretend controllers by itself", async () => {
-  await page.goto(base + "/demo/"); await page.waitForSelector("#page .panel");
+  await page.goto(base + "/demo/#/home"); await page.waitForSelector("#page .panel"); // (the classic Home: the v2 Stage is the default now)
   ok(await page.isVisible("#demo-bar"), "no demo banner");
   await until(async () => (await page.$$eval("#h-devs tr", r => r.length)) === 3, 8000, "pretend controllers not added");
   await until(async () => (await text("#h-leds")).includes("684"), 5000, "room not laid out (" + await text("#h-leds") + ")");
@@ -111,11 +111,11 @@ await step("the docs at /docs/ open as the docs, not the app (the service worker
     await page.goto(base + p); await page.waitForSelector(".article", { timeout: 8000 });
     ok(!(await page.$("#page")), `${p} opened the app`); ok(/docs|documentation/i.test(await page.title()), `${p}: title ${await page.title()}`);
   }
-  await page.goto(base + "/demo/"); await page.waitForSelector("#page .panel");
+  await page.goto(base + "/demo/#/home"); await page.waitForSelector("#page .panel"); // (the classic Home: the v2 Stage is the default now)
 });
 await step("iPhone size: no sideways scrolling", async () => {
   const phone = await browser.newContext({ ...require("playwright").devices["iPhone 13"] }); const p = await phone.newPage();
-  await p.goto(base + "/demo/"); await p.waitForSelector("#page .panel");
+  await p.goto(base + "/demo/#/home"); await p.waitForSelector("#page .panel");
   for (const h of ["home", "music", "live", "room", "devices"]) { await p.evaluate(x => { location.hash = "#/" + x; }, h); await sleep(400); const w = await p.evaluate(() => document.documentElement.scrollWidth); ok(w <= 391, `${h} is ${w}px wide`); }
   ok(!(await p.isVisible("#m-system")) || true, ""); await p.screenshot({ path: process.env.SHOT || "/tmp/demo-iphone.png" }); await phone.close();
 });
