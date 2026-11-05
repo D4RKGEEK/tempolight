@@ -62,7 +62,7 @@ export function createThumbs({ custom = [], palette = () => "auto", params = () 
     if (t !== frameT) { frameT = t; for (const f of frames.values()) f.fresh = false; }
     let f = frames.get(id); if (f && f.fresh) return f.rgb;
     if (!f) frames.set(id, f = { rgb: new Uint8Array(E.layout.N * 3), fresh: false });
-    const h = hashStr(id), bpm = 124 + (h % 5), p = params(id) || {}, sp = p.speed ?? 1, tt = t * sp;
+    const h = hashStr(id), bpm = 124 + (h % 5), p = params(id) || {}, sp = p.speed ?? 1, tt = t < 0 ? 60 / bpm * 9 + 0.15 : t * sp; // t < 0: a still frame, just after a kick and a snare
     const V = E.metronomeView(tt, bpm), beat = 60 / bpm, kickE = Math.exp(-(tt - V.kick) / 0.25), hatE = Math.exp(-(tt - V.hat) / 0.12);
     V.buildP = ((tt / beat) / 16) % 1; // a build-up every 16 beats: long enough to read, short enough to see it loop
     const tag = tagOf(id); if (tag === "calm") { V.state = "calm"; V.level = "low"; V.loud = 0.45; }
@@ -146,7 +146,7 @@ export function createThumbs({ custom = [], palette = () => "auto", params = () 
       const anim = !still && moving < max; if (anim) moving++;
       if (c.drawn && (scrolling || !(anim && now - c.last >= gap))) { if (anim) more = true; continue; }
       if (performance.now() - t0 > (scrolling ? BUDGET / 2 : BUDGET)) { more = true; break; }
-      draw(c, still || !anim ? (c.drawn ? t : 4.1) : t); c.last = now; c.drawn = true; if (anim) more = true;
+      draw(c, still || !anim ? (c.drawn ? t : -1) : t); c.last = now; c.drawn = true; if (anim) more = true;
     }
     if (more || scrolling) wake();
   }
