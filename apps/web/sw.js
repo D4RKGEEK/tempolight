@@ -11,7 +11,7 @@ const LATER = ["/room.js", "/mapper.js", "/mapping.js", "/timeline.js", "/timeli
   "/qr.js", "/calibrate.js", "/screen.js", "/engine/layout.js", "/engine/presets.js",
   "/engine/analysis.js", "/engine/tonal.js",
   "/integrations.js", "/claude-setup.js",
-  "/v2/more.js", "/v2/songs.js", "/v2/songs.css", "/v2/looks.js", "/v2/looks.css", "/v2/lights.js", "/v2/lights.css"];
+  "/v2/more.js", "/v2/songs.js", "/v2/songs.css", "/v2/looks.js", "/v2/looks.css", "/v2/lights.js", "/v2/lights.css", "/v2/fxthumbs.js", "/engine/effects.js", "/engine/signals.js", "/engine/ratings.js", "/engine/fft.js", "/engine/structure.js"];
 
 // one at a time and each on its own, so a file this server doesn't have can't stop the others being kept
 const keep = (c, list) => Promise.all(list.map(u => c.match(u).then(hit => hit || c.add(u)).catch(() => {})));
