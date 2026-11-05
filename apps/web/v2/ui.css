@@ -19,7 +19,7 @@
 .rail-nav a[aria-current] .ui-ic, .tabs a[aria-current] .ui-ic { stroke: var(--label); }
 .rail-host { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; text-align: center; font-size: 11.5px; color: var(--text-3); line-height: 1.3; }
 .rail-host b { color: var(--text-2); font-weight: 500; font-size: 11.5px; }
-.rail-host .mono, .rail-host small { font-size: 10.5px; word-break: break-all; }
+.rail-host .mono, .rail-host small { font-size: 10.5px; overflow-wrap: anywhere; }
 .rail-host .dot { width: 7px; height: 7px; }
 .ui-ic { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 
