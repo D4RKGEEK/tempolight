@@ -128,6 +128,15 @@ Want more change? Open **Effects** → *How effects are chosen* → **Variety**:
 - **Song parts**: one effect each for calm parts, build-ups and drops.
 - **Show (changes often)**: effects change with the song, every few bars.
 
+Two more under **Settings** → *Lighting*:
+
+- **Chord colours** (on): with *Automatic* colours, each chord gets its own shade of the palette, so the colour
+  steps on the bar line when the chord changes (a chorus that comes back gets the same colours). Live listening does
+  this too once it is sure of the chord.
+- **Stereo** (*Subtle*): when the sound comes in stereo (this computer's sound, a song played in the app), the side
+  of the room a hit came from lights up more. *Strong* leans further, *Off* turns it off. A microphone, mono sound or
+  a room drawn as one upright strip are unchanged.
+
 ## Where next
 
 - [Connect more kinds of lights](connect-lights.md): Hue, Nanoleaf, LIFX, DMX fixtures and more

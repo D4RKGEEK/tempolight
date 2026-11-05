@@ -28,6 +28,8 @@ export const DEFAULTS = () => ({
     songMemory: true, // remember analysed songs and recognise them when they play again while listening live
     nowPlaying: { enabled: true, spotifyClientId: "" }, // read the track music apps on this computer play (server only, see nowplaying.js)
     moodColours: true, // with the "auto" palette, colours follow the music's mood (key, brightness, energy)
+    chordColours: true, // with the "auto" palette, colours step with the song's chords (on bar lines)
+    stereo: "subtle", // off | subtle | strong: with a stereo source, the side of the room a hit came from brightens
   },
   // variety (automatic mode): "one" = one look per song (looks.js), "parts" = one for calm parts, build-ups and drops, "show" = effects change with the song
   show: { power: true, mode: "auto", effect: "shock", style: "auto", palette: "auto", everyBeats: 8, variety: "one", speed: 1, params: {}, layer: null },

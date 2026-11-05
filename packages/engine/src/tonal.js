@@ -119,6 +119,13 @@ export function chordOf(chroma, bass) {
     const r = xy / Math.sqrt(xx) / T.n + (bs > 0 ? 0.15 * bass[i >> 1] / bs : 0); if (r > br) { br = r; best = i; } }
   return { chord: CHORDS[best], index: best, root: best >> 1, minor: !!(best & 1), r: Math.round(br * 100) / 100 };
 }
+/** How well one chord (index, see CHORDS) fits a chroma, on the same scale as chordOf()'s r (live chords' hysteresis). */
+export function chordFit(chroma, bass, index) {
+  let m = 0; for (let k = 0; k < 12; k++) m += chroma[k]; if (!(m > 0) || index == null || !(index >= 0 && index < 24)) return -9; m /= 12;
+  let xx = 0, xy = 0; const T = TEMPL_C[index]; for (let k = 0; k < 12; k++) { const d = chroma[k] - m; xx += d * d; xy += d * T.c[k]; } if (!(xx > 0)) return -9;
+  let bs = 0; if (bass) for (let k = 0; k < 12; k++) bs += bass[k];
+  return xy / Math.sqrt(xx) / T.n + (bs > 0 ? 0.15 * bass[index >> 1] / bs : 0);
+}
 /**
  * Chords per bar from chroma frames at `rate` a second (the stored 5-a-second chroma, or the 10-a-second one), and
  * optionally the bass chroma: the frames inside each bar (a frame in from either end, where the chord before or after

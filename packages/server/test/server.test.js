@@ -107,6 +107,29 @@ test("WebSocket: a browser can stream audio, get status and preview frames", { s
   } finally { await s.done(); }
 });
 
+test("chord colours and stereo: settings reach the director; stereo audio gives the view a balance, mono none", async () => {
+  const s = await setup();
+  try {
+    await s.call("POST", "/api/devices", { virtual: true });
+    const set = s.app.store.data.settings, D = s.app.runtime.director.settings;
+    assert.deepEqual([set.chordColours, set.stereo, D.chordColours, D.stereo], [true, "subtle", true, "subtle"], "defaults");
+    assert.equal((await s.call("PATCH", "/api/settings", { stereo: "loud" })).status, 400);
+    await s.call("PATCH", "/api/settings", { chordColours: false, stereo: "strong" });
+    assert.deepEqual([s.app.runtime.director.settings.chordColours, s.app.runtime.director.settings.stereo], [false, "strong"]);
+    const song = edm(22050, { kickLeft: true }), from = Math.floor(15 * 22050), n = Math.floor(6 * 22050), tapped = [];
+    s.app.runtime.rt.pcmTap = a => tapped.push(a.length);
+    for (let i = 0; i < n; i += 1024) { const m = Math.min(1024, n - i), b = new Int16Array(2 * m);
+      for (let k = 0; k < m; k++) { b[2 * k] = Math.round(song.l[from + i + k] * 30000); b[2 * k + 1] = Math.round(song.r[from + i + k] * 30000); }
+      s.app.runtime.pushPcm(b, "browser", "Stereo test", "c1", 22050, 0, 2); }
+    const an = s.app.runtime.rt.live.an, V = an.view();
+    assert.ok(Math.abs(an.bpm - 128) < 3, `the mix is analysed (${an.bpm})`); assert.ok(V.lr && typeof V.pan === "number", "stereo: pan and lr");
+    assert.ok(tapped.length && tapped.slice(0, -1).every(k => k === 1024), "taps get mono samples");
+    await s.call("PATCH", "/api/settings", { stereo: "off" }); s.app.runtime.stopLive();
+    for (let i = 0; i < n; i += 1024) { const m = Math.min(1024, n - i), b = new Int16Array(m); for (let k = 0; k < m; k++) b[k] = Math.round(song.x[from + i + k] * 30000); s.app.runtime.pushPcm(b, "browser", "Mono test", "c1"); }
+    const V2 = s.app.runtime.rt.live.an.view(); assert.ok(!V2.lr && V2.pan === undefined, "mono: no balance");
+  } finally { delete s.app.runtime.rt.pcmTap; await s.done(); }
+});
+
 test("songs analysed in the browser follow the playback clock", async () => {
   const s = await setup();
   try {

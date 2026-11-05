@@ -5,6 +5,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Chord colours and stereo
+- Chord colours (Settings → Lighting, on with Automatic colours): each chord has its own shade of the palette, so the colour steps on the bar line when the chord changes and eases in over a beat, never more than once a bar; repeated sections get the same colours. Live listening estimates the chord too, only when it is sure. Stereo (Off / Subtle / Strong, default Subtle): with a stereo source (browser audio, this computer's sound through parec or ffmpeg, a file) the side of the room a hit came from brightens; mono sources are unchanged. API: `settings.chordColours`, `settings.stereo`.
+
 ### One look per song
 - Automatic mode now picks one well-chosen effect and palette for each song when it is analysed, and keeps it for the whole song, on the beat (like picking one LedFx effect). It fits the song: a fast four-on-the-floor track gets a kick-driven effect, a ballad a calm one that doesn't need a beat; the colours come from the mood. The same song always gets the same look; different songs get different ones.
 - The look stays lively from inside: speed follows the tempo, it gets stronger through build-ups, the colour steps at new sections (a chorus that comes back gets the same colour), drops vary every 2 bars, and the pump, the dip before the drop and the drop flash stay.

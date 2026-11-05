@@ -2,9 +2,11 @@
 // without shipping audio files. edm(): 128 BPM, 4 bars intro, 4 bars build-up (snare roll), 8 bars drop, 2 bars outro.
 export function rng(seed = 7) { let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296) * 2 - 1; }
 
-export function edm(sr = 22050) {
+export function edm(sr = 22050, o = {}) {
   const bpm = 128, beat = 60 / bpm, bar = 4 * beat, bars = 18, n = Math.floor((bars * bar + 1) * sr), x = new Float32Array(n), r = rng();
-  const put = (t, fn, dur) => { const i0 = Math.floor(t * sr); for (let k = 0; k < dur * sr && i0 + k < n; k++) x[i0 + k] += fn(k / sr); };
+  // o.kickLeft: also a stereo version (l, r) with the kick in the left channel only and everything else in both
+  const xk = o.kickLeft ? new Float32Array(n) : null;
+  const put = (t, fn, dur, into = x) => { const i0 = Math.floor(t * sr); for (let k = 0; k < dur * sr && i0 + k < n; k++) into[i0 + k] += fn(k / sr); };
   let ph = 0;
   const kick = t => { ph = t === 0 ? 0 : ph + 2 * Math.PI * (45 + 90 * Math.exp(-t * 28)) / sr; return Math.sin(ph) * Math.exp(-t * 7); };
   let hp = 0; const hat = t => { const w = r(), y = w - hp; hp = w; return y * 0.35 * Math.exp(-t * 70); };
@@ -17,13 +19,16 @@ export function edm(sr = 22050) {
     if (part === "build") { const div = [1, 2, 4, 8][b - 4], steps = b === 7 ? 3 * div : 4 * div;
       for (let s = 0; s < steps; s++) put(t0 + s * beat / div, snare(0.3 + 0.7 * ((b - 4) * 4 + s / div) / 16), 0.2); }
     if (part === "drop") for (let q = 0; q < 4; q++) {
-      put(t0 + q * beat, kick, 0.4);
+      put(t0 + q * beat, kick, 0.4, xk || x);
       if (q % 2) put(t0 + q * beat, snare(0.8), 0.2);
       let lp = 0; put(t0 + q * beat + 0.02, t => { const saw = 2 * ((ch[0] / 4 * t) % 1) - 1; lp += (saw - lp) * 0.05; return lp * 0.5; }, beat * 0.9);
     }
   }
+  if (xk) { const l = new Float32Array(n), rr = new Float32Array(n); let m = 0; for (let i = 0; i < n; i++) { l[i] = x[i] + xk[i]; rr[i] = x[i]; m = Math.max(m, Math.abs(l[i]), Math.abs(rr[i])); }
+    for (let i = 0; i < n; i++) { l[i] /= m; rr[i] /= m; x[i] = (l[i] + rr[i]) / 2; }
+    return { x, l, r: rr, sr, bpm, dropStart: 8 * bar, bar, chords: ["Am", "F", "C", "G"] }; }
   let m = 0; for (let i = 0; i < n; i++) m = Math.max(m, Math.abs(x[i])); for (let i = 0; i < n; i++) x[i] /= m;
-  return { x, sr, bpm, dropStart: 8 * bar, bar };
+  return { x, sr, bpm, dropStart: 8 * bar, bar, chords: ["Am", "F", "C", "G"] }; // (one chord a bar, in this order)
 }
 
 /** ballad(): 70 BPM, piano-like notes and a soft pad, no drums; a quiet verse then a louder chorus. */

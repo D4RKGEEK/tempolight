@@ -321,6 +321,39 @@ green; calm and minor: deep blues and violets; tense: reds and magentas), two va
 still bring new colours, rescaled so blends stay as bright as the corners. The director eases towards it with a 2.5 s
 time constant and drops it 5 s after the mood is gone. Night mode with `warm` on forces `sunset`.
 
+### Chord colours
+
+With `show.palette` `auto` and `settings.chordColours` on (the default), the palette showing (the mood's, the look's,
+or an automatic pair) steps with the chords ([`colour.js`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/engine/src/colour.js)). `V.chord` is the
+chord (0..23, `tonal.js` `CHORDS`: C, Cm, C#, ...): a whole-song view takes it from `bars[i].chord`, a live view from
+the analyser's estimate (below). `chordPalette(base, chord, tonic)` gives each chord a stable place: its root on the
+circle of fifths from the key's tonic (`fifthsFrom`, -5..6) turns both colours 15° a fifth round the colour wheel, odd
+steps swap the two colours (neighbouring chords differ clearly), and minor chords are a little darker and cooler. The
+tonic is the view's key, else the first chord heard. `createChordColours().update()` latches a new chord only on a new
+bar (`V.barI`, or the beat grid's bar live), at most one step a bar, and eases to it with a time constant of a third
+of a beat (there within about a beat); a bar without a chord keeps the colour, two such bars ease back to the palette.
+While chord colours are on and the song has sections, the palette's variant (the `auto` pair, the mood variant) comes
+from the section's label (`sectionKey`) instead of `state.palIdx`, so a repeated section gets the same colours. Show
+timelines don't plan colours: a planned show and live listening both colour each frame here, from the same view.
+
+Live, the analyser (`LiveAnalyser.liveChord`) judges the chord of the bar from beat 2 on, from the chroma frames since
+the bar line (the same 24 triads and bass chroma as the whole-song analysis): a new chord must fit with r ≥ 0.7 (under
+6 frames) or 0.55 and beat the current chord's fit on the same notes by 0.08; once a bar at most; two bars with no
+clear chord and `V.chord` is null again, so the director keeps today's colours.
+
+### Stereo accent
+
+A stereo source (browser audio whose channels differ, system capture through parec or ffmpeg, a file) reaches
+`LiveAnalyser.push(samples, 2)` interleaved; the analysis hears the mix, and a `StereoTap`
+([`stereo.js`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/engine/src/stereo.js)) keeps each side's level (RMS, ~80 ms) and low-band onset (the rise
+of the energy below ~150 Hz, held ~120 ms) every ~12 ms. The view gets `V.pan` (-1 left .. 1 right: of the hit just now,
+else of the levels) and `V.lr` ([left, right] levels, 0..1), only while the channels differ (a mono source sent as
+stereo stays mono) — and the runtime adds them to a song's view too while the same audio comes in. The director's
+spatial accent ([`spatial.js`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/engine/src/spatial.js)) leans the room on each kick: the most one-sided
+`pan` around the kick, times the hit fading over 0.2 s, scales each LED by `1 + a · u` (u: -1 at the room's left
+edge, 1 at the right, from the layout's `PX`) in the LEDs' perceived brightness, a = ±0.55 (`subtle`) or ±1 (`strong`)
+at full pan. Nothing happens without `V.lr`, with `settings.stereo` `off`, or in a room less than 0.2 wide.
+
 ## Overlays, pads and safe mode
 
 `director.state.overlay` holds the live pads, applied after everything else (`runtime.action()` sets them):
