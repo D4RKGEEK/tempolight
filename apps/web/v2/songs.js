@@ -389,7 +389,7 @@ export function render(el) {
   let raf = 0; const tick = () => { if (!alive) return; raf = requestAnimationFrame(tick); if (!reduced() && (audioMode() === "mic" || audioMode() === "system") && app.status) paintCards(app.status); };
   raf = requestAnimationFrame(tick);
   // #/songs/hear (the top bar's Hearing chip): open the active way's set-up
-  const sub = (location.hash.match(/^#\/songs\/(\w+)/) || [])[1];
+  const sub = (location.hash.match(/^#\/\w+\/(\w+)/) || [])[1]; // (also #/music/hear, the old address)
   if (sub === "hear") setTimeout(() => { if (alive) openCard(activeCard(app.status) || "computer"); }, 0);
   else if (sub === "folder" || sub === "library") setTimeout(() => { if (alive) openFolder(); }, 0);
   else if (sub === "spotify") setTimeout(() => { if (alive) openSpotify(); }, 0);

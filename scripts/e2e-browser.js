@@ -31,10 +31,10 @@ const lum = d => { let s = 0; for (const v of d.lastFrame) s += v; return s / d.
 const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream", "--auto-accept-this-tab-capture", "--auto-select-desktop-capture-source=Entire screen", "--enable-usermedia-screen-capturing"] });
 const ctx = await browser.newContext({ viewport: { width: 1400, height: 950 }, permissions: ["microphone"] });
 const page = await ctx.newPage(); const errors = [];
-page.on("pageerror", e => errors.push(e.message)); page.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
+page.on("pageerror", e => errors.push(e.message)); page.on("console", m => { if (m.type() === "error" && !/fonts\.(googleapis|gstatic)\.com/.test(m.location()?.url || "")) errors.push(m.text()); });
 page.on("dialog", d => d.accept(d.type() === "prompt" ? "Test scene" : undefined));
 const shot = async n => { if (shots) await page.screenshot({ path: path.join(shots, `${n}.png`) }); };
-const go = async h => { await page.goto(`${base}/#/${h}`); await page.waitForSelector("#page .panel"); await sleep(300); };
+const go = async h => { await page.goto(`${base}/#/${h}`); await page.waitForSelector("#page > *"); await sleep(300); };
 
 await step("first start opens the setup wizard; skipping it leaves the welcome card", async () => {
   await page.goto(`${base}/#/home1`); await page.waitForSelector("#wizard"); ok(await page.isVisible("#wz-title"), "no wizard title"); await shot("00-wizard");
@@ -374,7 +374,7 @@ await step("integrations: a game on, its config file, a Try button; the OBS brow
 await step("setup wizard on a fresh start, phone-sized: lights, room, hearing, timing, test song, PIN, done", async () => {
   const dir2 = mkdtempSync(path.join(os.tmpdir(), "tempolight-e2e-wz-")), app2 = await createApp({ dataDir: dir2, discover: false, logger: null });
   const base2 = `http://127.0.0.1:${await app2.listen(0, "127.0.0.1")}`, c2 = await browser.newContext({ viewport: { width: 390, height: 844 }, permissions: ["microphone"] }), p = await c2.newPage();
-  p.on("pageerror", e => errors.push("wizard: " + e.message)); p.on("console", m => { if (m.type() === "error") errors.push("wizard: " + m.text()); });
+  p.on("pageerror", e => errors.push("wizard: " + e.message)); p.on("console", m => { if (m.type() === "error" && !/fonts\.(googleapis|gstatic)\.com/.test(m.location()?.url || "")) errors.push("wizard: " + m.text()); });
   const wide = async where => { const w = await p.evaluate(() => document.documentElement.scrollWidth); ok(w <= 392, `wizard ${where} is ${w}px wide`); };
   const dot = () => p.$eval(".wz-dots li[aria-current]", li => Number(li.dataset.dot));
   try {
@@ -409,7 +409,7 @@ await step("music: How should Tempolight hear your music? on a pretend Mac: Blac
     hearing: { platform: "darwin", runner, interval: 300, listSources: () => [], commandFor: id => /BlackHole 2ch/.test(id) ? sine : false } });
   app3.store.data.settings.setupDone = true; // (no wizard over the page)
   const base3 = `http://127.0.0.1:${await app3.listen(0, "127.0.0.1")}`, p = await ctx.newPage(), st3 = () => app3.runtime.status();
-  p.on("pageerror", e => errors.push("hearing: " + e.message)); p.on("console", m => { if (m.type() === "error") errors.push("hearing: " + m.text()); });
+  p.on("pageerror", e => errors.push("hearing: " + e.message)); p.on("console", m => { if (m.type() === "error" && !/fonts\.(googleapis|gstatic)\.com/.test(m.location()?.url || "")) errors.push("hearing: " + m.text()); });
   const li = id => p.getAttribute(`#hr-steps li[data-step="${id}"]`, "class");
   try {
     await p.goto(base3 + "/#/music1/hear"); await p.waitForSelector('#hear [data-hc="computer"]');
@@ -433,7 +433,8 @@ await step("music: How should Tempolight hear your music? on a pretend Mac: Blac
     await p.click("#hr-off"); await until(() => !app3.store.data.settings.capture.enabled, 3000, "capture not stopped");
     await p.goto(base3 + "/#/home1"); await p.waitForSelector("#h-hear");
     await until(async () => /Can't hear anything/.test(await p.textContent("#h-hear")), 6000, "Home doesn't say it can't hear anything"); await p.click("#h-hear .hear-fix");
-    await until(() => p.isVisible('#hear [data-hc="computer"]'), 4000, "Fix doesn't open the panel"); ok(/#\/music\/hear$/.test(p.url()), "Fix goes elsewhere: " + p.url());
+    await until(() => p.isVisible(".ui-sheet"), 4000, "Fix doesn't open the hearing setup on Songs"); ok(/#\/music\/hear$/.test(p.url()), "Fix goes elsewhere: " + p.url());
+    await p.goto(base3 + "/#/music1/hear"); await p.waitForSelector('#hear [data-hc="mic"]'); // (the classic hearing panel, for the microphone steps)
     await p.click('[data-hc="mic"]'); await p.waitForSelector("#hr-mic"); ok(/keep this tab open/i.test(await p.textContent("#hr-detail")), "doesn't say the tab must stay open"); await p.click("#hr-mic");
     await until(() => app3.store.data.settings.hearing.method === "mic", 3000, "the microphone isn't remembered on the server"); ok(await p.evaluate(() => localStorage.getItem("tl.hear")) === "mic", "not remembered in this browser");
     await until(() => st3().hearing.via === "browser", 5000, "the microphone isn't heard");

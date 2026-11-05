@@ -26,9 +26,9 @@ async function until(fn, ms = 8000, msg = "timed out") { const t = Date.now(); w
 const browser = await chromium.launch({ args: ["--autoplay-policy=no-user-gesture-required", "--use-fake-ui-for-media-stream", "--use-fake-device-for-media-stream"] });
 const ctx = await browser.newContext({ viewport: { width: 1300, height: 900 }, permissions: ["microphone"] });
 const page = await ctx.newPage(), errors = [];
-page.on("pageerror", e => errors.push(e.message)); page.on("console", m => { if (m.type() === "error") errors.push(m.text()); });
+page.on("pageerror", e => errors.push(e.message)); page.on("console", m => { if (m.type() === "error" && !/fonts\.(googleapis|gstatic)\.com/.test(m.location()?.url || "")) errors.push(m.text()); });
 page.on("dialog", d => d.accept(d.type() === "prompt" ? "Demo scene" : undefined));
-const go = async h => { await page.evaluate(x => { location.hash = "#/" + x; }, h); await page.waitForSelector("#page .panel"); await sleep(300); };
+const go = async h => { await page.evaluate(x => { location.hash = "#/" + x; }, h); await page.waitForSelector("#page > *"); await sleep(300); };
 const text = sel => page.textContent(sel);
 
 await step("opens in demo mode and finds the pretend controllers by itself", async () => {
@@ -37,7 +37,7 @@ await step("opens in demo mode and finds the pretend controllers by itself", asy
   await until(async () => (await page.$$eval("#h-devs tr", r => r.length)) === 3, 8000, "pretend controllers not added");
   await until(async () => (await text("#h-leds")).includes("684"), 5000, "room not laid out (" + await text("#h-leds") + ")");
 });
-await step("preview shows light", async () => { await sleep(800); const lit = await page.evaluate(async () => { const { app } = await import("/app.js"); return app.frame ? app.frame.reduce((a, b) => a + b, 0) : 0; }); ok(lit > 1000, "preview frame is dark"); });
+await step("preview shows light", async () => { await sleep(800); const lit = await page.evaluate(async () => { const { app } = await import("/demo/app.js"); return app.frame ? app.frame.reduce((a, b) => a + b, 0) : 0; }); ok(lit > 1000, "preview frame is dark"); });
 await step("record a 15-second clip of the preview", async () => {
   const dl = page.waitForEvent("download", { timeout: 30000 }); await page.click("#h-rec"); const f = await dl;
   const p = await f.path(), size = (await import("node:fs")).statSync(p).size; ok(/\.(webm|mp4)$/.test(f.suggestedFilename()) && size > 20000, `clip ${f.suggestedFilename()} ${size} bytes`);
@@ -50,7 +50,7 @@ await step("play the demo song: analysed, tempo found, lights follow it", async 
 await step("the demo song: the sync meter says Locked and the song map shows its sections", async () => {
   await until(async () => (await text("#sm-label")) === "Locked", 6000, "the meter isn't Locked: " + await text("#sm-label"));
   await until(() => page.isHidden("#sm-empty"), 6000, "the song map is empty");
-  const map = await page.evaluate(async () => (await import("/app.js")).api("GET", "/api/song/map"));
+  const map = await page.evaluate(async () => (await import("/demo/app.js")).api("GET", "/api/song/map"));
   ok(map.source === "song" && map.sections.length >= 2 && map.env.length > 50, `map: ${map.source}, ${map.sections?.length} sections`);
   await until(async () => /^Part [A-Z]/.test(await text("#sm-part")), 4000, "the part playing isn't named");
   await go("home1"); await until(async () => (await page.getAttribute("#h-hear .syncdot", "data-state")) === "locked", 4000, "no sync dot on Home"); await go("music1");
@@ -122,7 +122,7 @@ await step("iPhone size: no sideways scrolling", async () => {
 await step("home & sleep: a sunrise and the sleep timer run in the browser", async () => {
   await go("sleep1"); await page.waitForSelector("#w-on"); await page.check("#w-on"); await sleep(300);
   await page.click("#hs-wnow"); await until(async () => /Sunrise/.test(await text("#hs-now")), 4000, "no sunrise shown");
-  const st = await page.evaluate(async () => (await import("/app.js")).app.status.home); ok(st.wake && st.wake.phase === "rising", "sunrise not rising " + JSON.stringify(st));
+  const st = await page.evaluate(async () => (await import("/demo/app.js")).app.status.home); ok(st.wake && st.wake.phase === "rising", "sunrise not rising " + JSON.stringify(st));
   await page.click("#hs-stop"); await until(async () => !/Sunrise \d/.test(await text("#hs-now")), 8000, "sunrise didn't stop");
   await page.click("#hs-go"); await until(async () => /Sleep timer/.test(await text("#hs-now")), 4000, "sleep timer not shown");
   await page.click("#hs-cancel"); await page.check("#p-on"); await sleep(400); await go("home1"); await page.waitForSelector("#hs-strip");
