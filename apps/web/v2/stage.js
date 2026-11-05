@@ -63,7 +63,7 @@ export function render(el) {
       <section class="ui-card st-look" aria-labelledby="st-look-h">
         <div class="ui-card-h"><h2 id="st-look-h">Look</h2><span class="ui-pill" id="st-look-tag" hidden></span></div>
         <div class="st-look-main"><b id="st-look-name">–</b><span id="st-look-sub"></span></div>
-        <div class="ui-swatches" id="st-sw" aria-label="The colours in the room now">${"<i></i>".repeat(5)}</div>
+        <div class="ui-swatches" id="st-sw" aria-label="The colours in the room now">${"<i hidden></i>".repeat(5)}</div>
         <p class="st-why" id="st-why"></p>
         <div class="st-look-a" id="st-look-a">
           <button class="btn" id="st-next-look" type="button">Try another look</button>
@@ -160,7 +160,7 @@ export function render(el) {
     if (!bins.some(B => B.w > 0)) return; // a dark moment (the dip before a drop): keep the last colours
     const top = bins.filter(B => B.w > 0).sort((a, b) => b.w - a.w).slice(0, 5);
     const cols = top.map(B => { const r = B.r / B.w, g = B.g / B.w, b = B.b / B.w, k = 255 / Math.max(r, g, b, 1); return `rgb(${Math.round(r * k)} ${Math.round(g * k)} ${Math.round(b * k)})`; });
-    $$("#st-sw i").forEach((x, i) => x.style.setProperty("--c", cols[i] || "transparent"));
+    $$("#st-sw i").forEach((x, i) => { x.style.setProperty("--c", cols[i] || "transparent"); x.hidden = !cols[i]; });
   }
 
   // ---------------------------------------------------------------- live status, 4 times a second
