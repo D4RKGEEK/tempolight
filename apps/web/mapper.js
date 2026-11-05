@@ -15,7 +15,7 @@ export function mapPage(el) {
         <select id="mp-n" aria-label="How many LEDs to look for" style="width:auto">${opt("40", "Quick (40 points)")}${opt("80", "Normal (80 points)", true)}${opt("200", "Detailed (200 points)")}</select>
         <button class="btn primary" id="mp-go" type="button" disabled>Map</button><button class="btn" id="mp-use" type="button" hidden>Use this layout</button></div>
       <div class="meter" aria-hidden="true"><i id="mp-prog" style="width:0%"></i></div><p id="mp-msg" class="muted" role="status"></p>
-      <p class="faint" style="font-size:12.5px">Darken the room, hold the camera still (lean it on something) so all the lights you want are in the picture, and keep people out of view. Each LED lights up in turn for a moment; the strip between the points found is filled in. Works best with WLED, Govee and OpenRGB devices that show single LEDs.</p></div>`, "span-12")}`;
+      <p class="faint" style="font-size:13px">Darken the room, hold the camera still (lean it on something) so all the lights you want are in the picture, and keep people out of view. Each LED lights up in turn for a moment; the strip between the points found is filled in. Works best with WLED, Govee and OpenRGB devices that show single LEDs.</p></div>`, "span-12")}`;
   if (!devs.length) { $("#mp-msg").textContent = "Add a controller with LEDs on the Devices page first (Govee lights need “segments” mode)."; $("#mp-cam").disabled = true; return {}; }
   const video = $("#mp-video"), dots = $("#mp-dots"), cv = document.createElement("canvas"), g = cv.getContext("2d", { willReadFrequently: true });
   let stream = null, running = false, result = null, gone = false, lock = null;

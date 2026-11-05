@@ -6,7 +6,7 @@
 
 export const SYNC_LABEL = { locked: "Locked", finding: "Finding the beat", none: "Not hearing" };
 export const PART_NAME = { calm: "calm", build: "build-up", drop: "drop", silent: "quiet" };
-const PART_COLOR = { calm: "#4a6fa5", build: "#c58a1d", drop: "#c8366e" }; // (as the show timeline's blocks)
+const PART_COLOR = { calm: "#5b8cff", build: "#f5b83d", drop: "#ff4f8b" }; // fallbacks for the --calm, --build and --drop tokens (as the show timeline's blocks)
 
 /** The meter's text for a status message: {state, label, score, hint, title}. */
 export function syncView(m) {
@@ -68,7 +68,8 @@ export function mountSongMap(root, { api }) {
   function themeColors() {
     const now = performance.now(); if (colors && now - colorsAt < 1000) return colors; colorsAt = now;
     const cs = getComputedStyle(root), v = n => cs.getPropertyValue(n).trim();
-    return colors = { bg: v("--panel-2"), line: v("--line"), text: v("--text"), faint: v("--faint"), accent: v("--accent"), panel: v("--panel") };
+    const part = { calm: v("--calm") || PART_COLOR.calm, build: v("--build") || PART_COLOR.build, drop: v("--drop") || PART_COLOR.drop };
+    return colors = { bg: v("--sunk") || v("--panel-2"), line: v("--hair") || v("--line"), text: v("--text"), faint: v("--text-3") || v("--faint"), accent: v("--accent"), panel: v("--sunk") || v("--panel"), mono: v("--mono") || "ui-monospace, monospace", part };
   }
   function draw() {
     if (!alive || document.hidden) return;
@@ -82,11 +83,11 @@ export function mountSongMap(root, { api }) {
     if (!map || !(map.dur > 0)) { if (m && mapKey(m) === "live") q("#sm-empty").textContent = "Listening… the map grows as the song plays."; else q("#sm-empty").textContent = "Play a song or listen live, and its map appears here."; return; }
     const span = spanOf(map), X = t => t / span * W, top = 16, bot = H - 6, ph = pos == null ? -1 : X(pos);
     // the parts: a tint behind, a solid band along the bottom, the label at the top left
-    ctx.font = "600 10.5px system-ui, sans-serif"; ctx.textBaseline = "top";
-    for (const s of map.sections) { const x0 = X(s.t0), x1 = X(s.t1), col = PART_COLOR[s.state] || C.faint;
+    ctx.font = `500 11px ${C.mono}`; ctx.textBaseline = "top";
+    for (const s of map.sections) { const x0 = X(s.t0), x1 = X(s.t1), col = C.part[s.state] || C.faint;
       ctx.globalAlpha = 0.13; ctx.fillStyle = col; ctx.fillRect(x0, top, x1 - x0, bot - top);
       ctx.globalAlpha = 1; ctx.fillRect(x0, bot, x1 - x0, 4);
-      if (x1 - x0 > 16) { ctx.fillStyle = col; ctx.fillText(s.label, x0 + 4, 2); }
+      if (x1 - x0 > 16) { ctx.fillStyle = col; ctx.fillText(s.label, x0 + 6, 3); }
       ctx.fillStyle = C.panel; ctx.fillRect(Math.round(x0), top, 1, H - top); }
     // the loudness: one bar per value, in its part's colour; what is still to come paler
     const env = map.env, st = map.envStep, bw = Math.max(1, X(st) - (X(st) > 3 ? 1 : 0));
@@ -94,14 +95,14 @@ export function mountSongMap(root, { api }) {
     for (let i = 0; i < env.length; i++) { const t = i * st, x = X(t); if (t >= map.dur) break;
       while (si < map.sections.length - 1 && t >= map.sections[si].t1) si++;
       const sec = map.sections[si], h = Math.max(1, env[i] * (bot - top - 3));
-      ctx.fillStyle = sec && t >= sec.t0 ? PART_COLOR[sec.state] || C.faint : C.faint; ctx.globalAlpha = ph >= 0 && x > ph ? 0.42 : 0.95;
+      ctx.fillStyle = sec && t >= sec.t0 ? C.part[sec.state] || C.faint : C.faint; ctx.globalAlpha = ph >= 0 && x > ph ? 0.42 : 0.95;
       ctx.fillRect(x, bot - 1 - h, bw, h); }
     ctx.globalAlpha = 1;
     // drops: a small mark at the top
-    ctx.fillStyle = PART_COLOR.drop;
+    ctx.fillStyle = C.part.drop;
     for (const t of map.drops) { const x = X(t); ctx.beginPath(); ctx.moveTo(x - 4, top - 1); ctx.lineTo(x + 4, top - 1); ctx.lineTo(x, top + 5); ctx.closePath(); ctx.fill(); }
     // the next drop: a dashed line with how long until it
-    if (d && d.at != null && d.at <= span) { const x = X(d.at); ctx.strokeStyle = C.accent; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
+    if (d && d.at != null && d.at <= span) { const x = X(d.at); ctx.strokeStyle = C.part.drop; ctx.lineWidth = 1.5; ctx.setLineDash([3, 3]);
       ctx.beginPath(); ctx.moveTo(x + 0.5, top); ctx.lineTo(x + 0.5, bot); ctx.stroke(); ctx.setLineDash([]); }
     // the playhead
     if (ph >= 0) { ctx.fillStyle = C.text; ctx.fillRect(Math.round(ph) - 1, top - 2, 2, bot - top + 6); ctx.beginPath(); ctx.arc(Math.round(ph), top - 2, 3.5, 0, Math.PI * 2); ctx.fill(); }

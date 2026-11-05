@@ -10,22 +10,24 @@ const DOCS = "https://github.com/D4RKGEEK/tempolight/blob/main/docs/wake-up.md";
 
 let styled = false;
 function style() { if (styled) return; styled = true; const s = document.createElement("style"); s.textContent = `
-.hs-now { display: grid; gap: 12px; }
-.hs-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; font-size: 13.5px; }
+.hs-now { display: grid; gap: 14px; }
+.hs-line { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 15px; }
 .hs-line b { font-weight: 600; }
-.hs-sun { width: 34px; height: 34px; border-radius: 50%; flex: none; border: 1px solid var(--line); background: var(--panel-2); }
-.hs-bar { height: 6px; border-radius: 3px; background: var(--panel-2); overflow: hidden; flex: 1 1 120px; min-width: 80px; }
-.hs-bar i { display: block; height: 100%; background: linear-gradient(90deg, #5a0600, #ff4a10, #ffb060, #ffe6c8); }
-.hs-days { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
-.hs-days label { display: flex; flex-direction: column; gap: 3px; font-size: 11.5px; color: var(--muted); min-width: 0; }
-.hs-days input { padding: 5px 6px !important; }
-.hs-col { width: 44px; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 6px; flex: none; background: none; }
-.hs-seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; }
-.hs-seg button { border: 0; background: var(--panel); padding: 5px 12px; font-size: 13px; cursor: pointer; }
-.hs-seg button[aria-pressed="true"] { background: var(--text); color: var(--panel); }
-.hs-url { font: 12px var(--mono); word-break: break-all; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; }
-.hs-plan td { white-space: nowrap; } .hs-plan td input[type=time], .hs-plan td input[data-k=from], .hs-plan td input[data-k=to] { width: 124px; } .hs-plan td input[type=range] { width: 90px; vertical-align: middle; }
-@media (max-width: 820px) { .hs-days { grid-template-columns: repeat(2, minmax(0, 1fr)); } }`; document.head.appendChild(s); }
+.hs-sun { width: 40px; height: 40px; border-radius: 50%; flex: none; background: var(--sunk); box-shadow: var(--ring); transition: background 1s linear, box-shadow 1s linear; }
+.hs-bar { height: 8px; border-radius: var(--r-pill); background: var(--sunk); box-shadow: var(--ring); overflow: hidden; flex: 1 1 120px; min-width: 80px; }
+.hs-bar i { display: block; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #5a0600, #ff4a10, #ffb060, #ffe6c8); }
+.hs-days { display: grid; grid-template-columns: repeat(auto-fill, minmax(124px, 1fr)); gap: 8px; }
+.hs-days label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--text-2); min-width: 0; }
+.hs-days input { padding: 6px 8px !important; font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.hs-col { width: 44px; height: 34px; padding: 3px; border: 0; border-radius: var(--r-field); flex: none; background: var(--sunk); box-shadow: var(--ring); }
+.hs-seg { display: inline-flex; gap: 2px; padding: 3px; border-radius: 13px; background: var(--sunk); box-shadow: var(--ring); }
+.hs-seg button { border: 0; background: none; color: var(--text-2); padding: 6px 14px; border-radius: 10px; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: background var(--t-out) var(--ease), color var(--t-out) var(--ease); }
+.hs-seg button:hover { color: var(--text); }
+.hs-seg button[aria-pressed="true"] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); }
+.hs-url { font: 12.5px var(--mono); word-break: break-all; background: var(--sunk); box-shadow: var(--ring); border-radius: var(--r-field); padding: 8px 12px; }
+.hs-plan td { white-space: nowrap; } .hs-plan td input[type=time], .hs-plan td input[data-k=from], .hs-plan td input[data-k=to] { width: 124px; font-family: var(--mono); } .hs-plan td input[type=range] { width: 90px; vertical-align: middle; }
+@media (max-width: 820px) { .hs-days { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (prefers-reduced-motion: reduce) { .hs-sun, .hs-seg button { transition: none; } }`; document.head.appendChild(s); }
 
 function sunCss(p) { // the dot shows the sunrise's colour at progress p
   const c = p < 0.25 ? "#5a0600" : p < 0.5 ? "#ff3a08" : p < 0.75 ? "#ff8c30" : p < 0.95 ? "#ffbf70" : "#ffe2c0"; return `background:${c};box-shadow:0 0 ${Math.round(4 + p * 18)}px ${c}`; }
@@ -136,7 +138,7 @@ export function homeSleepPage(el) {
   function onStatus(m) {
     const h = m.home; if (!H || !h || !$("#hs-now")) return; const w = h.wake, running = w && w.phase !== "pending" && w.phase !== "ending";
     $("#hs-now").innerHTML = esc(nowText(h) || (h.plan ? `Ambient plan: ${h.plan.name}${h.plan.fading ? " (changing)" : ""}` : "Nothing planned")) + (h.plan && (w || h.sleep || h.nextWake) ? ` <span class="faint">· Ambient: ${esc(h.plan.name)}</span>` : "");
-    $("#hs-dot").style.cssText = w && w.phase !== "pending" ? sunCss(w.progress) : h.sleep ? `background:#3a1a08;box-shadow:0 0 6px #ff7a30` : "";
+    $("#hs-dot").style.cssText = w && w.phase !== "pending" ? sunCss(w.progress) : h.sleep ? `background:#3a1a08;box-shadow:0 0 10px #ff7a30` : "";
     $("#hs-barw").hidden = !(w && w.phase !== "pending") && !h.sleep; $("#hs-bar").style.width = `${Math.round((w && w.phase !== "pending" ? w.progress : h.sleep ? 1 - h.sleep.progress : 0) * 100)}%`;
     $("#hs-cancel").hidden = !h.sleep; $("#hs-go").hidden = !!h.sleep;
     $("#hs-snooze").hidden = !running || !canUse; $("#hs-stop").hidden = !running || !canUse; $("#hs-skip").hidden = !h.nextWake || !canUse;

@@ -11,7 +11,7 @@ export function mount(box, { demo = false } = {}) {
   if (demo) {
     box.outerHTML = panel("Your own music", "Analysed ahead, followed from the first play", "", `<div class="pb stack" id="lib-demo">
       <p class="muted">Installed on your computer or Raspberry Pi, Tempolight can analyse a whole music folder ahead of time. Every song is then followed exactly from its first play: when a music player says which file it plays, and after a few seconds of listening otherwise.</p>
-      <p class="faint" style="font-size:12.5px">The online demo runs in your browser and can't read folders on your disk. Install Tempolight to use your own music.</p></div>`, "span-12");
+      <p class="faint" style="font-size:13px">The online demo runs in your browser and can't read folders on your disk. Install Tempolight to use your own music.</p></div>`, "span-12");
     return;
   }
   box.outerHTML = panel("Your own music", `<span id="lib-sub"></span>`, `<button class="btn sm" id="lib-scan" type="button">Look for new songs</button><button class="btn sm" id="lib-pause" type="button">Pause</button>`, `<div class="pb stack" id="lib">
@@ -21,9 +21,9 @@ export function mount(box, { demo = false } = {}) {
       <span class="help">Type the folder's full path on the computer Tempolight runs on. A web page can't open a folder picker on that computer, so it has to be typed. With Docker, use the folder the music is mounted at (for example /music).</span></div>
     <div id="lib-folders" class="stack"></div>
     <label class="check"><input type="checkbox" id="lib-watch"> Notice new songs in these folders by itself</label>
-    <div id="lib-progress" hidden><div class="progress" style="cursor:default"><div class="fill" id="lib-fill"></div></div><p class="faint" id="lib-ptext" style="font-size:12.5px;margin-top:6px" aria-live="polite"></p></div>
+    <div id="lib-progress" hidden><div class="progress" style="cursor:default"><div class="fill" id="lib-fill"></div></div><p class="faint" id="lib-ptext" style="font-size:13px;margin-top:6px" aria-live="polite"></p></div>
     <div class="tablewrap"><table><thead><tr><th>Song</th><th class="num">Tempo</th><th>Key</th><th>Look</th><th></th></tr></thead><tbody id="lib-songs"><tr><td class="faint" colspan="5">Loading…</td></tr></tbody></table></div>
-    <details id="lib-errbox" hidden><summary id="lib-errsum"></summary><ul id="lib-errs" class="faint" style="font-size:12.5px;margin:8px 0 0;padding-left:18px"></ul></details></div>`, "span-12");
+    <details id="lib-errbox" hidden><summary id="lib-errsum"></summary><ul id="lib-errs" class="faint" style="font-size:13px;margin:8px 0 0;padding-left:18px"></ul></details></div>`, "span-12");
   $("#lib-add").onclick = add; $("#lib-path").onkeydown = e => { if (e.key === "Enter") add(); };
   $("#lib-watch").onchange = e => patch({ watch: e.target.checked }, e.target.checked ? "New songs are noticed by themselves" : "Only when you press Look for new songs");
   $("#lib-scan").onclick = () => act(() => api("POST", "/api/library/scan"), "Looking for new songs…").then(v => { view = { ...view, ...v }; fill(); poll(); }).catch(() => {});
@@ -62,7 +62,7 @@ function fill() {
   $("#lib-sub").textContent = c.analysed ? `${c.analysed} song${c.analysed === 1 ? "" : "s"} ready` : v.folders.length ? "" : "No folder yet";
   $("#lib-watch").checked = v.watch; $("#lib-pause").textContent = v.paused ? "Resume" : "Pause"; $("#lib-pause").hidden = !v.folders.length; $("#lib-scan").hidden = !v.folders.length;
   const ff = $("#lib-ff"); ff.hidden = !v.message; ff.textContent = v.message ? `${v.message}${c.needsFfmpeg ? ` ${c.needsFfmpeg} song${c.needsFfmpeg === 1 ? " is" : "s are"} waiting for it.` : ""}` : "";
-  $("#lib-folders").innerHTML = v.folders.map((f, i) => `<div class="row" style="justify-content:space-between;flex-wrap:nowrap;gap:8px"><span class="mono" style="font-size:12.5px;word-break:break-all">${esc(f.path)}${f.exists ? "" : ' <span class="badge err">not found</span>'}</span><span class="row" style="flex-wrap:nowrap;gap:8px"><span class="faint" style="font-size:12.5px;white-space:nowrap">${f.songs} song${f.songs === 1 ? "" : "s"}</span><button class="btn sm" type="button" data-libdrop="${i}">Remove</button></span></div>`).join("");
+  $("#lib-folders").innerHTML = v.folders.map((f, i) => `<div class="row" style="justify-content:space-between;flex-wrap:nowrap;gap:8px"><span class="mono" style="font-size:13px;word-break:break-all">${esc(f.path)}${f.exists ? "" : ' <span class="badge err">not found</span>'}</span><span class="row" style="flex-wrap:nowrap;gap:8px"><span class="faint" style="font-size:13px;white-space:nowrap">${f.songs} song${f.songs === 1 ? "" : "s"}</span><button class="btn sm" type="button" data-libdrop="${i}">Remove</button></span></div>`).join("");
   $$("[data-libdrop]").forEach(b => b.onclick = () => { const f = v.folders[Number(b.dataset.libdrop)]; if (!confirm(`Stop using ${f.path}? Its songs are taken out of the library (the files stay).`)) return;
     patch({ folders: v.folders.filter((_, k) => k !== Number(b.dataset.libdrop)).map(x => x.path) }, "Folder removed"); });
   // progress: "Analysing 34 of 210 · 1.2 s each"
@@ -74,7 +74,7 @@ function fill() {
   if (v.cap?.full) $("#lib-ptext").textContent = `The library is full (${v.cap.songs} songs). Remove songs or folders to add others.`;
   if (v.songs) {
     const tb = $("#lib-songs"), list = v.songs;
-    tb.innerHTML = list.length ? list.slice(0, 500).map(s => `<tr><td>${esc(s.name)}<br><span class="faint mono" style="font-size:11.5px;word-break:break-all">${esc(s.file)}</span></td><td class="num faint">${s.bpm ? Math.round(s.bpm) : "–"}</td><td class="faint">${esc(s.key || "–")}</td><td class="faint">${esc(s.look?.name || "–")}</td><td style="white-space:nowrap"><a class="btn sm" href="#/timeline/${esc(s.id)}">Show</a> <button class="btn sm" type="button" data-librm="${esc(s.id)}" title="Take this song out of the library (the file stays)">Remove</button></td></tr>`).join("")
+    tb.innerHTML = list.length ? list.slice(0, 500).map(s => `<tr><td>${esc(s.name)}<br><span class="faint mono" style="font-size:12.5px;word-break:break-all">${esc(s.file)}</span></td><td class="num faint">${s.bpm ? Math.round(s.bpm) : "–"}</td><td class="faint">${esc(s.key || "–")}</td><td class="faint">${esc(s.look?.name || "–")}</td><td style="white-space:nowrap"><a class="btn sm" href="#/timeline/${esc(s.id)}">Show</a> <button class="btn sm" type="button" data-librm="${esc(s.id)}" title="Take this song out of the library (the file stays)">Remove</button></td></tr>`).join("")
       + (list.length > 500 ? `<tr><td class="faint" colspan="5">and ${list.length - 500} more</td></tr>` : "")
       : `<tr><td class="faint" colspan="5">${v.folders.length ? (busy ? "The first songs are on their way…" : "No songs found in these folders yet.") : "Add a folder above to start."}</td></tr>`;
     $$("[data-librm]").forEach(b => b.onclick = () => act(() => api("DELETE", `/api/library/songs/${b.dataset.librm}`), "Removed from the library").then(() => load()).catch(() => {}));

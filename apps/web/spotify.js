@@ -27,8 +27,8 @@ export function mount(el, { demo = false } = {}) {
   if (!el) return null;
   if (demo) { el.outerHTML = panel("Sync with Spotify", "Not in the online demo", "", `<div class="pb stack" id="sp-panel"><p class="muted" id="sp-demo">With Tempolight running on your computer or a Raspberry Pi, the lights follow the Spotify track that's playing, on this computer or on your phone or speakers, with its beats, build-ups and drops. Songs are learned the first time they play while Tempolight listens. The online demo runs in your browser and can't reach Spotify: <a href="https://github.com/D4RKGEEK/tempolight#install" target="_blank" rel="noopener">install Tempolight</a> to try it.</p></div>`, "span-12"); return null; }
   el.outerHTML = panel("Sync with Spotify", `<span id="sp-sub"></span>`, `<label class="check"><input type="checkbox" id="sp-on"> Sync with Spotify</label>`, `<div class="pb stack" id="sp-panel">
-    <div class="row" style="flex-wrap:nowrap;gap:12px;align-items:center"><img id="sp-art" alt="" width="56" height="56" style="border-radius:6px;flex:none;object-fit:cover" hidden>
-      <div style="flex:1;min-width:0"><b id="sp-title" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Nothing playing</b><span class="faint" id="sp-where" style="font-size:12.5px"></span></div>
+    <div class="row" style="flex-wrap:nowrap;gap:12px;align-items:center"><img id="sp-art" alt="" width="56" height="56" style="border-radius:12px;flex:none;object-fit:cover;box-shadow:var(--ring)" hidden>
+      <div style="flex:1;min-width:0"><b id="sp-title" style="display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">Nothing playing</b><span class="faint" id="sp-where" style="font-size:13px"></span></div>
       <span class="badge" id="sp-mode">–</span></div>
     <div class="progress" style="cursor:default" id="sp-prog" hidden><div class="fill" id="sp-fill"></div></div><div class="times" id="sp-times" hidden><span id="sp-pos">0:00</span><span id="sp-dur">0:00</span></div>
     <p class="muted" id="sp-why" aria-live="polite"></p>
@@ -40,13 +40,13 @@ export function mount(el, { demo = false } = {}) {
       <label class="check" title="The browser takes 2 or 3 colours from the album cover; they're used while the palette is Automatic"><input type="checkbox" id="sp-cover"> Album cover colours <span id="sp-sw"></span></label>
     </div>
     <details id="sp-cloudbox"><summary>Shared beat maps (optional)</summary><div class="stack" style="margin-top:8px">
-      <p class="faint" style="font-size:12.5px">A small service (a Cloudflare Worker you deploy, free) where Tempolight installs share the beat maps they learned: a song someone else learned plays with its full map the first time here. Maps hold only the Spotify track ID, beats, drums, song parts and loudness; installs are anonymous. A map is used once two installs agree on it.</p>
+      <p class="faint" style="font-size:13px">A small service (a Cloudflare Worker you deploy, free) where Tempolight installs share the beat maps they learned: a song someone else learned plays with its full map the first time here. Maps hold only the Spotify track ID, beats, drums, song parts and loudness; installs are anonymous. A map is used once two installs agree on it.</p>
       <div class="field"><label for="sp-url">Service address</label><div class="row" style="flex-wrap:nowrap"><input id="sp-url" class="mono" placeholder="https://tempolight-beatmaps.example.workers.dev" autocomplete="off"><button class="btn sm" id="sp-urlsave" type="button">Save</button></div></div>
       <label class="check"><input type="checkbox" id="sp-use"> Use shared beat maps</label>
       <label class="check"><input type="checkbox" id="sp-share"> Share the songs I learn</label>
-      <span class="faint" id="sp-cloudst" style="font-size:12.5px"></span>
+      <span class="faint" id="sp-cloudst" style="font-size:13px"></span>
     </div></details>
-    <details id="sp-help"><summary>Set up Spotify</summary><ol class="faint" style="font-size:12.5px;margin:8px 0 0 18px;line-height:1.6">
+    <details id="sp-help"><summary>Set up Spotify</summary><ol class="faint" style="font-size:13px;margin:8px 0 0 18px;line-height:1.6">
       <li>Spotify on <b>this computer</b> works with no set-up (the app must be open; macOS asks once to allow it).</li>
       <li>For Spotify on your phone or speakers: open <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>, create an app (Web API), and add this redirect URI: <span class="mono" id="sp-redir" style="word-break:break-all"></span></li>
       <li>Paste the app's Client ID in <b>Now playing on this computer → Spotify on other devices</b> below, then press Connect Spotify. <button class="btn sm" id="sp-goconnect" type="button">Go to Connect Spotify</button></li>
