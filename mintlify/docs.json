@@ -41,7 +41,7 @@
     "primary": {
       "type": "button",
       "label": "Try the demo",
-      "href": "https://tempolight.pages.dev/demo/"
+      "href": "https://tempolight.pages.dev/demo//demo/"
     }
   },
   "navigation": {
@@ -55,7 +55,7 @@
         {
           "anchor": "Online demo",
           "icon": "monitor-play",
-          "href": "https://tempolight.pages.dev/demo/"
+          "href": "https://tempolight.pages.dev/demo//demo/"
         },
         {
           "anchor": "Releases",

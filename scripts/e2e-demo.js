@@ -32,7 +32,7 @@ const go = async h => { await page.evaluate(x => { location.hash = "#/" + x; }, 
 const text = sel => page.textContent(sel);
 
 await step("opens in demo mode and finds the pretend controllers by itself", async () => {
-  await page.goto(base + "/"); await page.waitForSelector("#page .panel");
+  await page.goto(base + "/demo/"); await page.waitForSelector("#page .panel");
   ok(await page.isVisible("#demo-bar"), "no demo banner");
   await until(async () => (await page.$$eval("#h-devs tr", r => r.length)) === 3, 8000, "pretend controllers not added");
   await until(async () => (await text("#h-leds")).includes("684"), 5000, "room not laid out (" + await text("#h-leds") + ")");
@@ -87,15 +87,15 @@ await step("PIN lock works in the demo", async () => {
   await page.fill("#pin", "1234"); await page.click("#unlock"); await page.waitForSelector("#d-add"); await go("settings"); await page.click("#s-unlockset"); await sleep(300);
 });
 await step("phones as lights in the demo (another tab of the same browser)", async () => {
-  await page.goto(base + "/#/live"); await page.waitForSelector("#ph-qr svg");
-  const phone = await ctx.newPage(); await phone.goto(base + "/phone"); await phone.click("#go");
+  await page.goto(base + "/demo/#/live"); await page.waitForSelector("#ph-qr svg");
+  const phone = await ctx.newPage(); await phone.goto(base + "/demo/phone"); await phone.click("#go");
   await until(async () => (await phone.evaluate(() => getComputedStyle(document.getElementById("light")).backgroundColor)) !== "rgb(0, 0, 0)", 6000, "demo phone stays black");
   await until(() => page.textContent("#ph-n").then(t => /1 phone/.test(t)), 4000, "count not shown"); await phone.close();
 });
 await step("installable app: manifest, icons and service worker", async () => {
-  const man = await (await fetch(base + "/manifest.webmanifest")).json(); ok(man.display === "standalone" && man.icons.length >= 3, "manifest");
+  const man = await (await fetch(base + "/demo/manifest.webmanifest")).json(); ok(man.display === "standalone" && man.icons.length >= 3, "manifest");
   for (const i of man.icons) ok((await fetch(base + i.src)).ok, "missing icon " + i.src);
-  ok((await fetch(base + "/icons/apple-touch-icon.png")).ok, "no apple-touch-icon");
+  ok((await fetch(base + "/demo/icons/apple-touch-icon.png")).ok, "no apple-touch-icon");
   await until(() => page.evaluate(async () => !!(await navigator.serviceWorker.getRegistration())), 5000, "service worker not registered");
 });
 await step("works offline once installed", async () => {
@@ -111,11 +111,11 @@ await step("the docs at /docs/ open as the docs, not the app (the service worker
     await page.goto(base + p); await page.waitForSelector(".article", { timeout: 8000 });
     ok(!(await page.$("#page")), `${p} opened the app`); ok(/docs|documentation/i.test(await page.title()), `${p}: title ${await page.title()}`);
   }
-  await page.goto(base + "/"); await page.waitForSelector("#page .panel");
+  await page.goto(base + "/demo/"); await page.waitForSelector("#page .panel");
 });
 await step("iPhone size: no sideways scrolling", async () => {
   const phone = await browser.newContext({ ...require("playwright").devices["iPhone 13"] }); const p = await phone.newPage();
-  await p.goto(base + "/"); await p.waitForSelector("#page .panel");
+  await p.goto(base + "/demo/"); await p.waitForSelector("#page .panel");
   for (const h of ["home", "music", "live", "room", "devices"]) { await p.evaluate(x => { location.hash = "#/" + x; }, h); await sleep(400); const w = await p.evaluate(() => document.documentElement.scrollWidth); ok(w <= 391, `${h} is ${w}px wide`); }
   ok(!(await p.isVisible("#m-system")) || true, ""); await p.screenshot({ path: process.env.SHOT || "/tmp/demo-iphone.png" }); await phone.close();
 });
@@ -128,7 +128,7 @@ await step("home & sleep: a sunrise and the sleep timer run in the browser", asy
   await page.click("#hs-cancel"); await page.check("#p-on"); await sleep(400); await go("home"); await page.waitForSelector("#hs-strip");
 });
 await step("setup wizard in the demo: run it again from Settings", async () => {
-  await page.setViewportSize({ width: 390, height: 844 }); await page.goto(base + "/#/settings"); await page.waitForSelector("#s-wizard"); await page.click("#s-wizard"); await page.waitForSelector("#wizard");
+  await page.setViewportSize({ width: 390, height: 844 }); await page.goto(base + "/demo/#/settings"); await page.waitForSelector("#s-wizard"); await page.click("#s-wizard"); await page.waitForSelector("#wizard");
   await until(async () => /Found 3/.test(await text("#wz-scanmsg")), 6000, "the pretend controllers weren't found"); ok(/3 lights ready/.test(await text("#wz-have")), "added lights not shown");
   await page.click("#wz-next"); await page.waitForSelector("[data-wzp] canvas"); await page.click('[data-wzp="club"]'); await sleep(400);
   await page.click("#wz-skip"); await page.click("#wz-skip"); await page.click("#wz-next");

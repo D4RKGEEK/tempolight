@@ -124,7 +124,7 @@ export function buildDocs({ out = path.join(ROOT, "dist/site/docs"), quiet = fal
     const siteFoot = `<footer class="site-foot"><div class="site-foot-inner"><div class="site-foot-brand">${logo("logo-foot", false)}<p>Music-reactive lighting that understands the song. Free and open source under the MIT licence.</p></div>
       <div class="site-foot-cols"><div><h2>Docs</h2>${tabs.map(t => `<a href="${firstOf(t)}">${esc(t.tab === "Start" ? "Get started" : t.tab)}</a>`).join("")}${claude ? `<a href="${claude.url}">${esc(claude.sidebarTitle)}</a>` : ""}</div>
       <div><h2>Build</h2><a href="${API_BASE}/">API reference</a>${pages.has("websocket") ? `<a href="${url("websocket")}">WebSocket API</a>` : ""}${pages.has("architecture") ? `<a href="${url("architecture")}">Architecture</a>` : ""}</div>
-      <div><h2>Project</h2><a href="${SITE}/">Live demo</a><a href="${github}" target="_blank" rel="noopener">GitHub</a><a href="${REPO}/releases" target="_blank" rel="noopener">Releases</a><a href="${SITE}/about/">About</a></div></div></div>
+      <div><h2>Project</h2><a href="${SITE}/demo/">Live demo</a><a href="${github}" target="_blank" rel="noopener">GitHub</a><a href="${REPO}/releases" target="_blank" rel="noopener">Releases</a><a href="${SITE}/">Home</a></div></div></div>
       <p class="site-foot-note">These docs are built from <a href="${REPO}/tree/main/docs" target="_blank" rel="noopener">docs/</a> in the repository.</p></footer>`;
     const ogImage = `${SITE}${DOCS}/images/home-dark.png`;
     return `<!doctype html>

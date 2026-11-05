@@ -514,13 +514,13 @@ function docsJson(pageSlugs, warnings) {
     styling: { eyebrows: "section", codeblocks: "system", latex: false },
     navbar: {
       links: [{ type: "github", href: REPO }],
-      primary: { type: "button", label: "Try the demo", href: DEMO },
+      primary: { type: "button", label: "Try the demo", href: `${DEMO}/demo/` },
     },
     navigation: {
       global: {
         anchors: [
           { anchor: "GitHub", icon: "github", href: REPO },
-          { anchor: "Online demo", icon: "monitor-play", href: DEMO },
+          { anchor: "Online demo", icon: "monitor-play", href: `${DEMO}/demo/` },
           { anchor: "Releases", icon: "tag", href: `${REPO}/releases` },
         ],
       },
