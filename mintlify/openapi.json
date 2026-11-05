@@ -4390,6 +4390,7 @@
                   "style": "auto",
                   "palette": "auto",
                   "everyBeats": 8,
+                  "variety": "one",
                   "speed": 1,
                   "params": {},
                   "layer": null
@@ -5645,6 +5646,7 @@
                   "style": "auto",
                   "palette": "auto",
                   "everyBeats": 8,
+                  "variety": "one",
                   "speed": 1,
                   "params": {},
                   "layer": null
@@ -6171,6 +6173,7 @@
                   "style": "auto",
                   "palette": "auto",
                   "everyBeats": 8,
+                  "variety": "one",
                   "speed": 1,
                   "params": {},
                   "layer": null
@@ -6485,6 +6488,184 @@
         },
         "security": [],
         "x-tempolight-area": "open",
+        "x-tempolight-source": "packages/server/src/core.js"
+      }
+    },
+    "/api/song/look/keep": {
+      "post": {
+        "tags": [
+          "Music"
+        ],
+        "summary": "Keep the look",
+        "description": "The song keeps its look: it isn't picked again when the picker improves, and the effect counts a little more for other songs. `keep: false` lets it change again.\n\n**Access:** guest area `effects`. Open unless a PIN lock is set and guests aren't allowed this area (`settings.guest.effects`); then it needs an unlock token.",
+        "operationId": "postSongLookKeep",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookRequest"
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Look"
+                },
+                "example": {
+                  "main": "shock",
+                  "mainName": "Kick Shockwave",
+                  "drop": null,
+                  "build": "fill",
+                  "calm": "northern",
+                  "palette": "sunset",
+                  "params": {
+                    "intensity": 1.1
+                  },
+                  "why": [
+                    "fast four-on-the-floor",
+                    "high energy",
+                    "big drops"
+                  ],
+                  "label": "Kick Shockwave · Sunset (fast four-on-the-floor, high energy)",
+                  "locked": false,
+                  "rejected": [],
+                  "provisional": false,
+                  "variety": "one",
+                  "song": "m9x2q1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Locked, or not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Settings are locked. Unlock with the PIN in Settings."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "That song isn't remembered"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "token": []
+          }
+        ],
+        "x-tempolight-area": "guest: effects",
+        "x-tempolight-source": "packages/server/src/core.js"
+      }
+    },
+    "/api/song/look/next": {
+      "post": {
+        "tags": [
+          "Music"
+        ],
+        "summary": "Not this one: the next look",
+        "description": "Picks the next best look for the song playing (or the remembered song `id`). The look turned down goes into the song's `rejected` list and won't come back for it, and counts a little against that effect for other songs. While listening live to a song Tempolight doesn't know, it picks again from what it hears.\n\n**Access:** guest area `effects`. Open unless a PIN lock is set and guests aren't allowed this area (`settings.guest.effects`); then it needs an unlock token.",
+        "operationId": "postSongLookNext",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LookRequest"
+              },
+              "example": {}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Look"
+                },
+                "example": {
+                  "main": "shock",
+                  "mainName": "Kick Shockwave",
+                  "drop": null,
+                  "build": "fill",
+                  "calm": "northern",
+                  "palette": "sunset",
+                  "params": {
+                    "intensity": 1.1
+                  },
+                  "why": [
+                    "fast four-on-the-floor",
+                    "high energy",
+                    "big drops"
+                  ],
+                  "label": "Kick Shockwave · Sunset (fast four-on-the-floor, high energy)",
+                  "locked": false,
+                  "rejected": [],
+                  "provisional": false,
+                  "variety": "one",
+                  "song": "m9x2q1"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Locked, or not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Settings are locked. Unlock with the PIN in Settings."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Nothing is playing with a look (automatic mode, variety one look or song parts)"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {},
+          {
+            "token": []
+          }
+        ],
+        "x-tempolight-area": "guest: effects",
         "x-tempolight-source": "packages/server/src/core.js"
       }
     },
@@ -8315,9 +8496,18 @@
           },
           "everyBeats": {
             "type": "integer",
-            "description": "Automatic mode changes effect at most every this many beats, 1 to 64.",
+            "description": "Automatic mode changes effect at most every this many beats, 1 to 64 (variety `show`).",
             "minimum": 1,
             "maximum": 64
+          },
+          "variety": {
+            "type": "string",
+            "enum": [
+              "one",
+              "parts",
+              "show"
+            ],
+            "description": "Automatic mode: `one` = one look per song (the default), `parts` = one effect each for calm parts, build-ups and drops, `show` = effects change with the song."
           },
           "speed": {
             "type": "number",
@@ -8350,6 +8540,7 @@
           "style": "auto",
           "palette": "auto",
           "everyBeats": 8,
+          "variety": "one",
           "speed": 1,
           "params": {},
           "layer": null
@@ -8382,6 +8573,14 @@
             "minimum": 1,
             "maximum": 64
           },
+          "variety": {
+            "type": "string",
+            "enum": [
+              "one",
+              "parts",
+              "show"
+            ]
+          },
           "speed": {
             "type": "number",
             "minimum": 0.1,
@@ -8399,6 +8598,136 @@
           }
         },
         "additionalProperties": false
+      },
+      "Look": {
+        "type": "object",
+        "description": "The song's look: one well-chosen effect (and palette) for the whole song.",
+        "properties": {
+          "main": {
+            "type": "string",
+            "description": "The effect for the whole song."
+          },
+          "mainName": {
+            "type": "string"
+          },
+          "drop": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "An effect of its own for the drops (variety `one`: only when the drops really stand out)."
+          },
+          "build": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The build-up effect (variety `parts`)."
+          },
+          "calm": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The calm parts' effect (variety `parts`)."
+          },
+          "palette": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "A palette id; it steps on phrase lines (a chorus that comes back gets the same colour)."
+          },
+          "params": {
+            "type": "object",
+            "description": "The look's own effect settings: speed follows the tempo (effects that don't need the beat), a little more intensity for energetic songs.",
+            "properties": {
+              "speed": {
+                "type": "number"
+              },
+              "intensity": {
+                "type": "number"
+              }
+            }
+          },
+          "why": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Short reasons, most important first."
+          },
+          "label": {
+            "type": "string",
+            "description": "Effect · Palette (the first two reasons)."
+          },
+          "locked": {
+            "type": "boolean",
+            "description": "Kept by hand (Keep)."
+          },
+          "rejected": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Effects turned down for this song (Not this one)."
+          },
+          "provisional": {
+            "type": "boolean",
+            "description": "Picked while listening live to a song Tempolight doesn't know."
+          },
+          "variety": {
+            "type": "string",
+            "enum": [
+              "one",
+              "parts",
+              "show"
+            ]
+          },
+          "song": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The remembered song's id."
+          }
+        },
+        "example": {
+          "main": "shock",
+          "mainName": "Kick Shockwave",
+          "drop": null,
+          "build": "fill",
+          "calm": "northern",
+          "palette": "sunset",
+          "params": {
+            "intensity": 1.1
+          },
+          "why": [
+            "fast four-on-the-floor",
+            "high energy",
+            "big drops"
+          ],
+          "label": "Kick Shockwave · Sunset (fast four-on-the-floor, high energy)",
+          "locked": false,
+          "rejected": [],
+          "provisional": false,
+          "variety": "one",
+          "song": "m9x2q1"
+        }
+      },
+      "LookRequest": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "A remembered song's id (`m…`); default: the song playing."
+          },
+          "keep": {
+            "type": "boolean",
+            "default": true
+          }
+        },
+        "example": {}
       },
       "Effect": {
         "type": "object",
@@ -9920,6 +10249,23 @@
           "cover": {
             "type": "integer",
             "description": "Percent learned, for a partly learned song."
+          },
+          "look": {
+            "type": "object",
+            "properties": {
+              "main": {
+                "type": "string"
+              },
+              "palette": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "locked": {
+                "type": "boolean"
+              }
+            }
           }
         },
         "example": {
@@ -11507,6 +11853,16 @@
                 "type": "number"
               }
             }
+          },
+          "look": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Look"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "nowPlaying": {
             "type": [

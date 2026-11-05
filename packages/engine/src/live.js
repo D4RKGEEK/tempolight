@@ -327,7 +327,8 @@ export class LiveAnalyser {
       state: this.state, buildP: this.state === "build" ? Math.min(1, (t - this.buildStart) / 7) : 0, dropT: this.dropT, nextDrop: this.nextDrop(t), kickStrength: this.kickS,
       kick, snare: this.snares.length ? this.snares[this.snares.length - 1] : -9, hat: this.hats.length ? this.hats[this.hats.length - 1] : -9,
       pulses, snares, pulseN: this.pulseN, vocal: this.vocal, quietFor: this.state === "silent" ? t - this.stateT : 0, live: true,
-      key: this.keyEst ? this.keyEst.key : null, mode: this.keyEst ? this.keyEst.mode : null, keyConf: this.keyEst ? this.keyEst.confidence : 0, mood: this.mood };
+      key: this.keyEst ? this.keyEst.key : null, mode: this.keyEst ? this.keyEst.mode : null, keyConf: this.keyEst ? this.keyEst.confidence : 0, mood: this.mood,
+      styleSure: !!this.style, features: this.features || null }; // (what the style was chosen from: kickFrac, dyn, ...; for the director's live look)
     if (o.predict && g.has && t - kick < 2 && this.conf > 0.3) { V.kick = g.beatT; V.pulses = [g.beatT, g.beatT - g.P]; V.pulseN = g.idx; }
     return V;
   }

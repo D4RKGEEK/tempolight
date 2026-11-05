@@ -98,6 +98,19 @@ await step("music: the song is remembered in song memory", async () => {
   await until(() => page.textContent("#m-songs").then(t => /BPM/.test(t)), 6000, "song not in the memory list");
   ok(app.store.data.songs.length === 1, "not stored");
 });
+await step("music: the song's look is shown; Not this one picks another, Keep keeps it; Effects page sets the variety", async () => {
+  await go("music"); const lk0 = await until(() => status().look, 6000, "no look in the status");
+  const shown = await until(() => page.textContent("#m-look").then(t => t.startsWith(lk0.mainName) && t), 4000, "the look isn't on the Music page");
+  ok(/ · [A-Z]\w+ \(.+\)/.test(shown), `look label "${shown}"`); ok(status().effect === lk0.main || [lk0.drop, lk0.build, lk0.calm].includes(status().effect), "the look isn't playing");
+  await shot("04a-look");
+  await page.click("#m-looknext"); const lk1 = await until(() => status().look?.main !== lk0.main && status().look, 4000, "Not this one didn't change the look");
+  ok(app.store.data.songs[0].look.rejected.includes(lk0.main), "the rejected effect isn't remembered with the song");
+  await until(() => page.textContent("#m-look").then(t => t.startsWith(lk1.mainName)), 4000, "the new look isn't shown");
+  await page.click("#m-lookkeep"); await until(() => app.store.data.songs[0].look.locked === true, 3000, "Keep not saved");
+  await until(() => page.textContent("#m-lookkeep").then(t => /Kept/.test(t)), 3000, "Keep isn't shown as kept");
+  await go("effects"); ok(await page.inputValue("#e-var") === "one", "variety isn't One look per song");
+  await page.selectOption("#e-var", "show"); await until(() => app.store.data.show.variety === "show", 3000, "variety not saved"); // (the show editor steps below change blocks)
+});
 await step("music: Sync with Spotify panel: status, modes, settings, learned-song badge", async () => {
   await go("music"); await page.waitForSelector("#sp-panel #sp-mode"); ok(await page.isChecked("#sp-on"), "Sync with Spotify isn't on by default");
   await until(() => page.textContent("#sp-mode").then(t => t === "Nothing playing"), 4000, "no idle mode shown");

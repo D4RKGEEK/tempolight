@@ -5,6 +5,7 @@ import { showAt, chooseStep, swapBars, varyBars } from "./show.js";
 import { buildSignals, kickHit } from "./signals.js";
 import { rangeAt, brightAt, cuesAt, createCueFirer, blockPalette } from "./timeline.js";
 import { moodPalette } from "./tonal.js";
+import { pickLook, characterOf, phraseStep, rating } from "./looks.js";
 
 const G = (x, w) => Math.exp(-(x / w) * (x / w));
 
@@ -42,6 +43,11 @@ export function createDirector(layout, fx) {
     // variations: drops change look every 2 bars (colour flip and mirror) between effect changes;
     // night: night mode (a gentler pump; the runtime also turns the drop flash off and safe mode on)
     punch: 0.7, dynamics: 0.8, variations: true, night: false,
+    // variety (automatic mode): "show" = effects change with the song parts and on phrase lines (from the rated pools);
+    // "one" = one look for the whole song (look.drop only at drops, when the look has one); "parts" = the look's
+    // effect for calm parts, build-ups and drops. look: the song's look (looks.js pickLook), null = the director
+    // picks one itself from what it hears (live listening). nudge: effect id -> -1..1, a soft preference for looks
+    variety: "show", look: null, nudge: {}, lookExclude: [],
   };
   const cueFirer = createCueFirer();
   const ZBUF = new Float32Array(N * 3);
@@ -61,8 +67,17 @@ export function createDirector(layout, fx) {
     const S = [.213 + .787 * sat, .715 - .715 * sat, .072 - .072 * sat, .213 - .213 * sat, .715 + .285 * sat, .072 - .072 * sat, .213 - .213 * sat, .715 - .715 * sat, .072 + .928 * sat];
     const M = new Array(9); for (let r = 0; r < 3; r++) for (let k = 0; k < 3; k++) M[r * 3 + k] = S[r * 3] * H[k] + S[r * 3 + 1] * H[3 + k] + S[r * 3 + 2] * H[6 + k]; return M;
   }
+  // a look's own settings for its effects (looks.js: speed follows the tempo for effects that don't need the beat, a
+  // little more intensity for energetic songs), on top of the effect's settings
+  function paramsOf(id) {
+    const p = settings.params[id], L = lookOn() ? activeLook() : null, lp = L && L.params && (id === L.main || id === L.drop || id === L.build || id === L.calm) ? L.params : null;
+    if (!lp) return p;
+    const sp = lp.speed && !(rating(id) || {}).needsBeat ? lp.speed : 1, k = lp.intensity || 1;
+    if (sp === 1 && k === 1) return p;
+    return { ...(p || {}), speed: (p?.speed ?? 1) * sp, intensity: (p?.intensity ?? 1) * k };
+  }
   function renderFx(id, S, out) {
-    const p = settings.params[id];
+    const p = paramsOf(id);
     if (!p) { fx.render(id, S, out); return out; }
     fx.render(id, p.speed && p.speed !== 1 ? { ...S, t: S.t * p.speed } : S, out);
     const gain = p.intensity ?? 1, hue = p.hue || 0, sat = p.saturation ?? 1;
@@ -96,7 +111,59 @@ export function createDirector(layout, fx) {
 
   const style = V => fx.styles[settings.style !== "auto" ? settings.style : (V && V.style) || "party"] || fx.styles.party;
   const basePalette = () => settings.palette === "auto" || settings.palette === "mood" ? fx.palettes.auto[st.palIdx % fx.palettes.auto.length] : (fx.palettes[settings.palette] || fx.palettes.neon);
-  const palette = () => st.moodPal && (settings.palette === "mood" || (settings.palette === "auto" && settings.moodColours !== false)) ? st.moodPal : basePalette();
+  const palette = () => st.lookPal || (st.moodPal && (settings.palette === "mood" || (settings.palette === "auto" && settings.moodColours !== false)) ? st.moodPal : basePalette());
+  // ---- looks (looks.js): one effect for the song, its palette stepping on phrase lines
+  const lookOn = () => settings.mode === "auto" && (settings.variety === "one" || settings.variety === "parts") && !!activeLook();
+  const activeLook = () => settings.look || st.liveLook || null;
+  const VAR = new Map();
+  function variantPal(base, k) { // step 0: the palette; 1, 2: turned 40° round the colour wheel either way; 3: its colours swapped
+    const key = base.join() + k; let v = VAR.get(key); if (v) return v;
+    if (k === 3) v = [base[1].slice(), base[0].slice()];
+    else if (k === 0) v = base.map(c => c.slice());
+    else { const M = colourMatrix(k === 1 ? 40 : -40, 1); v = base.map(([r, g, b]) => [M[0] * r + M[1] * g + M[2] * b, M[3] * r + M[4] * g + M[5] * b, M[6] * r + M[7] * g + M[8] * b].map(x => Math.max(0, Math.min(1, x)))); }
+    if (VAR.size > 64) VAR.clear(); VAR.set(key, v); return v;
+  }
+  function updateLookPal(V, wall) {
+    const L = activeLook(), base = L && fx.palettes[L.palette];
+    if (!V || !lookOn() || settings.palette !== "auto" || !base) { st.lookPal = null; st.lookPalWall = wall; return; }
+    const step = ((phraseStep(V) % 4) + 4) % 4, target = variantPal(base, step), dt = Math.max(0, Math.min(0.5, wall - (st.lookPalWall ?? wall))); st.lookPalWall = wall;
+    if (!st.lookPal || st.lookPalBase !== base) { st.lookPal = target.map(c => c.slice()); st.lookPalBase = base; return; }
+    const k = 1 - Math.exp(-dt / 0.3); for (let c = 0; c < 2; c++) for (let i = 0; i < 3; i++) st.lookPal[c][i] += (target[c][i] - st.lookPal[c][i]) * k; // a quick step, not a flicker
+  }
+  // live listening with no look from the song: a look of its own from what it hears, kept for the song. A first one
+  // after 2 s of music (from the tempo and the kicks so far), the one to keep at the first drop or after 20 s of music
+  // (the first one wins a close call, so it rarely changes), and a new one for a new song (4 s of silence, or nothing
+  // playing for 3 s). settings.lookExclude: effects turned down for this song ("Not this one").
+  function liveLook(V, wall) {
+    if (settings.look || settings.mode !== "auto" || (settings.variety !== "one" && settings.variety !== "parts")) return;
+    const ll = st.ll, dt = ll ? Math.max(0, Math.min(0.1, wall - ll.wall)) : 0;
+    if (!V) { if (ll) { ll.idle += dt; ll.wall = wall; if (ll.idle > 3) resetLook(); } return; }
+    if (V.state === "silent") { if (ll) { ll.wall = wall; if ((V.quietFor ?? 0) > 4) resetLook(); } return; }
+    const L = ll || (st.ll = { wall, idle: 0, music: 0, bpm: [], ks: [], hits: 0, bars: 0, drumBars: 0, drumBeats: 0, beats: 0, lastKick: V.kick, lastBeat: V.g && V.g.idx, beatT: null, drops: 0, dropT: V.dropT, voc: 0, n: 0, final: false });
+    L.wall = wall; L.idle = 0; L.music += dt; L.n++;
+    if (V.bpm > 0 && L.n % 15 === 0) L.bpm.push(V.bpm);
+    // the kick where the drums play (as songCharacter() counts it): beats with a kick, in bars with kicks on 2 beats or more
+    if (V.kick !== L.lastKick && V.kick > -9) { L.lastKick = V.kick; L.ks.push(V.kick); if (L.ks.length > 16) L.ks.shift(); }
+    if (V.g && V.g.has && V.g.idx !== L.lastBeat) {
+      if (L.beatT != null) { L.beats++; if (L.ks.some(k => Math.abs(k - L.beatT) < 0.08)) L.hits++; }
+      if (V.g.beatInBar === 0) { L.bars++; if (L.hits >= 2) { L.drumBars++; L.drumBeats += Math.min(4, L.hits); } L.hits = 0; }
+      L.lastBeat = V.g.idx; L.beatT = V.g.beatT; }
+    if (V.state === "drop" && V.dropT > -9 && V.dropT !== L.dropT) { L.dropT = V.dropT; L.drops++; }
+    L.voc += ((V.vocal ?? 0) - L.voc) * 0.01;
+    if (L.music < 2 || L.final || (st.liveLook && !(L.drops >= 1 || L.music >= 20))) return;
+    const bpms = L.bpm.length ? [...L.bpm].sort((a, b) => a - b) : [V.bpm || 120], bpm = bpms[bpms.length >> 1], f = V.features || {};
+    // (a drop heard live is a loud stretch with kicks: at the first one, the kick counts as steady even before its bars are in)
+    let kickFrac = L.drumBars ? L.drumBeats / (4 * L.drumBars) * Math.min(1, 0.4 + L.drumBars / Math.max(1, L.bars)) : L.bars >= 2 ? 0 : 0.5;
+    if (L.drops >= 1) kickFrac = Math.max(kickFrac, 0.7);
+    // the style: a drop with kicks at 110 BPM or more is party (as the analyser decides, a little sooner); else the
+    // analyser's once it is sure, and before that a guess from the kicks
+    const style = L.drops >= 1 && bpm >= 110 ? "party" : V.styleSure ? V.style : kickFrac > 0.6 ? (bpm >= 110 ? "party" : "hiphop") : kickFrac < 0.2 ? "chill" : "poprock";
+    const c = characterOf({ bpm, style, kickFrac, drumless: L.bars >= 3 && !L.drumBars, drops: L.drops, dyn: f.dyn, vocal: L.voc, mood: V.mood, mode: V.mode });
+    const was = st.liveLook, nudge = was ? { ...settings.nudge, [was.main]: Math.min(1, (settings.nudge[was.main] || 0) + 0.6) } : settings.nudge;
+    const look = pickLook(c, { prefs: settings.prefs, nudge, exclude: settings.lookExclude, available: ids, seed: `${Math.round(bpm / 2)}:${style}` });
+    if (look) { look.provisional = true; st.liveLook = look; } L.final = !!was;
+  }
+  function resetLook() { st.ll = null; st.liveLook = null; if (settings.lookExclude.length) settings.lookExclude = []; }
   // mood colours: the music's valence and energy pick two colours (warm for happy, deep blue for sad, red and magenta
   // for tense, soft teal for calm and major); they ease over ~2.5 s, so a change of mood (or effect) crossfades
   function updateMood(V, wall) {
@@ -121,12 +188,15 @@ export function createDirector(layout, fx) {
     // a show timeline for this song: play it (an effect banned since the show was made is skipped)
     if (settings.plan && settings.plan.length) { const b = showAt(settings.plan, t);
       if (b && ids.has(b.effect) && settings.prefs[b.effect] !== -1) {
-        st.hot = b.part === "drop";
+        const lk = lookOn(); st.hot = lk ? V.state === "drop" : b.part === "drop"; // (a look's block can span the whole song)
+        if (lk && V.state === "drop" && V.dropT > -9 && V.dropT !== st.dropT && t - V.dropT >= -0.05) { st.dropT = V.dropT; st.switchBar = barOf(g, t); } // a drop restarts its variations
         if (st.cur !== b.effect) { const P = g.has ? g.P : 0.5, hard = b.part === "drop" && V.dropT > -9 && t - V.dropT >= -0.05 && t - V.dropT < 2 * P;
           st.prev = st.cur; st.cur = b.effect; st.xfadeT = hard ? -99 : t; st.palIdx++; st.switchBar = barOf(g, t); }
         return; } }
+    // a look, but none yet (live listening, the first seconds of a song): the effect showing stays until there is one
+    if ((settings.variety === "one" || settings.variety === "parts") && !activeLook()) return;
     // the automatic choice (show.js, the same as a show's): song part → pool, drops cut at once, the rest on phrase lines
-    const was = st.cur, d = chooseStep(st, fx, style(V), { prefs: settings.prefs, everyBeats: settings.everyBeats }, t, V);
+    const was = st.cur, d = chooseStep(st, fx, style(V), { prefs: settings.prefs, everyBeats: settings.everyBeats, variety: settings.variety, look: lookOn() ? activeLook() : null }, t, V);
     if (d) { st.prev = was; st.xfadeT = d.hard ? -99 : t; st.palIdx++; }
   }
 
@@ -216,7 +286,7 @@ export function createDirector(layout, fx) {
   function frame(V, t, extra = {}, wall = t) {
     COL.fill(0);
     if (st.overlay.freeze) { COL.set(PREV); overlays(wall); return COL; }
-    updateMood(V, wall);
+    updateMood(V, wall); liveLook(V, wall); updateLookPal(V, wall); st.lastV = V;
     if (!V) {
       if (settings.mode !== "auto" && ids.has(settings.effect)) { renderFx(settings.effect, Object.assign(idleSignals(t * settings.speed, palette(), settings.palette !== "auto"), { text: extra.text || "", screen: extra.screen || null }), COL); st.cur = settings.effect; st.showing = st.cur; }
       else { renderAmbient(t, COL); st.showing = settings.ambient; }
@@ -242,13 +312,15 @@ export function createDirector(layout, fx) {
       if (e > 0) {
         const want = V.state === "silent" ? (st.tgt ?? contour(V)) : contour(V), justDropped = V.state === "drop" && t - V.dropT >= 0 && t - V.dropT < 0.1;
         st.tgt = st.tgt == null || justDropped ? want : st.tgt + (want - st.tgt) * (1 - Math.exp(-dt / (want > st.tgt ? 0.6 : 0.4)));
-        const p = settings.params[st.cur], raw = seen(COL) / ((p && p.intensity) || 1);
+        const p = paramsOf(st.cur), raw = seen(COL) / ((p && p.intensity) || 1);
         if (!fading && V.state !== "silent" && dt > 0) { const L0 = st.fxLum[st.cur] ?? (fx.lum && fx.lum[st.cur]) ?? raw; st.fxLum[st.cur] = L0 + (raw - L0) * (1 - Math.exp(-dt / 6)); }
         const k = gain = gainOf(st.cur, e); if (k !== 1) for (let i = 0; i < COL.length; i++) COL[i] *= k;
         if (!fading && V.state !== "silent" && dt > 0 && raw > 0.003) { // learn how far the roll-off keeps this effect from its aim
           const post = seen(COL), c = st.fxCorr[st.cur] ?? 1, r = lin(aimOf(st.cur, e)) / lin(post);
           st.fxCorr[st.cur] = Math.max(0.3, Math.min(3, c * Math.exp(Math.log(Math.max(0.5, Math.min(2, r))) * (1 - Math.exp(-dt / 2))))); }
       }
+      // a look plays one effect through the song: in a build-up it rises from inside, instead of a new effect
+      if (lookOn() && V.state === "build") { const k = 0.8 + 0.45 * Math.max(0, Math.min(1, V.buildP || 0)); for (let i = 0; i < COL.length; i++) COL[i] *= k; }
       if (fading) {
         const k = Math.max(0, (t - st.xfadeT) / ST.xfade), gp = gainOf(st.prev, e); PREV.set(COL); renderFx(st.prev, S, COL);
         for (let i = 0; i < COL.length; i++) COL[i] = PREV[i] * k + COL[i] * gp * (1 - k);
@@ -299,6 +371,12 @@ export function createDirector(layout, fx) {
   return {
     frame, settings, state: st,
     get current() { return st.cur; }, get showing() { return st.showing || st.cur; }, get style() { return st.styleName; },
+    /** The look playing (the song's, or the one picked live; provisional: true), or null (variety "show", manual mode). */
+    get look() { return lookOn() ? activeLook() : null; },
+    /** Forget the look picked live (a new song). */
+    resetLook,
+    /** "Not this one" for the look picked live: the next best, without `id` (and what settings.lookExclude has). */
+    nextLiveLook(id) { if (!st.ll) return null; if (id && !settings.lookExclude.includes(id)) settings.lookExclude = [...settings.lookExclude, id]; st.liveLook = null; st.ll.final = false; st.ll.music = Math.max(st.ll.music, 20); if (st.lastV) liveLook(st.lastV, st.ll.wall); return st.liveLook; },
     flash(t, color) { st.overlay.flashT = t; st.overlay.flashColor = color || [1, 0.97, 0.94]; },
     /** Light up some shapes (indexes) so people can see which is which; null = all. */
     identify(t, shapes) { st.identify = { t, shapes: shapes == null ? null : new Set([].concat(shapes)) }; },

@@ -12,6 +12,7 @@ export const DEFAULTS = () => ({
     capture: { enabled: false, source: "auto", command: "" }, metronome: { enabled: false, bpm: 120 },
     guest: { effects: true, scenes: true, pads: true, brightness: true },
     effectPrefs: {}, // effect id -> 1 liked, -1 banned (automatic mode)
+    effectNudge: {}, // effect id -> -1..1: a soft preference for song looks, from "Not this one" (down) and "Keep" (up)
     location: null,  // {lat, lon, name} for sunrise/sunset schedules and night mode
     night: { enabled: false, from: "23:00", to: "07:00", maxBrightness: 0.3, warm: true }, // calmer light at night
     text: { source: "song", custom: "TEMPOLIGHT" }, // what Text Scroller shows on matrix panels: song, bpm, clock or custom
@@ -28,7 +29,8 @@ export const DEFAULTS = () => ({
     nowPlaying: { enabled: true, spotifyClientId: "" }, // read the track music apps on this computer play (server only, see nowplaying.js)
     moodColours: true, // with the "auto" palette, colours follow the music's mood (key, brightness, energy)
   },
-  show: { power: true, mode: "auto", effect: "shock", style: "auto", palette: "auto", everyBeats: 8, speed: 1, params: {}, layer: null },
+  // variety (automatic mode): "one" = one look per song (looks.js), "parts" = one for calm parts, build-ups and drops, "show" = effects change with the song
+  show: { power: true, mode: "auto", effect: "shock", style: "auto", palette: "auto", everyBeats: 8, variety: "one", speed: 1, params: {}, layer: null },
   devices: [],
   room: { name: "My room", shapes: [], zones: [] },
   scenes: [
