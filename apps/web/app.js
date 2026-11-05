@@ -936,6 +936,7 @@ const PAGES = { stage: ["Stage", lazyPage(() => import("/v2/stage.js"), "render"
   songs: ["Songs", lazyPage(() => import("/v2/songs.js"), "render")],
   looks: ["Looks", lazyPage(() => import("/v2/looks.js"), "render")],
   lights: ["Lights", lazyPage(() => import("/v2/lights.js"), "render")],
+  settings2: ["Settings", lazyPage(() => import("/v2/settings.js"), "render")], schedules: ["Schedules and scenes", lazyPage(() => import("/v2/scenes.js"), "render")],
   home: ["Home", homePage], music: ["Music", musicPage], effects: ["Effects", effectsPage], live: ["Live pads", livePage], scenes: ["Scenes & schedules", scenesPage], sleep: ["Home & sleep", lazyPage(() => import("/homesleep.js"), "homeSleepPage")],
   room: ["Room", el => unlocked() ? roomPage(el) : lockScreen(el, "Room setup")], map: ["Camera mapping", el => unlocked() ? mapPage(el) : lockScreen(el, "Room setup")], devices: ["Devices", devicesPage], settings: ["Settings", settingsPage], timeline: ["Show editor", lazyPage(() => import("/timeline.js"), "timelinePage")] };
 PAGES.integrations = ["Integrations", lazyPage(() => import("/integrations.js"), "integrationsPage")]; // Stream Deck, OBS, games, Twitch, Discord
