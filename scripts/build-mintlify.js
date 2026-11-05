@@ -70,6 +70,7 @@ const META = {
   "internals/live-analyser": { icon: "audio-lines" },
   "internals/song-memory": { icon: "brain" },
   "internals/director-and-effects": { icon: "clapperboard" },
+  "internals/effect-ratings": { icon: "thumbs-up", description: "How good every built-in effect is in drops, build-ups and calm parts, measured on synthetic songs (generated)." },
   "internals/runtime-and-outputs": { icon: "cable" },
   "internals/data-model": { icon: "database" },
   "internals/web-app": { icon: "app-window" },
@@ -103,7 +104,7 @@ const NAV = [
   { tab: "Internals", icon: "cpu", groups: [
     { group: "Architecture", pages: ["architecture"] },
     { group: "Internals", pages: ["internals/engine-analysis", "internals/live-analyser", "internals/song-memory",
-      "internals/director-and-effects", "internals/runtime-and-outputs", "internals/data-model", "internals/web-app",
+      "internals/director-and-effects", "internals/effect-ratings", "internals/runtime-and-outputs", "internals/data-model", "internals/web-app",
       "internals/security", "internals/extending", "internals/testing", "internals/*", "mintlify"] },
   ] },
   { tab: "Help", icon: "life-buoy", groups: [

@@ -249,6 +249,7 @@ also notices when music time jumps back (a seek, a newly recognised song) and re
 | [internals/live-analyser.md](internals/live-analyser.md) | streaming analysis: drum gating, tempo, song parts, vocals, chroma, fingerprint taps |
 | [internals/song-memory.md](internals/song-memory.md) | fingerprints, recognition, following a song, limits and storage |
 | [internals/director-and-effects.md](internals/director-and-effects.md) | the signals object, the effect contract, pools, styles, custom effects, shows, palettes, safe mode |
+| [internals/effect-ratings.md](internals/effect-ratings.md) | every effect's measured score for drops, build-ups and calm parts, its traits, the automatic picks (generated) |
 | [internals/runtime-and-outputs.md](internals/runtime-and-outputs.md) | device kinds and senders, rebuilds, health and latency, power limit, mapping, DMX, performance |
 | [internals/data-model.md](internals/data-model.md) | `tempolight.json`: every key with its type and default; secrets kept elsewhere |
 | [internals/web-app.md](internals/web-app.md) | pages, routing, lazy modules, demo mode, service worker |

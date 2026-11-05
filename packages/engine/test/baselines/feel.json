@@ -18,59 +18,61 @@
   "style": "party"
  },
  "whole": {
-  "kickContrast": 0.694,
-  "kickContrastP10": 0.324,
+  "kickContrast": 0.729,
+  "kickContrastP10": 0.255,
   "kickLagMs": 12.5,
   "lum": {
-   "intro": 0.162,
-   "build": 0.219,
-   "drop": 0.207,
-   "break": 0.097,
-   "outro": 0.071,
-   "silence": 0.081
+   "intro": 0.143,
+   "build": 0.241,
+   "drop": 0.217,
+   "break": 0.1,
+   "outro": 0.103,
+   "silence": 0.077
   },
-  "dropBreak": 2.126,
+  "dropBreak": 2.173,
   "preDropDip": [
-   0.442,
-   0.311
+   0.266,
+   0.148
   ],
-  "preDropDipWorst": 0.442,
+  "preDropDipWorst": 0.266,
   "dropImpact": [
-   6.135,
-   4.496
+   4.424,
+   5.201
   ],
-  "dropImpactMin": 4.496,
+  "dropImpactMin": 4.424,
   "changes": 8,
+  "changesPerMin": 7.9,
   "onDownbeat": 1,
   "on4Bar": 0.75,
   "shortEffects": 0
  },
  "live": {
-  "kickContrast": 0.747,
-  "kickContrastP10": 0.574,
+  "kickContrast": 0.655,
+  "kickContrastP10": 0.53,
   "kickLagMs": 0,
   "lum": {
    "intro": 0.181,
-   "build": 0.137,
-   "drop": 0.205,
-   "break": 0.102,
-   "outro": 0.135,
-   "silence": 0.094
+   "build": 0.157,
+   "drop": 0.18,
+   "break": 0.119,
+   "outro": 0.219,
+   "silence": 0.098
   },
-  "dropBreak": 2.01,
+  "dropBreak": 1.522,
   "preDropDip": [
-   0.22,
-   1.17
+   0.472,
+   1.139
   ],
-  "preDropDipWorst": 1.17,
+  "preDropDipWorst": 1.139,
   "dropImpact": [
-   5.131,
-   5.175
+   6.494,
+   9.448
   ],
-  "dropImpactMin": 5.131,
-  "changes": 11,
-  "onDownbeat": 0.727,
-  "on4Bar": 0.273,
+  "dropImpactMin": 6.494,
+  "changes": 10,
+  "changesPerMin": 9.9,
+  "onDownbeat": 0.7,
+  "on4Bar": 0.3,
   "shortEffects": 0,
   "dropDelayMs": [
    50,
@@ -82,31 +84,31 @@
  },
  "varieties": {
   "one": {
-   "look": "shock//fill/northern/sunset",
-   "liveLook": "shock/sunset",
+   "look": "ping//vortex/ping/sunset",
+   "liveLook": "ping/fire",
    "whole": {
-    "kickContrast": 0.828,
-    "kickContrastP10": 0.302,
+    "kickContrast": 0.798,
+    "kickContrastP10": 0.486,
     "kickLagMs": 12.5,
     "lum": {
-     "intro": 0.172,
-     "build": 0.273,
-     "drop": 0.235,
-     "break": 0.124,
-     "outro": 0.147,
-     "silence": 0.091
+     "intro": 0.155,
+     "build": 0.259,
+     "drop": 0.212,
+     "break": 0.104,
+     "outro": 0.127,
+     "silence": 0.082
     },
-    "dropBreak": 1.892,
+    "dropBreak": 2.031,
     "preDropDip": [
-     0.331,
-     0.344
+     0.291,
+     0.305
     ],
-    "preDropDipWorst": 0.344,
+    "preDropDipWorst": 0.305,
     "dropImpact": [
-     4.283,
-     4.347
+     5.472,
+     5.588
     ],
-    "dropImpactMin": 4.283,
+    "dropImpactMin": 5.472,
     "changes": 0,
     "changesPerMin": 0,
     "onDownbeat": null,
@@ -114,28 +116,28 @@
     "shortEffects": 0
    },
    "live": {
-    "kickContrast": 0.799,
-    "kickContrastP10": 0.755,
+    "kickContrast": 0.735,
+    "kickContrastP10": 0.672,
     "kickLagMs": 0,
     "lum": {
-     "intro": 0.178,
-     "build": 0.164,
-     "drop": 0.236,
-     "break": 0.135,
-     "outro": 0.208,
-     "silence": 0.111
+     "intro": 0.162,
+     "build": 0.147,
+     "drop": 0.204,
+     "break": 0.112,
+     "outro": 0.166,
+     "silence": 0.095
     },
-    "dropBreak": 1.751,
+    "dropBreak": 1.823,
     "preDropDip": [
-     0.508,
-     1.066
+     0.448,
+     1.074
     ],
-    "preDropDipWorst": 1.066,
+    "preDropDipWorst": 1.074,
     "dropImpact": [
-     4.585,
-     5.222
+     5.077,
+     6.383
     ],
-    "dropImpactMin": 4.585,
+    "dropImpactMin": 5.077,
     "changes": 2,
     "changesPerMin": 2,
     "onDownbeat": 0.5,
@@ -151,64 +153,64 @@
    }
   },
   "parts": {
-   "look": "shock//fill/northern/sunset",
-   "liveLook": "shock/sunset",
+   "look": "ping//vortex/ping/sunset",
+   "liveLook": "ping/fire",
    "whole": {
-    "kickContrast": 0.827,
-    "kickContrastP10": 0.299,
+    "kickContrast": 0.794,
+    "kickContrastP10": 0.496,
     "kickLagMs": 12.5,
     "lum": {
-     "intro": 0.16,
-     "build": 0.302,
-     "drop": 0.238,
-     "break": 0.093,
-     "outro": 0.084,
-     "silence": 0.083
+     "intro": 0.119,
+     "build": 0.268,
+     "drop": 0.218,
+     "break": 0.105,
+     "outro": 0.123,
+     "silence": 0.082
     },
-    "dropBreak": 2.567,
+    "dropBreak": 2.074,
     "preDropDip": [
-     0.32,
-     0.362
+     0.362,
+     0.479
     ],
-    "preDropDipWorst": 0.362,
+    "preDropDipWorst": 0.479,
     "dropImpact": [
-     4.25,
-     4.214
+     5.33,
+     5.644
     ],
-    "dropImpactMin": 4.214,
-    "changes": 6,
-    "changesPerMin": 6,
+    "dropImpactMin": 5.33,
+    "changes": 4,
+    "changesPerMin": 4,
     "onDownbeat": 1,
-    "on4Bar": 0.833,
+    "on4Bar": 0.75,
     "shortEffects": 0
    },
    "live": {
-    "kickContrast": 0.799,
-    "kickContrastP10": 0.755,
+    "kickContrast": 0.735,
+    "kickContrastP10": 0.672,
     "kickLagMs": 0,
     "lum": {
-     "intro": 0.178,
-     "build": 0.141,
-     "drop": 0.235,
-     "break": 0.123,
-     "outro": 0.213,
+     "intro": 0.162,
+     "build": 0.145,
+     "drop": 0.205,
+     "break": 0.112,
+     "outro": 0.167,
      "silence": 0.095
     },
-    "dropBreak": 1.91,
+    "dropBreak": 1.826,
     "preDropDip": [
-     0.508,
-     2.109
+     0.448,
+     1.106
     ],
-    "preDropDipWorst": 2.109,
+    "preDropDipWorst": 1.106,
     "dropImpact": [
-     4.585,
-     5.087
+     5.077,
+     6.371
     ],
-    "dropImpactMin": 4.585,
-    "changes": 6,
-    "changesPerMin": 6,
-    "onDownbeat": 0.667,
-    "on4Bar": 0.333,
+    "dropImpactMin": 5.077,
+    "changes": 4,
+    "changesPerMin": 4,
+    "onDownbeat": 0.75,
+    "on4Bar": 0.5,
     "shortEffects": 0,
     "dropDelayMs": [
      50,

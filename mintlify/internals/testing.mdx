@@ -20,6 +20,7 @@ tests check real bytes on real sockets.
 | `node scripts/bench.js` | CPU per part of the server | |
 | `npm run eval:beat` | `scripts/beat-eval.js`: how well the live analyser finds the beat | |
 | `npm run eval:feel` | `scripts/feel-eval.js`: how well the lights follow a song | |
+| `node scripts/effect-score.js` | rates every effect per song part (minutes); `--write` regenerates `ratings.js` | |
 
 CI (`.github/workflows/ci.yml`) runs `npm test` on Linux, Windows and macOS with Node 20, 22 and 24, starts the server
 and checks `/api/health` and `/`, then runs both browser tests on Linux. `firmware.yml` runs the firmware host tests
@@ -137,6 +138,17 @@ shows progress; it is not a test.
 | drop / breakdown brightness | at least 1.8 |
 | pre-drop dip | at most 0.7 |
 | live drop delay | at most 150 ms |
+
+### Effect ratings: `node scripts/effect-score.js`
+
+Runs every built-in effect alone through the director on synthetic songs with known beats and parts, measures it
+raw and with the feel layer, and scores it for drops, build-ups and calm parts; see
+[effect ratings](/internals/effect-ratings) for the metrics, weights and the table. It takes several minutes (worker threads,
+`--workers N`). `--write` regenerates `packages/engine/src/ratings.js` and `docs/internals/effect-ratings.md`;
+`--only a,b` scores just some effects; `--save m.json` / `--from m.json` keep the measurements to try other weights.
+`ratings.test.js` (part of `npm test`) does not score anything: it fails when an effect was added, removed or changed
+since `ratings.js` was made (ids and a hash of the effects' sources), when the contract changes, or when `AUTO` lists
+an effect that doesn't exist or has another tag. Run `node scripts/effect-score.js --write` and commit the result.
 
 ### Baselines
 
