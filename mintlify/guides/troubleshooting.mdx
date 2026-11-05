@@ -73,11 +73,44 @@ The warnings it shows:
 | *WLED's own power limit is holding brightness back* | raise WLED's limit (LED Preferences) if your power supply allows it |
 | *The power limit is holding brightness back right now.* | Tempolight's own **Power limit (A)** on the Devices page is working; raise it only if the supply allows |
 
+## Is it in sync?
+
+Look at **Music → In sync** first. The meter and the line under it say what is wrong.
+
+| The meter says | What it means | Fix |
+| --- | --- | --- |
+| *Not hearing* | nothing to follow | play a song, or start listening (see [Nothing reacts](#nothing-reacts-to-the-music)) |
+| *Too quiet — turn it up or move the mic closer* | the sound is too soft to hear the beat | turn the music up, move the microphone closer, or listen to this computer's sound instead |
+| *Finding the beat* for more than a few seconds | the beat isn't clear yet | wait for the drums to come in; or tap the beat 4 times (**T** on Live pads, or **Music → What Tempolight hears → Tap the beat**) |
+| *No drums — following the melody* | a song without drums | nothing to fix: the lights follow the melody, and it never says *Locked* |
+| *Locked*, but the lights are early or late | the beat is right, the timing isn't | see [Lights lag behind the music](#lights-lag-behind-the-music) |
+
+## The show feels flat, or too much
+
+| What you see | Fix |
+| --- | --- |
+| drops don't hit hard enough | raise **Settings → Lighting → Punch** (the pump on each kick) and **Drama** (drops brighter than calm parts) |
+| too much flashing | lower **Punch** and **Drama**, untick **Flash on drops**, or turn on **Photosensitive-safe mode** |
+| you don't like the effect for this song | **Music → In sync → Not this one** picks the next best look; **Keep** keeps one you like |
+| the effect never changes in a song | that's *One look per song*. For more change: **Effects → How effects are chosen → Variety** → *Song parts* or *Show* |
+| the colours change too often | untick **Settings → Lighting → Chord colours** |
+| no drop countdown on Live pads | tick **Settings → Lighting → Show drop countdown**. Calm songs and ballads don't get one |
+
+## Your own music
+
+| What you see | Fix |
+| --- | --- |
+| MP3, M4A or FLAC files are skipped | install ffmpeg (`brew install ffmpeg`, `sudo apt install ffmpeg`, or `winget install ffmpeg`), then **Look for new songs**. WAV works without it |
+| the folder isn't found | type the full path on the computer Tempolight runs on. In Docker, mount it and type the path inside the container (`/music`) |
+| analysing makes the computer slow | press **Pause**. It runs at the lowest priority, with one worker in low-power mode |
+
+More in [Your own music](/guides/your-music).
+
 ## Lights lag behind the music
 
 | Cause | Fix |
 | --- | --- |
-| speakers play late (Bluetooth, a TV's sound processing, a party PA) | Music → Timing → **Fix the timing automatically**, or move **Light timing** right (Bluetooth often +150 to +250 ms) |
+| speakers play late (Bluetooth, a TV's sound processing, a party PA), so the lights come before you hear the beat | Music → Timing → **Fix the timing automatically**, or move **Light timing** left (Bluetooth often -150 to -250 ms). Each speaker keeps its own timing |
 | listening through a microphone across the room | sound takes 3 ms a metre; fix the timing with the microphone where it stays |
 | weak Wi-Fi, frames dropped | see [Wi-Fi weak](#wi-fi-weak) |
 | slow lights (Hue basic, WiZ, Kasa) | they take about 10 updates a second: give them calm effects with a [zone](/guides/room-and-zones#zones); Hue fast mode helps |

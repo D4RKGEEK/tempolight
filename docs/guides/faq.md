@@ -5,7 +5,10 @@
 **Do I need to buy anything?** No. Tempolight is free and open source (MIT). You need lights it can drive (WLED strips
 are cheapest and best for music; see [connect-lights.md](connect-lights.md)) and a computer or Raspberry Pi on the same
 network. To try it with no lights at all, use **Try without lights** in the setup wizard, or the
-[online demo](https://tempolight.pages.dev).
+[online demo](https://tempolight.pages.dev/demo/).
+
+**Can Claude set it up for me?** Yes. Paste one prompt into Claude Code or the Claude app with access to your
+computer: [Set up Tempolight with Claude](../setup-with-claude.md).
 
 **Which computer?** Windows 10/11, macOS, Linux, or a Raspberry Pi 3, 4 or 5. A Pi Zero 2 works for small setups at a
 lower frame rate (Tempolight switches to low-power mode by itself).
@@ -33,18 +36,30 @@ reacts live. Songs you've played in Tempolight before are recognised from any so
 **Do my songs get uploaded?** No. Song files play in your browser; only their beat map (tempo, beats, parts) goes to
 the Tempolight server on your network. Live audio goes from the browser to that server, is analysed and thrown away.
 
-**Why do the lights know a drop is coming?** For songs played in the app, or remembered and learned ones, the whole song
-is analysed ahead: build-ups and drops are known before they play. While listening live to an unknown song, Tempolight
-notices a drop as it happens.
+**Why do the lights know a drop is coming?** For songs played in the app, songs in your music folder, and remembered
+and learned ones, the whole song is analysed ahead: build-ups and drops are known before they play. While listening
+live to a song it has never heard, Tempolight hears the build-up (the sound getting brighter, the snares speeding up)
+and knows the drop 3 to 5 seconds ahead. Live pads shows a countdown.
 
-**The lights are a bit behind the beat.** Your speakers play the sound late. Music → Timing → **Fix the timing
+**How good is the sync?** In the beat tests (house, hip-hop, dubstep, broken beats, swing and tempo changes) the live
+beat tracker lands on 91% of beats. It holds the beat through breaks and finds it again in under a second. **Music →
+In sync** shows how sure it is right now.
+
+**Why does every song keep one effect?** That's *One look per song*, the default: one effect and palette picked to
+fit the song. **Not this one** on the Music page picks another. For more change, set **Effects → How effects are
+chosen → Variety** to *Song parts* or *Show*.
+
+**Can it use my music collection?** Yes. **Music → Your own music** analyses a folder ahead, so every song in it is in
+sync from its first play: [your-music.md](your-music.md).
+
+**The lights are off the beat.** Your speakers add a delay (Bluetooth most of all). Music → Timing → **Fix the timing
 automatically** measures it once. [troubleshooting.md](troubleshooting.md#lights-lag-behind-the-music).
 
 ## Lights
 
 **Which lights work?** WLED (and anything that speaks DDP, E1.31 or Art-Net), Govee (LAN, beta), OpenRGB, Nanoleaf,
 Philips Hue, LIFX, WiZ, TP-Link Kasa, Yeelight, Twinkly, DMX fixtures through an Art-Net or sACN node, and phones.
-All at once, as one show.
+All at once, as one show. Tempolight sets each light's delay by itself, so slow bulbs and fast strips flash together.
 
 **Why does my Hue lamp look slow?** The Hue bridge takes about 10 commands a second for all its lights. Calm effects
 look good; for beat effects, try fast (Entertainment) mode, which is in beta.

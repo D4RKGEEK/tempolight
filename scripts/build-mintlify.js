@@ -17,7 +17,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DOCS = path.join(root, "docs");
 const OUT = path.join(root, "mintlify");
 const REPO = "https://github.com/D4RKGEEK/tempolight";
-const DEMO = "https://tempolight.pages.dev";
+const SITE = "https://tempolight.pages.dev", DEMO = `${SITE}/demo/`;
 const PAGES_SITE = "https://d4rkgeek.github.io/tempolight/";   // the VitePress site, which also serves /flash/
 export const HAND_WRITTEN = new Set(["index.mdx", "custom.css", "openapi.json"]);
 const GENERATED_NOTE = "{/* Generated from docs/SOURCE by scripts/build-mintlify.js. Edit that file, then run: node scripts/build-mintlify.js */}";
@@ -44,6 +44,8 @@ const META = {
   "getting-started": { icon: "flag", description: "The short version: what you need, WLED settings, the setup wizard, music sources and the first fixes." },
   install: { icon: "download", sidebarTitle: "Install" },
   "guides/first-run": { icon: "play", sidebarTitle: "Your first show" },
+  "setup-with-claude": { icon: "bot", sidebarTitle: "Set up with Claude" },
+  "guides/what-you-can-do": { icon: "list-checks", sidebarTitle: "What you can do" },
   "guides/overview": { icon: "map", sidebarTitle: "All guides" },
   "guides/connect-lights": { icon: "lightbulb" },
   "guides/room-and-zones": { icon: "layout-grid" },
@@ -88,7 +90,7 @@ const META = {
 // listed land in Guides → More, so a new page in docs/ always shows up.
 const NAV = [
   { tab: "Start", icon: "rocket", groups: [
-    { group: "Get started", pages: ["index", "overview", "install", "guides/first-run", "getting-started"] },
+    { group: "Get started", pages: ["index", "overview", "install", "setup-with-claude", "guides/first-run", "guides/what-you-can-do", "getting-started"] },
   ] },
   { tab: "Guides", icon: "book-open", groups: [
     { group: "Guides", pages: ["guides/overview"] },
@@ -199,7 +201,7 @@ export function rewriteHref(href, ctx) {
   if (!inDocs) return github();
   const docsRel = posix(path.relative(DOCS, abs));
   if (docsRel === "flash" || docsRel.startsWith("flash/")) return `${PAGES_SITE}flash/`;
-  if (docsRel === "index.html") return `${DEMO}/about/`;
+  if (docsRel === "index.html") return `${SITE}/`;
   if (/^(public\/)?images\//.test(docsRel)) return "/" + docsRel.replace(/^public\//, "");
   let md = docsRel;
   if (!md.endsWith(".md")) {

@@ -1,0 +1,217 @@
+---
+title: "What you can do"
+description: "A short tour of everything in Tempolight, one feature at a time. Each part says what it does and where to find it. The menu is on the left on a computer and at the bottom on a phone."
+icon: "list-checks"
+---
+{/* Generated from docs/guides/what-you-can-do.md by scripts/build-mintlify.js. Edit that file, then run: node scripts/build-mintlify.js */}
+
+A short tour of everything in Tempolight, one feature at a time. Each part says what it does and where to find it.
+The menu is on the left on a computer and at the bottom on a phone. A path like **Music → In sync** means: open
+**Music** in the menu, then look for the box called *In sync*.
+
+New here? Start with [Your first show](/guides/first-run), or let [Claude set it up for you](/setup-with-claude).
+
+## Play a song
+
+Tempolight listens to the whole song first, so it knows every beat, build-up and drop before they come.
+
+- **Music → Play songs → Add songs…** and pick songs from your computer (MP3, M4A, WAV, OGG, FLAC).
+- **Music → Play songs → Play the demo track** to try it with a song that comes with Tempolight.
+
+Your songs stay on your computer. Nothing is uploaded.
+
+## Music you play somewhere else
+
+Spotify, YouTube, a DJ app or a speaker in the room work too. Tempolight listens and follows along.
+
+- **Music → How should Tempolight hear your music?** walks you through it. Pick *This computer's sound* or *The
+  microphone*.
+- **Music → Listen live → Listen to this computer's sound** or **Listen with a microphone** starts listening right
+  away.
+- On a Mac, the computer's sound needs a small free tool called BlackHole. The panel shows each step.
+  [Hearing the music](/hearing-music) has the details.
+
+## Spotify
+
+The lights follow the Spotify song with its full beat map. Tempolight learns each song the first time it plays.
+
+- **Music → Sync with Spotify**, then tick **Sync with Spotify**.
+- More in [Sync with Spotify](/spotify).
+
+## Your own music library
+
+Add your music folder and Tempolight studies every song in it ahead of time. Then each song is in sync from its very
+first play, whichever player you use.
+
+- **Music → Your own music → Add a folder**: type the folder's full path, for example `/home/you/Music`, then press
+  **Add**.
+- **Look for new songs** checks the folder again. **Pause** stops the work for now.
+- Most music files need a free tool called ffmpeg. WAV files work without it.
+- More in [Your own music](/guides/your-music).
+
+## Songs it remembers
+
+Every song you play in Tempolight is remembered. When it plays again from anywhere, Tempolight knows it after about
+8 seconds of listening, even if the song is a little faster or slower or the sound is different.
+
+- **Music → Song memory** lists the songs it knows. Tick **On** to use it.
+
+## Is it in sync
+
+A meter tells you how well the lights follow the beat.
+
+- **Music → In sync**.
+- *Locked* means on the beat. *Finding the beat* means wait a few seconds. *Not hearing* means nothing to follow.
+- The line under it tells you why, or what to do. For example, *Following the song's beat map* means it knows the
+  song and every beat in it.
+- **Home** shows the same as a small dot before the status line. Green is locked.
+
+## The song map
+
+A picture of the song that is playing: how loud it is, its parts and its drops.
+
+- **Music → In sync**, under the meter.
+- Blue is calm, amber is a build-up, pink is a drop. Parts that repeat get the same letter.
+- The dashed line is the next drop. The line under the map counts down to it.
+
+## One look per song
+
+Tempolight picks one effect and one set of colours for each song, to fit it. Fast dance music gets an effect that
+hits on every kick. A slow song gets a calm one. The same song always gets the same look.
+
+- **Music → In sync → Look** shows the look, for example *Kick Shockwave · Sunset*.
+- **Not this one** picks the next best look. The old one won't come back for this song.
+- **Keep** keeps this look for this song.
+
+## More or less change
+
+Choose how often the effect changes.
+
+- **Effects → How effects are chosen → Variety**.
+- *One look per song*: one effect for the whole song. This is the default.
+- *Song parts*: one effect for calm parts, one for build-ups, one for drops.
+- *Show (changes often)*: the effect changes with the song, every few bars.
+
+## Pick an effect yourself
+
+There are 95 effects. Automatic mode picks them for you, from effects tested on drops, build-ups and calm parts.
+
+- **Effects**, then tap an effect to show it. **Back to automatic** lets Tempolight choose again.
+- The heart on an effect means automatic mode picks it more often. The ban sign means it never picks it.
+- **Effects → Effect settings** changes the speed, intensity and colours of one effect.
+
+## Make your own effect
+
+Build an effect from simple parts, without code, and share it with friends.
+
+- **Effects → Make your own**. Pick a pattern, a direction, what moves it and the colours.
+
+## How hard it hits
+
+Two sliders set the feel of the show.
+
+- **Settings → Lighting → Punch**: how hard the whole room pumps on each kick in a drop.
+- **Settings → Lighting → Drama**: how much brighter drops are than calm parts, with a short dip just before each
+  drop.
+- **Settings → Lighting → Vary drops every 2 bars** flips the colours or the direction during drops.
+
+## All lights flash together
+
+Some lights are slower than others. Hue and WiZ bulbs take about 100 ms to change, WLED about 20 ms. Tempolight works
+out the delay of each light by itself and holds the faster ones back, so a kick flashes on all of them at once.
+
+- Nothing to set. **Devices → Sound to light** shows each light's delay.
+- If your speakers play late (Bluetooth does), use **Music → Timing → Fix the timing automatically** once.
+
+## Drop countdown
+
+Tempolight hears a drop coming a few seconds ahead, even in a song it has never heard. The lights build up to it by
+themselves: brighter and faster, a short dip, then the flash.
+
+- **Live pads** shows a big *Drop in 4 · 3 · 2 · 1* just before the drop.
+- Turn it off in **Settings → Lighting → Show drop countdown**.
+
+## Play the lights live
+
+Big buttons for a flash, a strobe, a blackout, a build-up and a drop, on top of the show.
+
+- **Live pads**. Keys work too: Space is a flash, B a blackout, U a build-up and drop.
+- **Live pads → MIDI controller** connects a pad controller.
+- More in [Parties and DJs](/guides/party-and-dj).
+
+## Chord colours
+
+The colour changes when the chord changes, on the start of a bar. A chorus that comes back gets the same colours.
+
+- **Settings → Lighting → Chord colours**. It works when the colours are set to *Automatic*.
+
+## Stereo
+
+When the sound comes in stereo, the side of the room a hit came from lights up more.
+
+- **Settings → Lighting → Stereo**: *Off*, *Subtle* (the default) or *Strong*.
+- A microphone is mono, so nothing changes with it.
+
+## Your room
+
+Tell Tempolight where your lights are, so effects move across the room the way it really is.
+
+- **Room → Start from a layout** picks a ready-made room.
+- **Room → Map with the camera…** lets a phone camera find where every LED is.
+- **Room → Zones** gives part of the room its own effect or brightness.
+- More in [Your room and zones](/guides/room-and-zones).
+
+## Add lights
+
+- **Devices → Scan network** finds lights on your Wi-Fi.
+- **Devices → Add a controller** adds one by its address.
+- Which lights work, and how: [Connect your lights](/guides/connect-lights).
+
+## Scenes and schedules
+
+A scene saves the effect, colours and brightness. A schedule turns a scene on at a set time.
+
+- **Home → Save as scene** saves what is showing.
+- **Scenes & schedules** lists your scenes and sets times, including sunrise and sunset.
+
+## Wake up and fall asleep
+
+- **Home & sleep → Wake-up sunrise**: the room gets lighter before your alarm.
+- **Home & sleep → Right now → Sleep in 30 min** fades the lights out. Tap 15, 30, 45 or 60 first to pick how long.
+- **Home & sleep → Ambient plan**: a soft light for each hour when no music plays.
+- **Settings → Night mode and location**: dimmer, warmer light at night, with no strobes.
+- More in [Wake-up and sleep](/wake-up).
+
+## Parties
+
+- **Live pads → Phones as lights**: guests scan a QR code and their phone screen joins the show.
+- **Music → Guest requests**: guests ask for songs from their phones and vote.
+- **Settings → Lock**: a PIN keeps guests out of your settings.
+- **Home → Record clip** records 15 seconds of the show to share.
+
+## Screen sync
+
+Share a film, a game or a music video and the room takes its colours.
+
+- **Music → Screen sync**.
+
+## Smart home
+
+- **Settings → Home Assistant** connects to Home Assistant.
+- **Settings → Apple Home** lets Siri and the Home app control Tempolight.
+- More in [Smart home](/guides/smart-home) and [Voice control](/voice).
+
+## Streams and games
+
+- **Integrations**: Stream Deck, OBS, CS2 and Dota 2, Twitch and Discord.
+- More in [Streamers and gamers](/guides/creators).
+
+## Safe for everyone
+
+- **Settings → Lighting → Photosensitive-safe mode**: at most 3 flashes a second, over everything.
+
+## Keep it up to date
+
+- **Settings → About → Check for updates**.
+- **Settings → Backup → Download backup** saves your lights, room, scenes and settings in one file.
+- **Settings → About → Run setup again** opens the setup wizard.
