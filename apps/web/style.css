@@ -173,6 +173,14 @@ tr.sel td { background: var(--accent-bg) !important; }
 .pad[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
 .pad[aria-pressed="true"] span { color: var(--accent-ink); }
 .pad.hot { border-color: var(--accent); }
+/* the drop countdown on the Live pads page: big enough to read from across the room */
+.dropcd { display: flex; align-items: center; justify-content: center; gap: 14px; flex-wrap: wrap; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--accent); background: var(--accent-bg); text-align: center; }
+.dropcd[hidden] { display: none; }
+.dropcd-l { font-size: 20px; font-weight: 650; }
+.dropcd b { font-size: 64px; line-height: 1; font-variant-numeric: tabular-nums; min-width: 1.4ch; color: var(--accent); }
+.dropcd-dots { font-size: 22px; letter-spacing: .04em; color: var(--faint); font-variant-numeric: tabular-nums; }
+.dropcd-dots i { font-style: normal; } .dropcd-dots i.on { color: var(--text); font-weight: 700; }
+.dropcd.now b { font-size: 48px; }
 kbd { font: 500 11px var(--mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 4px; padding: 0 5px; color: var(--muted); background: var(--panel); }
 
 .callout { border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 6px; padding: 10px 12px; background: var(--panel-2); font-size: 13px; }

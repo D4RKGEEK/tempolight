@@ -7561,6 +7561,13 @@
                   "part": "drop",
                   "beat": 2,
                   "level": 0.71,
+                  "drop": {
+                    "next": 3.2,
+                    "at": 61.9,
+                    "conf": 0.82,
+                    "source": "predicted",
+                    "building": true
+                  },
                   "power": true,
                   "brightness": 0.8,
                   "night": false,
@@ -10972,6 +10979,10 @@
             "type": "boolean",
             "description": "Drops change look every 2 bars (colour flip, mirror) between effect changes."
           },
+          "dropCountdown": {
+            "type": "boolean",
+            "description": "The Live pads page shows \"Drop in 4 · 3 · 2 · 1\" before a drop."
+          },
           "punch": {
             "type": "number",
             "description": "How hard the kick pumps the room in drops.",
@@ -11324,6 +11335,10 @@
           "variations": {
             "type": "boolean",
             "description": "Drops change look every 2 bars (colour flip, mirror) between effect changes."
+          },
+          "dropCountdown": {
+            "type": "boolean",
+            "description": "The Live pads page shows \"Drop in 4 · 3 · 2 · 1\" before a drop."
           },
           "punch": {
             "type": "number",
@@ -11740,6 +11755,48 @@
             "minimum": 0,
             "maximum": 1
           },
+          "drop": {
+            "type": "object",
+            "description": "The next drop (see docs/internals/live-analyser.md, the drop countdown). All `null`, `conf` 0 when none is expected.",
+            "properties": {
+              "next": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "Seconds until the next drop."
+              },
+              "at": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "When it comes, on the music's clock (the song's position, or the live analyser's clock)."
+              },
+              "conf": {
+                "type": "number",
+                "description": "How sure: 1 when known.",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "source": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "memory",
+                  "predicted",
+                  null
+                ],
+                "description": "`memory`: known ahead (an analysed or remembered song, a show's cue, the Build & drop pad); `predicted`: heard coming while listening live."
+              },
+              "building": {
+                "type": "boolean",
+                "description": "The lights are building toward it."
+              }
+            }
+          },
           "bands": {
             "type": [
               "array",
@@ -12120,6 +12177,13 @@
           "part": "drop",
           "beat": 2,
           "level": 0.71,
+          "drop": {
+            "next": 3.2,
+            "at": 61.9,
+            "conf": 0.82,
+            "source": "predicted",
+            "building": true
+          },
           "power": true,
           "brightness": 0.8,
           "night": false,

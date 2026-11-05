@@ -443,7 +443,7 @@ default: [internals/data-model.md](/internals/data-model#settings).
 | --- | --- |
 | `brightness`, `fps`, `syncOffsetMs`, `idleBrightness`, `idleAfterSec` | numbers (0-1, 10-120, -500..500, 0-1, 1-600) |
 | `punch`, `dynamics` | 0 to 1: the kick pump in drops and how much brightness follows the song part |
-| `safe`, `predict`, `dropFlash`, `variations`, `audioSync`, `autoDiscover`, `setupDone`, `songMemory`, `moodColours`, `requests`, `shows` | booleans |
+| `safe`, `predict`, `dropFlash`, `variations`, `dropCountdown`, `audioSync`, `autoDiscover`, `setupDone`, `songMemory`, `moodColours`, `requests`, `shows` | booleans (`dropCountdown`: the Live pads page counts down to drops, default on) |
 | `performance` | `"auto"`, `"full"` or `"lite"`: low-power mode for small computers. Lite caps the frame rate at 30 fps, sends the preview and phones 15 times a second and status twice a second, and the live analyser works out chroma every second frame and the vocal estimate at half rate. Auto picks lite on a Raspberry Pi Zero, 1, 2 or 3, a 32-bit ARM processor, one core or two slow ones, or when the frame loop can't keep up for 10 seconds. `status.perf` is `{mode, setting, why, fps, frameMs, cpu}` |
 | `ambient` | an effect id or `"off"` |
 | `capture` | `{enabled, source: "auto"\|<id>, command}` |
@@ -498,6 +498,7 @@ Only where the Wi-Fi setup service runs (the [Raspberry Pi image](/raspberry-pi)
 | `fps`, `leds`, `uptime` | frames a second now, LEDs in the room, seconds since start |
 | `effect`, `effectName`, `style`, `styleName` | what shows now |
 | `bpm`, `part`, `beat` | tempo, `calm`/`build`/`drop`/`silent`/`idle`, beat in the bar (0-3) |
+| `drop` | the next drop: `{next, at, conf, source, building}`. `next`: seconds until it; `at`: when, on the music's clock (the song's position, or the live analyser's clock); `conf`: 0-1, how sure; `source`: `"memory"` (known ahead: an analysed or remembered song, a show's cue, the Build & drop pad) or `"predicted"` (heard coming while listening live, see [the drop countdown](/internals/live-analyser#drop-countdown)); `building`: the lights are building toward it. `{next: null, at: null, conf: 0, source: null, building: false}` when none is expected |
 | `level`, `bands` | loudness 0-1; with live audio 24 spectrum bands (else `null`) |
 | `key`, `mood`, `hears`, `vocal` | `{key, mode, name, confidence}`, `{valence, energy, name}`, `"A minor · melancholic"`, the live vocal estimate 0-1 |
 | `song` | `{memId, name, playing, pos, dur, bpm, style, drops}` while a browser plays a song |

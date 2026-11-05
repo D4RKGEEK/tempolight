@@ -204,7 +204,7 @@ export const schemas = {
   Settings: obj({
     brightness: unit(), fps: int(undefined, { minimum: 10, maximum: 120 }), syncOffsetMs: int(undefined, { minimum: -500, maximum: 500 }), syncOffsets: loose("Light timing per sound output: `{key: {ms, name, bt}}`."),
     performance: en(["auto", "full", "lite"]), ambient: str("An effect id or `off`."), idleBrightness: unit(), idleAfterSec: num(undefined, { minimum: 1, maximum: 600 }),
-    safe: bool("Photosensitive-safe mode."), predict: bool(), dropFlash: bool(), variations: bool("Drops change look every 2 bars (colour flip, mirror) between effect changes."), punch: unit("How hard the kick pumps the room in drops."), dynamics: unit("How much brightness follows the song part."), audioSync: bool(), autoDiscover: bool(), setupDone: bool(), songMemory: bool(), moodColours: bool(), requests: bool(), shows: bool(),
+    safe: bool("Photosensitive-safe mode."), predict: bool(), dropFlash: bool(), variations: bool("Drops change look every 2 bars (colour flip, mirror) between effect changes."), dropCountdown: bool("The Live pads page shows \"Drop in 4 · 3 · 2 · 1\" before a drop."), punch: unit("How hard the kick pumps the room in drops."), dynamics: unit("How much brightness follows the song part."), audioSync: bool(), autoDiscover: bool(), setupDone: bool(), songMemory: bool(), moodColours: bool(), requests: bool(), shows: bool(),
     hearing: obj({ method: en(["", "computer", "mic", "pi"]) }),
     capture: obj({ enabled: bool(), source: str("`auto` or a source id."), command: str() }), metronome: obj({ enabled: bool(), bpm: num(undefined, { minimum: 40, maximum: 220 }) }),
     osc: obj({ enabled: bool(), port: int() }), guest: obj({ effects: bool(), scenes: bool(), pads: bool(), brightness: bool() }, { description: "What guests may do while a PIN lock is set." }),
@@ -222,7 +222,7 @@ export const schemas = {
     brightness: unit(), fps: int(undefined, { minimum: 10, maximum: 120 }), syncOffsetMs: int("Light timing for the sound output playing now (or `output`), -500 to 500 ms."), output: str("A sound output's key, for `syncOffsetMs`."),
     syncOffsets: { type: "object", additionalProperties: { type: ["number", "null"] }, description: "`{key: ms}`, or `{key: null}` to forget one." },
     performance: en(["auto", "full", "lite"]), ambient: str(), idleBrightness: unit(), idleAfterSec: num(),
-    safe: bool(), predict: bool(), dropFlash: bool(), variations: bool("Drops change look every 2 bars (colour flip, mirror) between effect changes."), punch: unit("How hard the kick pumps the room in drops."), dynamics: unit("How much brightness follows the song part."), audioSync: bool(), autoDiscover: bool(), setupDone: bool(), songMemory: bool(), moodColours: bool(), requests: bool(), shows: bool(),
+    safe: bool(), predict: bool(), dropFlash: bool(), variations: bool("Drops change look every 2 bars (colour flip, mirror) between effect changes."), dropCountdown: bool("The Live pads page shows \"Drop in 4 · 3 · 2 · 1\" before a drop."), punch: unit("How hard the kick pumps the room in drops."), dynamics: unit("How much brightness follows the song part."), audioSync: bool(), autoDiscover: bool(), setupDone: bool(), songMemory: bool(), moodColours: bool(), requests: bool(), shows: bool(),
     hearing: obj({ method: en(["", "computer", "mic", "pi"]) }), capture: obj({ enabled: bool(), source: str(), command: str() }), metronome: obj({ enabled: bool(), bpm: num() }),
     osc: obj({ enabled: bool(), port: int() }), guest: obj({ effects: bool(), scenes: bool(), pads: bool(), brightness: bool() }), location: nullable(obj({ lat: num(), lon: num(), name: str() })),
     night: obj({ enabled: bool(), from: str(), to: str(), maxBrightness: num(), warm: bool() }), text: obj({ source: en(["song", "bpm", "clock", "custom"]), custom: str() }),
@@ -238,7 +238,10 @@ export const schemas = {
   Status: obj({
     type: str(undefined, { const: "status" }), source: en(["song", "nowplaying", "browser", "capture", "djlink", "midiclock", "link", "metronome", "idle"]), sourceLabel: str(),
     fps: int(), leds: int(), uptime: int("Seconds since start."), effect: str(), effectName: str(), style: str(), styleName: str(),
-    bpm: nullable(num()), part: en(["calm", "build", "drop", "silent", "idle"]), beat: nullable(int("Beat in the bar, 0 to 3.")), level: unit("Loudness."), bands: nullable(arr(num(), "24 spectrum bands, with live audio.")),
+    bpm: nullable(num()), part: en(["calm", "build", "drop", "silent", "idle"]), beat: nullable(int("Beat in the bar, 0 to 3.")), level: unit("Loudness."),
+    drop: obj({ next: nullable(num("Seconds until the next drop.")), at: nullable(num("When it comes, on the music's clock (the song's position, or the live analyser's clock).")), conf: unit("How sure: 1 when known."),
+      source: nullable(en(["memory", "predicted"], "`memory`: known ahead (an analysed or remembered song, a show's cue, the Build & drop pad); `predicted`: heard coming while listening live.")),
+      building: bool("The lights are building toward it.") }, { description: "The next drop (see docs/internals/live-analyser.md, the drop countdown). All `null`, `conf` 0 when none is expected." }), bands: nullable(arr(num(), "24 spectrum bands, with live audio.")),
     key: nullable(obj({ key: str(), mode: str(), name: str(), confidence: num() })), mood: nullable(obj({ valence: num(), energy: num(), name: str() })), hears: nullable(str()), vocal: nullable(num()),
     song: nullable(obj({ memId: nullable(str()), name: str(), playing: bool(), pos: num(), dur: num(), bpm: num(), style: str(), drops: { description: "The drops the analysis found." } })),
     recognised: nullable(obj({ id: str(), name: str(), pos: num(), dur: num() })), look: nullable(ref("Look")),
@@ -256,7 +259,7 @@ export const schemas = {
     devices: arr(ref("DeviceStatus")),
   }, { description: "What is happening now; the same object as the WebSocket's `status` messages.",
     example: { type: "status", source: "browser", sourceLabel: "Browser audio", fps: 60, leds: 240, uptime: 3600, effect: "laser", effectName: "Laser", style: "party", styleName: "Party", bpm: 124, part: "drop", beat: 2, level: 0.71,
-      power: true, brightness: 0.8, night: false, overlay: { strobe: false, blackout: false, freeze: false, hold: false, boost: 1, forced: null }, devices: [] } }),
+      drop: { next: 3.2, at: 61.9, conf: 0.82, source: "predicted", building: true }, power: true, brightness: 0.8, night: false, overlay: { strobe: false, blackout: false, freeze: false, hold: false, boost: 1, forced: null }, devices: [] } }),
   DeviceStatus: obj({
     id: str(), online: bool(), sent: int(), used: int(), amps: num(), limited: bool(), latencyMs: nullable(num("Sound to light.")),
     latency: obj({ audioMs: num(), analysisMs: num(), networkMs: num(), frameMs: num(), offsetMs: num(), lightMs: num("The light's own delay used (network + frame, or set by hand)."), lightAuto: bool() }), latencyLevel: en(["good", "ok", "slow", "none"]),

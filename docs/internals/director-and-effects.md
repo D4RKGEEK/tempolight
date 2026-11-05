@@ -65,7 +65,7 @@ it. Without it every kick counts as 1.
 | `wave` | `Float32Array(256)` or null | the last live samples |
 | `vocal` | number or null | live vocal estimate, null when there is none |
 | `buildP` | number | build-up progress 0-1 in a build; otherwise a slow 16-bar ramp |
-| `dropIn`, `sinceDrop` | number | seconds to the next known drop and since the last one; 99 = none |
+| `dropIn`, `sinceDrop` | number | seconds to the next drop (known, or predicted live with `dropConf` 0.5 or more) and since the last one; 99 = none |
 | `text` | string | what Text Scroller shows (`settings.text`: song name, BPM, clock or custom) |
 | `screen` | object or null | the shared screen picture `{w, h, px}` for Screen Sync |
 
@@ -211,7 +211,8 @@ at least a bar after the last change. `planShow(pre, fx, {variety, look})` uses 
 what the live director plays (one block for `one`, a few for `parts`). The liveliness comes from inside the effect:
 
 - **Speed** follows the tempo (`params.speed`).
-- **Intensity rises through build-ups**: x 0.8 at the start to x 1.25 at the drop, on top of the energy contour.
+- **Intensity rises through build-ups**: the build toward the drop (the feel layer below); with no drop ahead, x 0.8
+  at the start to x 1.25 at the drop, on top of the energy contour.
 - **Colour steps on phrase lines** (`phraseStep(V)`): each section label gets its own step (`songView` gives
   `V.section` and `V.barI`), so a chorus that comes back has the same colour, and a long section steps again every 16
   bars; live, every 16 bars. Step 0 is the look's palette, 1 and 2 turn it 40° round the colour wheel, 3 swaps its
@@ -249,9 +250,22 @@ The feel layer works on the whole frame, on top of any effect. The effects thems
   gets a deeper pump, up to 0.85 (learnt per effect). Kicks on the beat grid pump on the grid's beat, so a kick
   detected a little late still lands on time. The floor and the middle of the room pump a little more than the
   ceiling and the edges. Night mode (`settings.night`) makes it 0.4 x as deep. Safe mode caps it at 0.1.
-- **Moments** (every style, as big as its `moment`). The last beat before a known next drop (`V.nextDrop`) dims, by
-  up to 75%, without needing a silence. The first 0.7 s of a drop flash white (`settings.dropFlash`; 0.6 x in safe
-  mode). The drop itself is a hard cut.
+- **Build toward a drop** (any mode and variety; `rampOf()`). A drop ahead that is known (`V.dropConf` 1: an analysed
+  or remembered song, a show's cue, the Build & drop pad) or predicted live from `dropConf` 0.5 (the
+  [drop countdown](live-analyser.md#drop-countdown)) starts a ramp while the music builds up (a build-up part, or a
+  live prediction), or over the last 2 bars before any known drop. Its progress `r` runs 0 to 1 from where it began
+  (8 bars before the drop at most) to the drop; a prediction that moves keeps the start, and eases back rather than
+  dropping. Over it: **brightness** from where it was to `1 + 0.9 * min(1, 1.25 * dynamics) * moment` (half at night),
+  along `r²`; a known drop first eases down to `1 - 0.5 *` that over a beat, so there is more to rise. **Speed**: the
+  effect's free-running animation runs up to 1.7x as fast (its clock moves ahead; kick, snare, hat and beat times move
+  with it, so hits stay on time; not for effects that need the beat). **Pulses** in the last bar until its last beat:
+  eighths, then sixteenths for the last two beats, `0.45 * punch * moment` deep and as bright on average; only for
+  effects whose rating has mid or high energy, never in safe or night mode. `D.ramp` is `{at, conf, r, building}`
+  (status `drop.building`). One effect throughout: in variety `one` the energy comes from these, not a new effect.
+- **Moments** (every style, as big as its `moment`). The last beat before a sure next drop (`V.nextDrop`, `dropConf`
+  0.5 or more) dims, by up to 75% (90% at the end of a ramp), without needing a silence. The first 0.7 s of a drop
+  flash white (`settings.dropFlash`; 0.6 x in safe mode); after a build ramp the flash peaks higher, by as much as the
+  ramp brightened the room, with the extra part gone by the next kick. The drop itself is a hard cut.
 
 ## Custom effects
 

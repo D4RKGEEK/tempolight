@@ -5,6 +5,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Drop countdown
+- Tempolight now knows a drop is coming 3-5 seconds ahead while listening live, even for songs it has never heard: it hears the riser (the sound getting brighter, the highs rising, the snares speeding up), counts phrases from the start of the song or the last drop, and catches the dip just before the drop. The lights build toward it in every variety: brighter and faster over the last bars, tighter pulses in the last bar, then the dip and the drop flash (as big as Drama and Punch say; gentler at night, no pulses in safe mode). Live pads shows a big **Drop in 4 · 3 · 2 · 1** (Settings → Lighting → **Show drop countdown**). API: `drop: {next, at, conf, source, building}` in the status.
+
 ### One look per song
 - Automatic mode now picks one well-chosen effect and palette for each song when it is analysed, and keeps it for the whole song, on the beat (like picking one LedFx effect). It fits the song: a fast four-on-the-floor track gets a kick-driven effect, a ballad a calm one that doesn't need a beat; the colours come from the mood. The same song always gets the same look; different songs get different ones.
 - The look stays lively from inside: speed follows the tempo, it gets stronger through build-ups, the colour steps at new sections (a chorus that comes back gets the same colour), drops vary every 2 bars, and the pump, the dip before the drop and the drop flash stay.

@@ -5,6 +5,7 @@ import { gridAt } from "./signals.js";
 import { FingerprintTap } from "./memory.js";
 import { ChromaTap, keyOf, moodOf } from "./tonal.js";
 import { BeatTracker } from "./beat.js";
+import { DropPredictor } from "./drops.js";
 
 const NF = 1024, HOP = 256;
 const EDGES = (() => { const e = []; for (let i = 0; i <= 24; i++) e.push(40 * Math.pow(10000 / 40, i / 24)); return e; })();
@@ -53,6 +54,7 @@ export class LiveAnalyser {
     this.state = "silent"; this.cand2 = "silent"; this.candT = 0; this.stateT = 0; this.buildStart = 0; this.dropT = -9;
     this.domS = null; this.domHist = []; this.domHistT = -9; this.domBase = null; // domBase: pct(domHist, 0.3), kept until domHist changes
     this.styleStats = { env: [], envT: -9, drops: [] }; this.style = null; this.styleCand = null; this.styleN = 0; this.lastStyleT = -9; this.styleLock = null;
+    if (this.drops) this.drops.reset(); else this.drops = new DropPredictor(); // the drop countdown (drops.js)
   }
 
   /** Feed samples. Accepts Float32Array (-1..1) or Int16Array. */
@@ -164,6 +166,7 @@ export class LiveAnalyser {
     }
     if (!this._lite || (++this.hopN & 1)) this.vocalHop(loudEnough, this._lite ? dt * 2 : dt); // (lite: every 2nd hop, covering two)
     this.sections(t, dt);
+    this.drops.hop(this, t);
     this.levels(t);
     if (t - this.lastStyleT > 2) { this.lastStyleT = t; this.estimateStyle(t); }
     if (t - this.lastMoodT > 2) { this.lastMoodT = t; this.estimateMood(t); }
@@ -319,12 +322,12 @@ export class LiveAnalyser {
    *   on time; when it isn't, the kicks heard drive the lights
    */
   view(t = this.now, o = {}) {
-    const g = this.grid(t), loud = Math.min(1, this.eFast / this.eMax);
+    const g = this.grid(t), loud = Math.min(1, this.eFast / this.eMax), nd = this.nextDrop(t);
     const ki = this.kicks.length - 1, kick = ki >= 0 ? this.kicks[ki] : -9, pulses = [], snares = [];
     for (let i = ki; i >= 0 && t - this.kicks[i] < 1; i--) pulses.push(this.kicks[i]);
     for (let i = this.snares.length - 1; i >= 0 && t - this.snares[i] < 0.7; i--) snares.push(this.snares[i]);
     const V = { g, bpm: this.bpm, conf: this.conf, style: this.style || "party", loud, level: this.levelS,
-      state: this.state, buildP: this.state === "build" ? Math.min(1, (t - this.buildStart) / 7) : 0, dropT: this.dropT, nextDrop: this.nextDrop(t), kickStrength: this.kickS,
+      state: this.state, buildP: this.state === "build" ? Math.min(1, (t - this.buildStart) / 7) : 0, dropT: this.dropT, nextDrop: nd, dropConf: nd != null ? this.drops.conf : 0, dropSource: nd != null ? "predicted" : null, kickStrength: this.kickS,
       kick, snare: this.snares.length ? this.snares[this.snares.length - 1] : -9, hat: this.hats.length ? this.hats[this.hats.length - 1] : -9,
       pulses, snares, pulseN: this.pulseN, vocal: this.vocal, quietFor: this.state === "silent" ? t - this.stateT : 0, live: true,
       key: this.keyEst ? this.keyEst.key : null, mode: this.keyEst ? this.keyEst.mode : null, keyConf: this.keyEst ? this.keyEst.confidence : 0, mood: this.mood,
@@ -334,15 +337,10 @@ export class LiveAnalyser {
   }
 
   /**
-   * During a build-up with a sure beat grid: when the drop will probably come, else null. Build-ups run 4, 8 or 16
-   * bars from the bar line nearest their start, and the drop lands on the bar line after.
+   * When the next drop will probably come (on this analyser's clock), else null: the drop predictor's guess (drops.js:
+   * a riser, the phrase grid and the pre-drop dip) once it is fairly sure (dropConf).
    */
-  nextDrop(t) {
-    const B = this.beat; if (this.state !== "build" || !B.has || B.conf < 0.5) return null;
-    const bar = 4 * B.P, i0 = Math.round((this.buildStart - B.off) / B.P), j = Math.round((i0 - B.barOff) / 4) * 4 + B.barOff, b0 = B.off + j * B.P;
-    for (const n of [4, 8, 16]) { const d = b0 + n * bar; if (d > t + 0.02) return d; }
-    return null;
-  }
+  nextDrop(t) { const d = this.drops; return d.next != null && d.next > t - 0.5 && d.conf > 0 ? d.next : null; }
 
   /** Extra per-frame signals for buildSignals(): spectrum bands, waveform, bass level. */
   extras() { return { bands: this.bands, wave: this.wave, bassL: Math.min(1, this.bass / this.bassMax) }; }

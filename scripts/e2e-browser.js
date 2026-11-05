@@ -169,6 +169,8 @@ await step("live pads: blackout, flash, build & drop", async () => {
   await go("live"); await page.click('[data-pad="blackout"]'); await sleep(300); ok(status().overlay.blackout, "blackout not on"); ok(lum(A) === 0, "LEDs not dark in blackout");
   await page.click('[data-pad="blackout"]'); await sleep(300); ok(!status().overlay.blackout, "blackout not off");
   await page.click('[data-pad="build"]'); await sleep(300); ok(status().overlay.forced === "build", "build not forced");
+  ok(status().drop.source === "memory" && status().drop.next <= 8, `status.drop ${JSON.stringify(status().drop)}`);
+  await until(() => page.isVisible("#l-drop"), 3000, "no drop countdown"); const cdN = Number(await page.textContent("#l-drop-n")); ok(cdN >= 1 && cdN <= 8, `countdown shows ${cdN}`); await shot("06a-countdown");
   await page.keyboard.press("Escape"); await sleep(300); ok(!status().overlay.forced, "Esc did not clear"); await shot("06-live");
 });
 await step("phones as lights: QR code, a phone joins and shows the room's colours", async () => {

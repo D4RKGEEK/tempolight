@@ -152,7 +152,7 @@ export function createCore({ store, runtime, env }) {
     if (b.idleBrightness !== undefined) s.idleBrightness = num(b.idleBrightness, 0, 1);
     for (const k of ["punch", "dynamics"]) if (b[k] !== undefined) s[k] = num(b[k], 0, 1); // the feel: kick pump in drops, brightness following the song part
     if (b.idleAfterSec !== undefined) s.idleAfterSec = num(b.idleAfterSec, 1, 600);
-    for (const k of ["safe", "predict", "dropFlash", "variations", "audioSync", "autoDiscover", "setupDone"]) if (b[k] !== undefined) s[k] = !!b[k];
+    for (const k of ["safe", "predict", "dropFlash", "variations", "dropCountdown", "audioSync", "autoDiscover", "setupDone"]) if (b[k] !== undefined) s[k] = !!b[k];
     if (b.ambient !== undefined) { if (b.ambient !== "off" && !effectIds().has(b.ambient)) throw new HttpError(400, `Unknown effect "${b.ambient}"`); s.ambient = b.ambient; }
     if (b.capture) Object.assign(s.capture, { enabled: b.capture.enabled ?? s.capture.enabled, source: b.capture.source ?? s.capture.source, command: b.capture.command ?? s.capture.command });
     if (b.metronome) Object.assign(s.metronome, { enabled: b.metronome.enabled ?? s.metronome.enabled, bpm: b.metronome.bpm !== undefined ? num(b.metronome.bpm, 40, 220) : s.metronome.bpm });
