@@ -1,6 +1,7 @@
 // Camera mapping page: point a phone (or laptop) camera at the lights; Tempolight lights the LEDs one at a time,
 // finds each in the picture and builds the room shape from where they really are.
-import { app, api, act, toast, esc, panel, opt, $, ws, loadLayout, refreshState } from "/app.js";
+import { app, api, act, toast, esc, opt, $, ws, loadLayout, refreshState } from "/app.js";
+import { enterEditor, edTop, EI } from "/v2/editor.js";
 import { toGray, scan, sampleIndices, fillPositions, toStage } from "/mapping.js";
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -8,15 +9,27 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 export function mapPage(el) {
   // devices that can light single LEDs: not pretend ones, not switched off, not a Govee light that only takes one colour
   const st = app.state, devs = st.devices.filter(d => !d.virtual && d.enabled !== false && d.leds > 1 && !(d.kind === "govee" && d.goveeMode !== "segments"));
-  el.innerHTML = `${panel("Map with the camera", "Find out where every LED really is", `<a class="btn" href="#/room">Back to the room</a>`, `<div class="pb stack">
-      <div class="mapview"><video id="mp-video" playsinline muted></video><canvas id="mp-dots" aria-hidden="true"></canvas><div class="empty" id="mp-hint">Press “Start camera” and point it at the lights.</div></div>
-      <div class="row"><button class="btn" id="mp-cam" type="button">Start camera</button>
-        <select id="mp-dev" aria-label="Controller" style="width:auto">${devs.map(d => opt(d.id, `${d.name} (${d.leds} LEDs)`)).join("")}</select>
-        <select id="mp-n" aria-label="How many LEDs to look for" style="width:auto">${opt("40", "Quick (40 points)")}${opt("80", "Normal (80 points)", true)}${opt("200", "Detailed (200 points)")}</select>
-        <button class="btn primary" id="mp-go" type="button" disabled>Map</button><button class="btn" id="mp-use" type="button" hidden>Use this layout</button></div>
-      <div class="meter" aria-hidden="true"><i id="mp-prog" style="width:0%"></i></div><p id="mp-msg" class="muted" role="status"></p>
-      <p class="faint" style="font-size:12.5px">Darken the room, hold the camera still (lean it on something) so all the lights you want are in the picture, and keep people out of view. Each LED lights up in turn for a moment; the strip between the points found is filled in. Works best with WLED, Govee and OpenRGB devices that show single LEDs.</p></div>`, "span-12")}`;
-  if (!devs.length) { $("#mp-msg").textContent = "Add a controller with LEDs on the Devices page first (Govee lights need “segments” mode)."; $("#mp-cam").disabled = true; return {}; }
+  const leave = enterEditor(el, "map");
+  el.innerHTML = `<div class="ed mp">${edTop({ back: "#/room", backLabel: "Back to the room", eyebrow: "Room", title: "<h1>Map with the camera</h1>",
+      actions: `<a class="btn" href="#/room">Back to the room</a>` })}
+    <div class="mp-body">
+      <div class="mp-view"><div class="mapview"><video id="mp-video" playsinline muted></video><canvas id="mp-dots" aria-hidden="true"></canvas>
+        <div class="empty" id="mp-hint"><span class="mp-ic">${EI.camera}</span><b>Point a camera at your lights</b><span>Press “Start camera”, then hold it still so every light you want is in the picture.</span></div></div>
+        <div class="mp-prog meter" aria-hidden="true"><i id="mp-prog" style="width:0%"></i></div></div>
+      <aside class="mp-panel">
+        <section class="re-sec"><header class="re-sec-h"><h3>Find every LED</h3></header>
+          <div class="re-rows">
+            <label class="re-r"><span>Light</span><select id="mp-dev" aria-label="Controller">${devs.map(d => opt(d.id, `${d.name} (${d.leds} LEDs)`)).join("")}</select></label>
+            <label class="re-r"><span>Detail</span><select id="mp-n" aria-label="How many LEDs to look for">${opt("40", "Quick (40 points)")}${opt("80", "Normal (80 points)", true)}${opt("200", "Detailed (200 points)")}</select></label>
+          </div>
+          <div class="mp-go"><button class="btn" id="mp-cam" type="button">${EI.camera}Start camera</button><button class="btn primary" id="mp-go" type="button" disabled>Map</button><button class="btn primary" id="mp-use" type="button" hidden>Use this layout</button></div>
+          <p id="mp-msg" class="mp-msg" role="status"></p></section>
+        <section class="re-sec"><header class="re-sec-h"><h3>For a clean result</h3></header>
+          <ol class="mp-steps"><li>Darken the room and keep people out of view.</li><li>Lean the camera on something so it stays still, with all the lights you want in the picture.</li>
+            <li>Each LED lights up in turn for a moment; the strip between the points found is filled in.</li><li>Works best with WLED, Govee and OpenRGB devices that show single LEDs.</li></ol></section>
+      </aside>
+    </div></div>`;
+  if (!devs.length) { $("#mp-msg").textContent = "Add a light with single LEDs on the Lights screen first (Govee lights need “segments” mode)."; $("#mp-cam").disabled = true; $("#mp-go").hidden = true; return { destroy: leave }; }
   const video = $("#mp-video"), dots = $("#mp-dots"), cv = document.createElement("canvas"), g = cv.getContext("2d", { willReadFrequently: true });
   let stream = null, running = false, result = null, gone = false, lock = null;
   const W = 160; let H = 120;
@@ -62,5 +75,5 @@ export function mapPage(el) {
     const r = await act(() => api("PUT", "/api/room", { ...room, shapes }), "Room updated from the camera").catch(() => null);
     if (r) { await refreshState(); await loadLayout(); location.hash = "#/room"; }
   };
-  return { destroy() { gone = true; running = false; ws.send({ type: "map", end: true }); if (stream) stream.getTracks().forEach(t => t.stop()); } };
+  return { destroy() { leave(); gone = true; running = false; ws.send({ type: "map", end: true }); if (stream) stream.getTracks().forEach(t => t.stop()); } };
 }

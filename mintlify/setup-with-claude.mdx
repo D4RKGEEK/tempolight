@@ -1,0 +1,82 @@
+---
+title: "Set up Tempolight with Claude"
+sidebarTitle: "Set up with Claude"
+description: "You can let Claude do the setup for you. Paste one prompt, and Claude installs Tempolight, starts it, finds your lights, sets how it hears your music, draws your room and plays a test song."
+icon: "sparkles"
+---
+{/* Generated from docs/setup-with-claude.md by scripts/build-mintlify.js. Edit that file, then run: node scripts/build-mintlify.js */}
+
+You can let Claude do the setup for you. Paste one prompt, and Claude installs Tempolight, starts it, finds your
+lights, sets how it hears your music, draws your room and plays a test song. It tells you what it does as it goes.
+
+## What you need
+
+- Claude with access to your computer: [Claude Code](https://claude.com/claude-code) in a terminal, or the Claude
+  desktop app with access to your files and terminal turned on.
+- Your lights switched on and on the same Wi-Fi as the computer.
+- About ten minutes.
+
+## What Claude does
+
+1. Checks that Node.js 20 or newer is installed.
+2. Installs Tempolight with `npx tempolight`, or downloads the one-file app if you have no Node.js.
+3. Starts Tempolight and waits until it answers at http://localhost:8080.
+4. Looks for your lights (WLED, Govee, LIFX, WiZ, Kasa, Yeelight, Twinkly, OpenRGB) and adds them. It asks you about
+   Philips Hue, Nanoleaf and lights it can't find.
+5. Sets how Tempolight hears your music:
+   - on a Mac, through BlackHole (a free sound driver),
+   - on Linux, through the sound output's monitor,
+   - on Windows, through Stereo Mix,
+   - or through the microphone.
+6. Asks how your lights sit in the room and picks a room layout to match.
+7. Asks you to play the demo track, so you see the lights move.
+8. Explains the sync meter on the Music page.
+
+Claude asks before it installs anything for the whole computer, such as Node.js, BlackHole or ffmpeg, and before it
+changes your sound settings. You can say no to any step and do it yourself later.
+
+## The prompt
+
+Copy this and paste it into Claude.
+
+```text
+Set up Tempolight on this computer for me. Tempolight is open-source, music-reactive lighting for WLED and other lights: https://github.com/D4RKGEEK/tempolight. Its HTTP API (docs/api.md there) runs at http://localhost:8080/api.
+
+Work one step at a time and tell me what you do in plain words. Ask me before you install anything system-wide (Node.js, BlackHole, ffmpeg, a service), change my sound settings or open the firewall.
+
+1. Check for Node.js 20 or newer. If it is there, run "npx tempolight --open" and keep it running. If not, ask me whether to install Node.js or to download the one-file app for this computer from the latest GitHub release.
+2. Wait until GET /api/health answers.
+3. Find my lights with POST /api/discover {"scan": true} and add each one with POST /api/devices. Ask me about lights it missed, such as Philips Hue, Nanoleaf or an IP address.
+4. Set how Tempolight hears music. Read GET /api/hearing and explain the choices: this computer's sound (BlackHole on a Mac, the output monitor on Linux, Stereo Mix on Windows) or the microphone. Follow its checklist, then POST /api/hearing/use.
+5. Ask me how my lights are placed in the room, then pick the closest layout from "presets" in GET /api/state with POST /api/room/preset.
+6. Ask me to open Music and press "Play the demo track".
+7. Explain the "In sync" meter on the Music page: Locked, Finding the beat, Not hearing, and the hint under it.
+
+End with a short summary of what is set up and what I can try next.
+```
+
+## When it is done
+
+- Open **Music** and play your own songs, or play Spotify or YouTube on the computer.
+- Look at **Music → In sync**. *Locked* means the lights are on the beat.
+- See everything else you can do in [What you can do](/guides/what-you-can-do).
+- Something not right? Ask Claude, or read [Troubleshooting](/guides/troubleshooting).
+
+## For AI assistants
+
+This section is for Claude and other agents that set up or control Tempolight.
+
+- **Base URL:** `http://localhost:8080/api` on the computer that runs Tempolight. From another device, use
+  `http://<that computer's address>:8080/api`, or `http://tempolight.local:8080/api` on the Raspberry Pi image. The
+  port changes with `--port` or `PORT`.
+- **Reference:** [api.md](/api) lists every route, who may call it and what it takes. All bodies are JSON.
+- **Health:** `GET /api/health` answers once the server is up. `GET /api/status` gives the source, tempo, song part,
+  effect and the sync meter (`sync`).
+- **Setup routes:** `POST /api/discover`, `POST /api/devices`, `GET /api/hearing`, `POST /api/hearing/use`,
+  `GET /api/state` (with `presets`), `POST /api/room/preset`, `PATCH /api/settings`.
+- **Lock:** without a PIN every call works. With a PIN, admin calls need a token from `POST /api/unlock`. Ask the
+  person for the PIN, never guess it.
+- **Browser only:** playing a song file, listening with the microphone in a browser and the timing fix run in the web
+  app, so ask the person to press those buttons.
+- **Command line:** `tempolight --help` lists the options. `tempolight --list-audio` shows the sound inputs the
+  server can record from.

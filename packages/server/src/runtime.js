@@ -6,6 +6,7 @@ import { createFixtures } from "./fixtures.js";
 import { createBeatSources } from "./beatsources.js";
 import { noteRtt, audioDelay, deviceLatency, lightLatency, timingPlan, newestSampleClock, level, LOOKAHEAD_CAP_MS } from "./latency.js";
 import { createPerf, LITE } from "./perf.js";
+import { syncScore, songMap, createLiveMap } from "./songmap.js";
 import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, gridAt, toRGB8, LiveAnalyser, memoryEntry, memoryAnalysis, recognise, matchAt, refineByKicks, planShow, SHOW_VERSION, drumlessEntry, hearsLabel, moodName, pickLook, lookLabel, LOOK_VERSION } from "../../engine/src/index.js";
 // Everything that touches the network or the sound card comes in through `io` (see node-io.js), so the same runtime
 // runs on a PC or Pi and, with pretend devices, inside the browser for the online demo.
@@ -82,23 +83,26 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     const s = data().settings, sh = data().show;
     const night = !!rt.night; // night mode: no strobing, warm colours
     Object.assign(D.settings, { mode: sh.mode, effect: sh.effect, style: sh.style, palette: night && s.night.warm ? "sunset" : sh.palette, everyBeats: sh.everyBeats, speed: sh.speed,
-      ambient: s.ambient, moodColours: s.moodColours !== false, safe: s.safe || night, dropFlash: s.dropFlash && !night, night,
+      ambient: s.ambient, moodColours: s.moodColours !== false, chordColours: s.chordColours !== false, stereo: s.stereo || "subtle", safe: s.safe || night, dropFlash: s.dropFlash && !night, night,
       punch: s.punch ?? 0.7, dynamics: s.dynamics ?? 0.8, variations: s.variations !== false, prefs: s.effectPrefs || {}, params: sh.params || {}, layer: sh.layer || null, zones: data().room.zones || [],
       variety: sh.variety || "one", nudge: s.effectNudge || {} });
   }
   let col8 = new Uint8Array(0);
 
   // ---------------------------------------------------------------- music sources
-  function pushPcm(samples, kind, label, clientId, rate = RATE, inMs = 0) { // inMs: the browser's estimate of its capture delay (latency meter)
+  // channels 2: interleaved left/right (a stereo source), for the stereo accent; the analysis hears them mixed
+  function pushPcm(samples, kind, label, clientId, rate = RATE, inMs = 0, channels = 1) { // inMs: the browser's estimate of its capture delay (latency meter)
     heard(samples, kind, label);
     if (!rt.live || rt.live.kind !== kind || rt.live.clientId !== clientId || rt.live.rate !== rate) {
       if (rt.live && rt.live.kind === "browser" && kind === "capture" && performance.now() - rt.live.lastPush < 1500) return; // a browser that is sending wins
       rt.live = { an: new LiveAnalyser(rate), kind, label, clientId, rate, lastPush: 0, started: performance.now() }; rt.mem.lock = null; rt.mem.cand = null; memT = 0; memJob = null;
       rt.live.an.lite = perf.lite; D.resetLook(); note(`Listening to ${label}`); // (a new source: a new song, a look of its own)
     }
-    const t0 = performance.now(); rt.live.an.push(samples); perf.add("analysis", performance.now() - t0); rt.live.lastPush = performance.now(); rt.live.inMs = inMs; rt.live.chunkMs = samples.length / rate * 1000;
-    if (rt.pcmTap) rt.pcmTap(samples, rate, kind, inMs);
+    const st2 = channels === 2 && (samples.length & 1) === 0 ? 2 : 1; rt.live.an.stereoOn = data().settings.stereo !== "off";
+    const t0 = performance.now(); rt.live.an.push(samples, st2); perf.add("analysis", performance.now() - t0); rt.live.lastPush = performance.now(); rt.live.inMs = inMs; rt.live.chunkMs = samples.length / rate * 1000;
+    if (rt.pcmTap) rt.pcmTap(st2 === 2 ? mono(samples) : samples, rate, kind, inMs);
   }
+  const mono = s => { const n = s.length >> 1, o = new Int16Array(n); for (let i = 0; i < n; i++) o[i] = (s[2 * i] + s[2 * i + 1]) >> 1; return o; };
   // how loud each kind of live source is (BlackHole sends exact zeros when nothing reaches it), for "Tempolight hears it"
   const SOUND_RMS = 0.0015; // about -56 dBFS: a quiet room through a microphone is more, digital silence is 0
   function heard(samples, kind, label) {
@@ -136,18 +140,19 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   function startCaptureSource() {
     stopCaptureSource();
     const c = data().settings.capture; let src;
-    if (c.command) src = { id: "custom", label: "Custom capture command", cmd: splitCommand(c.command) };
+    if (c.command) src = { id: "custom", label: "Custom capture command", cmd: splitCommand(c.command), channels: /(^|\s)(-ac\s+2|--channels[= ]2|-c\s+2)(\s|$)/.test(c.command) ? 2 : 1 }; // (stereo when the command asks for 2 channels)
     else if (/^\w+:/.test(c.source || "")) { // a named input (BlackHole 2ch, Stereo Mix, a sink's monitor): that one or none, never the microphone instead
       src = io.sourceFor?.(c.source) || null; // (capture.js; the demo has none)
       if (!src) { rt.capture = { sourceId: c.source, label: c.source.replace(/^\w+:/, ""), error: `The sound input “${c.source.replace(/^\w+:/, "")}” can't be used here.` }; note(rt.capture.error, "warn"); return rt.capture; } }
     else { const all = listSources(); src = (c.source && c.source !== "auto" && all.find(s => s.id === c.source)) || all[0]; }
     if (!src) { rt.capture = { error: "No audio capture tool found on this computer (install ffmpeg, or use a browser as the audio source)." }; note(rt.capture.error, "warn"); return rt.capture; }
     const cap = { sourceId: src.id, label: src.label, error: null, startedAt: performance.now() };
-    cap.proc = startCapture(src.cmd, a => pushPcm(a, "capture", src.label, "capture"), why => {
+    const chans = src.channels === 2 ? 2 : 1;
+    cap.proc = startCapture(src.cmd, a => pushPcm(a, "capture", src.label, "capture", RATE, 0, chans), why => {
       if (rt.capture !== cap) return;
       cap.error = why === "ended" ? null : why; cap.proc = null; if (why !== "ended") note(`Audio capture: ${why}`, "warn");
       if (data().settings.capture.enabled && why !== "ended") cap.retry = setTimeout(() => { if (rt.capture === cap) startCaptureSource(); }, 5000);
-    });
+    }, chans);
     rt.capture = cap; note(`Audio capture started: ${src.label}`);
     return cap;
   }
@@ -160,7 +165,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     rt.song = { name: song.name || "Song", pre, pos: 0, playing: false, rate: 1, at: performance.now(), clientId };
     if (data().settings.songMemory && pre.dur > 20 && pre.env.length) rt.song.memId = remember(rt.song.name, pre)?.id;
     if (!rt.song.memId) rt.song.look = newLook(pre, rt.song.name, []); // (not remembered: a look for this time)
-    const lk = rt.song.memId ? data().songs.find(e => e.id === rt.song.memId)?.look : rt.song.look;
+    const lk = rt.song.memId ? songById(rt.song.memId)?.look : rt.song.look;
     note(`Song ready: ${rt.song.name} (${Math.round(pre.bpm)} BPM, ${fx.styles[pre.style]?.name || pre.style})${lk ? `. Look: ${lookLabel(lk, fxNames())}` : ""}`);
   }
   // ---------------------------------------------------------------- Pro DJ Link: the decks' beat grid
@@ -189,6 +194,16 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   // ---------------------------------------------------------------- song memory
   const MEM_ONE = 400000, MEM_ALL = 2000000; // characters of saved JSON per song, and for all of them
   for (const e of data().songs || []) { delete e._fp; delete e._shape; } // caches an earlier version saved by mistake (they made the file 4x bigger)
+  // The imported music library (library.js, on a PC) keeps its songs in files of its own, not in the settings file:
+  // rt.library = {list(): light entries for recognising (id, name, dur, bpm, style, fp, ch, drumless), full(id): the
+  // whole entry (read from its file), save(e), remove(id)}. Song memory is both: the songs here and the library's.
+  /** Every remembered song, as entries to recognise or match by name (library songs as their light entries). */
+  function songs() { const L = rt.library?.list(); return L && L.length ? data().songs.concat(L) : data().songs; }
+  /** A remembered song by id, whole (a library song is read from its file). */
+  function songById(id) { if (!id) return null; return data().songs.find(x => x.id === id) || rt.library?.full(id) || null; }
+  const isLib = e => !!e && e.src === "library" && !!rt.library;
+  /** Keep a change to a remembered song (a library song's own file, or the settings file). */
+  function saveSong(e) { if (isLib(e)) rt.library.save(e); else store.save(); }
   function remember(name, pre) {
     const list = data().songs, old = list.findIndex(e => e.name === name && Math.abs(e.dur - pre.dur) < 1.5);
     const e = memoryEntry(name, pre, old >= 0 ? list[old].id : "m" + Math.random().toString(36).slice(2, 10));
@@ -209,7 +224,8 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   const variety = () => data().show.variety || "one";
   const nudges = () => data().settings.effectNudge || {};
   function newLook(pre, name, rejected = []) {
-    const o = { prefs: data().settings.effectPrefs, nudge: nudges(), seed: name, available: fx.list.map(f => f.id) };
+    const used = {}; for (const e of data().songs) if (e.look?.main && e.name !== name) used[e.look.main] = (used[e.look.main] || 0) + 1; // spread looks over the library
+    const o = { prefs: data().settings.effectPrefs, nudge: nudges(), seed: name, available: fx.list.map(f => f.id), used };
     let lk = pickLook(pre, { ...o, exclude: rejected }); if (!lk && rejected.length) { rejected = []; lk = pickLook(pre, o); } // every one turned down: start again
     return lk ? { ...lk, rejected: [...rejected], locked: false } : null;
   }
@@ -219,13 +235,13 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     const L = e.look, prefs = data().settings.effectPrefs || {}, banned = L && prefs[L.main] === -1;
     if (L && !banned && (L.locked || L.v === LOOK_VERSION)) return L;
     const key = JSON.stringify(prefs); if (!L && lookTried.get(e) === key) return null;
-    e.look = newLook(memoryAnalysis(e), e.name, L?.rejected || []); if (!e.look) lookTried.set(e, key); store.save();
+    e.look = newLook(memoryAnalysis(e), e.name, L?.rejected || []); if (!e.look) lookTried.set(e, key); saveSong(e);
     return e.look;
   }
   /** The remembered song playing now (played here, in a music app, or recognised while listening), or null. */
   function playingEntry() {
     const id = rt.source === "song" ? rt.song?.memId : rt.source === "nowplaying" ? rt.nowPlaying?.memId : rt.mem.lock && liveFresh() ? rt.mem.lock.id : null;
-    return id ? data().songs.find(x => x.id === id) || null : null;
+    return id ? songById(id) : null;
   }
   /** The look for what plays now: the song's, or null (live listening: the director picks one as it listens). */
   function currentLook() {
@@ -237,7 +253,9 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   const showKey = e => variety() === "show" ? "show" : `${variety()}:${["main", "drop", "build", "calm"].map(k => e.look?.[k] || "").join("/")}`;
   const planFor = (e, seed = e.name + ":" + Date.now()) => { const p = planShow(memoryAnalysis(e), fx, planOpts(e, seed)); e.showKey = showKey(e); return p; }; // "New show": a new seed
   /** A remembered song's show, made again when the planner, the variety or the look changed (unless edited by hand). */
-  function freshShow(e) { if (!e.show || (!e.showEdited && (e.showV !== SHOW_V || e.showKey !== showKey(e)))) { e.show = planFor(e, ""); e.showV = SHOW_V; store.save(); } return e; }
+  function freshShow(e) { if (!e.show || (!e.showEdited && (e.showV !== SHOW_V || e.showKey !== showKey(e)))) { e.show = planFor(e, ""); e.showV = SHOW_V; saveSong(e); } return e; }
+  /** A new library song's look and show, before it is first kept (nothing is saved here). */
+  function prepareSong(e) { const pre = memoryAnalysis(e); e.look = newLook(pre, e.name, []); e.show = planShow(pre, fx, planOpts(e)); e.showEdited = false; e.showV = SHOW_V; e.showKey = showKey(e); return e; }
   function nudge(id, d) { const s = data().settings; s.effectNudge ||= {}; const v = Math.round(Math.max(-1, Math.min(1, (s.effectNudge[id] || 0) + d)) * 100) / 100; if (v) s.effectNudge[id] = v; else delete s.effectNudge[id]; D.settings.nudge = s.effectNudge; }
   /** What the look is about, for the status and the API. */
   function lookInfo(L, extra = {}) {
@@ -248,7 +266,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   // the song a "Not this one" or "Keep" is for: a remembered song (id, or the one playing), a song played here that
   // isn't remembered, or the look picked while listening live
   function lookTarget(id) {
-    if (id) { const e = data().songs.find(x => x.id === id); return e ? { e } : null; }
+    if (id) { const e = songById(id); return e ? { e } : null; }
     const e = playingEntry(); if (e) return { e };
     if (rt.source === "song" && rt.song && rt.song.look) return { song: rt.song };
     if (D.look && D.look.provisional) return { live: true };
@@ -261,7 +279,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     const cur = tg.e ? lookOf(tg.e) : tg.song.look, rejected = [...new Set([...(cur?.rejected || []), ...(cur ? [cur.main] : [])])];
     const L = newLook(tg.e ? memoryAnalysis(tg.e) : tg.song.pre, tg.e ? tg.e.name : tg.song.name, rejected);
     if (cur) nudge(cur.main, -0.15);
-    if (tg.e) { tg.e.look = L; freshShow(tg.e); } else tg.song.look = L;
+    if (tg.e) { tg.e.look = L; freshShow(tg.e); saveSong(tg.e); } else tg.song.look = L;
     store.save(); note(`Look for “${tg.e ? tg.e.name : tg.song.name}”: ${lookLabel(L, fxNames())}`);
     return lookInfo(L, { song: tg.e ? tg.e.id : null });
   }
@@ -270,7 +288,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     const tg = lookTarget(id); if (!tg) return null;
     const L = tg.e ? lookOf(tg.e) : tg.song ? tg.song.look : D.look; if (!L) return null;
     if (keep && !L.locked) nudge(L.main, 0.1);
-    L.locked = !!keep; store.save();
+    L.locked = !!keep; if (tg.e) saveSong(tg.e); store.save();
     return lookInfo(L, { song: tg.e ? tg.e.id : null });
   }
   /** The show timeline for the song playing now (played or recognised), when shows are on. */
@@ -278,7 +296,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     if (data().settings.shows === false) return null;
     const id = rt.source === "song" ? rt.song?.memId : rt.source === "nowplaying" ? rt.nowPlaying?.memId : rt.mem.lock && liveFresh() ? rt.mem.lock.id : null; if (!id) return null;
     const dr = rt.draft; if (dr && dr.id === id && performance.now() < dr.until) return dr; // the timeline editor's unsaved version, while it previews
-    const e = data().songs.find(x => x.id === id); if (!e) return null; return freshShow(e);
+    const e = songById(id); if (!e) return null; return freshShow(e);
   }
   /** The timeline editor previews its unsaved changes on the lights: {id, show, colors, cues, bright} for a while, or null. */
   function setDraft(d) { rt.draft = d ? { ...d, until: performance.now() + 120000 } : null; }
@@ -300,13 +318,42 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   // matching runs after it, in slices of a few ms between frames (one remembered song at a time, the best kept), so a
   // long list of songs on a slow computer never makes the lights stutter. The answer is the same as matching them all at once.
   function songMemoryTick() {
-    const an = rt.live.an, list = data().songs, m = rt.mem;
-    if (!data().settings.songMemory || !list.length) { memJob = null; if (m.lock) release("song memory is off: stopped following"); return; }
+    const an = rt.live.an, list = data().songs, m = rt.mem, lib = rt.library?.list() || [];
+    if (!data().settings.songMemory || (!list.length && !lib.length)) { memJob = null; libJob = null; if (m.lock) release("song memory is off: stopped following"); return; }
     if (memJob || an.t - memT < 1) return; memT = an.t;
     const L = m.lock, exp = L ? lockPos(L, an.t) : 0;
     if (L && exp > L.pre.dur + 0.5) return release("the end of");
-    memJob = { an, t: an.t, q: an.tap.q.slice(), query: an.memoryQuery(), kicks: an.kicks.slice(), lock: L, exp, entries: list.slice(), i: 0, best: null, here: undefined };
+    // the songs here, the library song the background search found (for a while), and the library song followed now
+    const entries = list.slice(), hint = libHint && an.t - libHint.at < 20 && an.t >= libHint.at ? songById(libHint.id) : null; if (!hint) libHint = null;
+    if (hint && !entries.includes(hint)) entries.push(hint); if (L && isLib(L.e) && !entries.some(e => e.id === L.id)) entries.push(L.e);
+    memJob = { an, t: an.t, q: an.tap.q.slice(), query: an.memoryQuery(), kicks: an.kicks.slice(), lock: L, exp, entries, i: 0, best: null, here: undefined };
     setTimeout(memStep, 0);
+    if (!L && lib.length && !libJob && an.t >= libNext) startLibSweep(an, lib);
+  }
+  // The music library while listening live: too many songs to try them all every second, so a search goes through
+  // them in the background, a few ms at a time and at most LIB_BUDGET ms of every second, on a snapshot of what was
+  // heard. The best match it finds is tried with the songs here at the next once-a-second check, which follows it as
+  // usual (two matches in step, or one clear one). Songs whose tempo can't be what is heard are skipped. The matcher's
+  // work for a song (about 200 kB) is kept only for the songs tried most recently (a copy of the entry it works on).
+  let libHint = null, libJob = null, libNext = 0;
+  const libBudget = () => perf.lite ? 40 : 120, probes = new Map(), PROBES = () => perf.lite ? 16 : 64;
+  function probe(e) { let p = probes.get(e.id); if (p && p.src0 === e) { probes.delete(e.id); probes.set(e.id, p); return p; }
+    p = { ...e, src0: e }; probes.set(e.id, p); while (probes.size > PROBES()) probes.delete(probes.keys().next().value); return p; }
+  function startLibSweep(an, lib) {
+    const bpm = an.bpm && !an.drumless() ? an.bpm : 0;
+    const fits = e => !bpm || e.drumless !== false || !e.bpm || [1, 2, 0.5, 1.5, 2 / 3].some(k => Math.abs(bpm / e.bpm / k - 1) < 0.07);
+    libJob = { an, t: an.t, q: an.tap.q.slice(), query: an.memoryQuery(), list: lib.filter(fits), i: 0, best: null };
+    setTimeout(libStep, 0);
+  }
+  function libStep() {
+    const J = libJob; if (!J) return;
+    if (!rt.live || rt.live.an !== J.an || rt.mem.lock || !data().settings.songMemory) { libJob = null; return; }
+    const t0 = performance.now();
+    while (J.i < J.list.length && performance.now() - t0 < MEM_SLICE) { const e = J.list[J.i++], r = recognise(J.q, [probe(e)], J.query); if (r && (!J.best || r.score > J.best.score)) J.best = r; }
+    const ms = performance.now() - t0; perf.add("memory", ms);
+    if (J.i < J.list.length) { setTimeout(libStep, Math.max(1, Math.round(ms * (1000 / libBudget() - 1)))); return; }
+    libJob = null; libNext = J.t + (J.best ? 0 : 2); // (nothing: a short rest before the next search)
+    if (J.best) libHint = { id: J.best.id, at: J.t };
   }
   function memStep() {
     const J = memJob; if (!J) return;
@@ -320,7 +367,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     memJob = null; memDecide(J);
   }
   function memDecide(J) {
-    const an = J.an, list = data().songs, m = rt.mem, t = J.t, r = J.best && list.some(e => e.id === J.best.id) ? J.best : null; // (not one forgotten meanwhile)
+    const an = J.an, m = rt.mem, t = J.t, r = J.best && songById(J.best.id) ? J.best : null; // (not one forgotten meanwhile)
     const known = (r, at) => sure(r) || (m.cand && m.cand.id === r.id && Math.abs(r.pos - (m.cand.pos + (t - m.cand.t) * rateFor(r, an, at))) < 0.3); // seen twice, in step (or once, clearly)
     if (J.lock) {
       const L = J.lock, exp = J.exp, here = J.here, ok = here && here.score > 0.45;
@@ -332,17 +379,19 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       else L.miss++;
       // something we know, somewhere else, twice in step (another song, or this one after a skip): follow that instead,
       // unless where we are still fits about as well (a chorus that comes back)
-      if (r && !(r.id === L.id && Math.abs(r.pos - exp) < 0.3) && (!ok || r.score > here.score + 0.1)) { const e = list.find(x => x.id === r.id);
+      if (r && !(r.id === L.id && Math.abs(r.pos - exp) < 0.3) && (!ok || r.score > here.score + 0.1)) { const e = songById(r.id);
         if (known(r, e)) { if (e.id !== L.id) note(`Song memory: “${L.name}” is no longer playing`); return lockOn(e, r.pos, J.kicks, t, rateFor(r, an, e)); }
         m.cand = { ...r, t }; } else m.cand = null;
       if (L.miss >= 4) release("lost track of");
       return;
     }
     if (!r) { m.cand = null; return; }
-    const e = list.find(x => x.id === r.id);
+    const e = songById(r.id);
     if (known(r, e)) lockOn(e, r.pos, J.kicks, t, rateFor(r, an, e)); else m.cand = { ...r, t };
   }
-  function forget(id) { const list = data().songs, i = list.findIndex(e => e.id === id); if (i < 0) return false; list.splice(i, 1); if (rt.mem.lock && rt.mem.lock.id === id) rt.mem.lock = null; store.save(); return true; }
+  function forget(id) { const list = data().songs, i = list.findIndex(e => e.id === id);
+    if (i < 0) { if (!rt.library?.remove(id)) return false; } else { list.splice(i, 1); store.save(); }
+    if (rt.mem.lock && rt.mem.lock.id === id) rt.mem.lock = null; if (libHint && libHint.id === id) libHint = null; return true; }
 
   function songClock(c, clientId) {
     if (!rt.song) return; if (clientId && rt.song.clientId && rt.song.clientId !== clientId) return;
@@ -357,15 +406,18 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   // now: the wall clock (ms); lead: how far ahead (ms) this frame is drawn for (light timing, below). Sources on the
   // wall clock (metronome, beat clocks, DJ Link, idle) are drawn for now + lead; sources with a music clock for where
   // the music will be by then, plus the timing trim (syncOffset).
+  // a stereo source heard live (the browser playing the song, the computer's sound): its balance on a song's view too
+  const lr = V => { const sv = liveFresh() && rt.live.an.stereoView ? rt.live.an.stereoView() : null; if (sv) { V.pan = sv.pan; V.lr = sv.lr; } return V; };
   function currentView(now, lead = 0) {
+    rt.extBeat = null; // (a beat grid from outside while listening live: djlink, midiclock or link)
     const s = data().settings, off = syncOffset() / 1000, ld = lead / 1000, wt = (now + lead) / 1000;
     if (rt.song && rt.song.playing && now - rt.song.at < 4000) {
       const t = rt.song.pos + ((now - rt.song.at) / 1000 + ld) * rt.song.rate + off;
       rt.source = "song"; rt.sourceLabel = rt.song.name;
-      return { V: songView(rt.song.pre, t), t, extra: liveFresh() ? rt.live.an.extras() : {} };
+      return { V: lr(songView(rt.song.pre, t)), t, extra: liveFresh() ? rt.live.an.extras() : {} };
     }
     const np = rt.nowPlaying && rt.nowPlaying.follow(now); // a music app here plays a remembered song: its beat map, at the app's position
-    if (np) { const t = np.pos + ld + off; rt.source = "nowplaying"; rt.sourceLabel = `${np.app}: ${np.name} (remembered)`; return { V: songView(np.pre, t), t, extra: liveFresh() ? rt.live.an.extras() : {} }; }
+    if (np) { const t = np.pos + ld + off; rt.source = "nowplaying"; rt.sourceLabel = `${np.app}: ${np.name} (remembered)`; return { V: lr(songView(np.pre, t)), t, extra: liveFresh() ? rt.live.an.extras() : {} }; }
     if (rt.spotify && rt.spotify.paused()) { rt.source = "idle"; rt.sourceLabel = "Spotify paused"; return { V: null, t: wt }; } // fade to the ambient look
     if (liveFresh()) {
       // the analyser's clock now: its newest sample when it says (else its last frame's centre), plus the time since
@@ -374,11 +426,11 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       songMemoryTick();
       if (rt.mem.lock) { const L = rt.mem.lock, pos = lockPos(L, t); // a song we know: use its beat map
         rt.source = rt.live.kind; rt.sourceLabel = `${rt.live.label}: ${L.name} (recognised)`;
-        return { V: { ...songView(L.pre, pos), live: true, vocal: an.vocal, ...(L.pre.mood ? {} : { key: an.keyEst?.key || null, mode: an.keyEst?.mode || null, mood: an.mood }) }, t: pos, extra: an.extras() }; } // (remembered before key and mood were)
+        return { V: { ...lr(songView(L.pre, pos)), live: true, vocal: an.vocal, ...(L.pre.mood ? {} : { key: an.keyEst?.key || null, mode: an.keyEst?.mode || null, mood: an.mood }) }, t: pos, extra: an.extras() }; } // (remembered before key and mood were)
       const V = an.view(t, { predict: s.predict });
       rt.source = rt.live.kind; rt.sourceLabel = rt.live.label;
       const G = djFresh(now) ? { ...djGrid(now, tl), bpm: rt.dj.bpm, label: `DJ Link (${rt.dj.name})` } : beats.grid(now, tl); // DJ Link, else MIDI clock, else Ableton Link (on the analyser's clock now)
-      if (G) { V.g = gridAt(G, t); V.bpm = G.bpm; if (V.g.has && t - V.kick > 0.6) { V.kick = V.g.beatT; V.pulses = [V.g.beatT]; V.pulseN = V.g.idx; } rt.sourceLabel += ` + ${G.label}`; }
+      if (G) { rt.extBeat = G.kind || "djlink"; V.g = gridAt(G, t); V.bpm = G.bpm; if (V.g.has && t - V.kick > 0.6) { V.kick = V.g.beatT; V.pulses = [V.g.beatT]; V.pulseN = V.g.idx; } rt.sourceLabel += ` + ${G.label}`; }
       if (V.state === "silent" && V.quietFor > (s.idleAfterSec ?? 8)) { rt.source = "idle"; rt.sourceLabel = `${rt.live.label} (quiet)`; return { V: null, t: wt }; }
       return { V, t, extra: an.extras() };
     }
@@ -393,7 +445,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     const f = rt.forced; if (!f || !V) return V;
     const el = (now - f.t0) / 1000;
     if (f.kind === "build") {
-      if (el < f.dur) return { ...V, state: "build", buildP: el / f.dur, nextDrop: t + (f.dur - el) };
+      if (el < f.dur) return { ...V, state: "build", buildP: el / f.dur, nextDrop: t + (f.dur - el), dropConf: 1, dropSource: "memory" };
       rt.forced = { kind: "drop", t0: now, dur: 8, dropT: t }; return { ...V, state: "drop", dropT: t };
     }
     if (f.kind === "drop") { if (f.dropT == null) f.dropT = t; if (el < Math.max(4, f.dur)) return { ...V, state: "drop", dropT: f.dropT, level: "peak" }; rt.forced = null; }
@@ -459,6 +511,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     const wall = now / 1000, sh = data().show, s = data().settings;
     updateTiming(now); const lead = leadMs();
     let { V, t, extra } = currentView(now, lead);
+    if (liveFresh()) liveMap.tick(rt.live.an, rt.live.an.t, rt.live.an.eFast, V ? V.state : "silent"); // the live song map, as it is heard
     D.settings.look = V ? currentLook() : null; // (null while listening live to a song it doesn't know: the director picks one)
     const pe = V ? currentPlan() : null; D.settings.plan = pe ? pe.show : null;
     D.settings.timeline = pe && (pe.colors?.length || pe.cues?.length || pe.bright?.length) ? { colors: pe.colors || [], cues: pe.cues || [], bright: pe.bright || [] } : null;
@@ -661,17 +714,52 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     if (liveFresh()) { const an = rt.live.an; an.bpm = bpm; an.phase = (an.t - (now - rt.taps.at(-1)) / 1000) % (60 / bpm); an.phaseSet = true; note(`Beat synced by tapping: ${Math.round(bpm)} BPM`); }
   }
 
+  // ---------------------------------------------------------------- the sync meter and the song map (songmap.js)
+  const syncMem = {}, liveMap = createLiveMap(), mapCache = new WeakMap(), r3 = v => Math.round(v * 1000) / 1000;
+  /** How locked on the beat it is: {score 0-100, state locked|finding|none, hint, source}. */
+  function syncInfo(h) {
+    const an = liveFresh() ? rt.live.an : null;
+    return syncScore({ source: rt.source, ext: an ? rt.extBeat || null : null, live: an ? { conf: an.conf, drumless: an.drumless(), misses: rt.mem.lock?.miss || 0 } : null,
+      lock: !!(an && rt.mem.lock), level: h.level, sound: h.sound, listening: !!h.via }, syncMem, performance.now());
+  }
+  const songPos = () => rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0);
+  const mapOf = (key, pre) => { const v = `${key.at}:${key.dur}:${key.env?.length}`; let c = mapCache.get(key); // (made again if a remembered song was learned further)
+    if (!c || c.v !== v) mapCache.set(key, c = { v, m: songMap(pre()) }); return c.m; };
+  const NO_MAP = { source: null, id: null, name: null, playing: false, growing: false, pos: null, dur: 0, env: [], envStep: 0.02, sections: [], drops: [], bars: [], phrase: null };
+  /**
+   * The song map: of a remembered song (id), else of what plays now: a song played here, one a music app plays or song
+   * memory follows (all known ahead), or a song heard live that isn't known (made as it is heard: growing). undefined:
+   * no such song.
+   */
+  function songMapNow(id) {
+    if (id != null) { const e = data().songs.find(x => x.id === id); if (!e) return undefined; return { ...NO_MAP, source: "memory", id: e.id, name: e.name, ...mapOf(e, () => memoryAnalysis(e)) }; }
+    if (rt.source === "song" && rt.song) return { ...NO_MAP, source: "song", id: rt.song.memId || null, name: rt.song.name, playing: !!rt.song.playing, ...mapOf(rt.song.pre, () => rt.song.pre), pos: r3(songPos()) };
+    const e = playingEntry();
+    if (rt.source === "nowplaying" && e) return { ...NO_MAP, source: "memory", id: e.id, name: e.name, playing: true, ...mapOf(e, () => memoryAnalysis(e)), pos: r3(rt.t || 0) };
+    if (rt.mem.lock && liveFresh()) { const L = rt.mem.lock; return { ...NO_MAP, source: "memory", id: L.id, name: L.name, playing: true, ...mapOf(L.pre, () => L.pre), pos: r3(lockPos(L, rt.live.an.t)) }; }
+    if (liveFresh() && liveMap.length) return { ...NO_MAP, source: "live", name: rt.live.label, playing: true, growing: true, ...liveMap.map(rt.live.an.t) };
+    return { ...NO_MAP };
+  }
+
+  /** The next drop for the status: {next: seconds until it, at: when (the music's clock), conf 0..1, source: "memory"
+   *  (known ahead: an analysed or remembered song, a show's cue, the Build & drop pad) | "predicted" (heard coming, live) |
+   *  null, building: the lights are building toward it}. */
+  function dropInfo(V, t) {
+    const at = V && V.nextDrop != null && Number.isFinite(V.nextDrop) && Number.isFinite(t) && V.nextDrop >= t - 0.05 ? V.nextDrop : null, r = D.ramp, r2 = v => Math.round(v * 100) / 100;
+    if (at == null) return { next: null, at: null, conf: 0, source: null, building: false };
+    return { next: r2(Math.max(0, at - t)), at: r2(at), conf: r2(Math.max(0, Math.min(1, V.dropConf ?? 1))), source: V.dropSource === "predicted" ? "predicted" : "memory", building: !!(r && r.building && Math.abs(r.at - at) < 0.5) };
+  }
   function status() {
-    const V = rt.view, an = liveFresh() ? rt.live.an : null;
+    const V = rt.view, an = liveFresh() ? rt.live.an : null, hear = hearingInfo();
     return {
       type: "status", source: rt.source, sourceLabel: rt.sourceLabel, fps: Math.round(rt.fps), leds: L.N, effect: D.showing, effectName: fx.list.find(e => e.id === D.showing)?.name || D.showing, style: D.style,
       styleName: fx.styles[D.style]?.name || D.style, bpm: V && V.bpm ? Math.round(V.bpm * 10) / 10 : null, part: V ? V.state : "idle",
-      beat: V && V.g.has ? V.g.beatInBar : null, level: an ? Math.round(Math.min(1, an.eFast / an.eMax) * 100) / 100 : V ? Math.round((V.loud || 0) * 100) / 100 : 0,
+      beat: V && V.g.has ? V.g.beatInBar : null, drop: dropInfo(V, rt.t), level: an ? Math.round(Math.min(1, an.eFast / an.eMax) * 100) / 100 : V ? Math.round((V.loud || 0) * 100) / 100 : 0,
       bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, key: V && V.key ? { key: V.key, mode: V.mode, name: `${V.key} ${V.mode}`, confidence: V.keyConf ?? 0 } : null, mood: V && V.mood ? { ...V.mood, name: moodName(V.mood) } : null, hears: V ? hearsLabel(V.key, V.mode, V.mood) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, mapping: rt.mapping ? { device: rt.mapping.dev, led: rt.mapping.led } : null, djlink: djFresh(performance.now()) ? { name: rt.dj.name, bpm: rt.dj.bpm, beatInBar: rt.dj.beatInBar } : null, recognised: rt.mem.lock && liveFresh() ? { id: rt.mem.lock.id, name: rt.mem.lock.name, pos: Math.round(lockPos(rt.mem.lock, rt.live.an.t) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, home: rt.home ? rt.home.status() : null, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
       look: lookInfo(D.look, { song: playingEntry()?.id || null }),
       song: rt.song ? { memId: rt.song.memId || null, name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
       nowPlaying: rt.nowPlaying ? rt.nowPlaying.info() : null, spotify: rt.spotify ? rt.spotify.info() : null,
-      capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null, hearing: hearingInfo(), offsetMs: syncOffset(), timing: timingInfo(),
+      capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null, hearing: hear, offsetMs: syncOffset(), timing: timingInfo(), sync: syncInfo(hear),
       overlay: overlayState(), devices: data().devices.map(d => { const o = outs.get(d.id), { rtts, ...h } = health.get(d.id) || {}; void rtts;
         return { id: d.id, ...h, sent: o?.sender.sent || 0, used: o?.used || 0, amps: Math.round((o?.amps || 0) * 100) / 100, limited: !!o?.limited, ...latencyOf(d, h, o) }; }),
       uptime: Math.round((Date.now() - rt.startedAt) / 1000), perf: { ...perf.status(), fps: perf.fps || Math.round(rt.fps) },
@@ -706,7 +794,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   return {
     get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, perf, rt, log, listeners, previewClients, phones, health,
     rebuild, rebuildEffects, syncDirector, startLoop, syncOffset, setOutput, hearingInfo, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
-    fixtures, beats, identify, syncSegments, setPower, action, status, setScreen, clearScreen, remember, forget, djBeat, djOnAir, planFor, freshShow, lookNext, lookKeep, lookOf, setDraft, mapLight, endMap, layoutInfo, checkDevice, note,
+    fixtures, beats, identify, syncSegments, setPower, action, status, songMapNow, setScreen, clearScreen, remember, forget, songs, songById, saveSong, prepareSong, djBeat, djOnAir, planFor, freshShow, lookNext, lookKeep, lookOf, setDraft, mapLight, endMap, layoutInfo, checkDevice, note,
     close() { for (const [id, o] of outs) if (data().devices.find(d => d.id === id)?.kind === "dmx") try { o.sender.send(new Uint8Array(512)); } catch {} // DMX: leave everything at zero
       loopGen++; clearTimeout(timer); clearTimeout(flushTimer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
   };

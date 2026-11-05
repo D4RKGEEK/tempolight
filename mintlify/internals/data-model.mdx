@@ -56,6 +56,7 @@ Changed with `PATCH /api/settings` (admin) unless noted; out-of-range numbers ar
 | `idleBrightness` | number 0-1 | `0.5` | brightness factor while idle in automatic mode |
 | `idleAfterSec` | number 1-600 | `8` | seconds of live silence before going idle |
 | `dropFlash` | boolean | `true` | white flash at drops |
+| `dropCountdown` | boolean | `true` | the Live pads page shows "Drop in 4 · 3 · 2 · 1" before a drop (Settings → Show drop countdown) |
 | `punch` | 0-1 | `0.7` | how hard the room pumps on each kick in a drop (Settings → Punch) |
 | `dynamics` | 0-1 | `0.8` | how much brightness follows the song part, and the dip before a drop (Settings → Drama) |
 | `variations` | boolean | `true` | drops change look every 2 bars (colour flip, mirror) between effect changes |
@@ -81,6 +82,8 @@ Changed with `PATCH /api/settings` (admin) unless noted; out-of-range numbers ar
 | `songMemory` | boolean | `true` | remember analysed songs and recognise them live |
 | `nowPlaying` | `{enabled, spotifyClientId}` | `{enabled: true, spotifyClientId: ""}` | changed with `PATCH /api/nowplaying`; the client ID is 32 hex digits |
 | `moodColours` | boolean | `true` | the automatic palette follows the mood |
+| `chordColours` | boolean | `true` | with the automatic palette, colours step with the chords on bar lines (colour.js) |
+| `stereo` | string | `"subtle"` | `off`, `subtle` or `strong`: with a stereo source, the side of the room a hit came from brightens (spatial.js) |
 | `spotify` | object | added by spotify.js: `{sync: true, learn: true, analysis: true, coverColours: false, pauseFade: true, muteDim: true, cloud: {url: "", use: false, share: false}}` | changed with `PATCH /api/spotify`; `analysisBlocked` (a client ID) remembers that Spotify refused its audio analysis |
 
 `GET /api/state` returns `settings` with `mqtt.password` blanked and `mqtt.hasPassword` added.

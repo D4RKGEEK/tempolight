@@ -122,6 +122,8 @@ takes about 5 seconds.
 | pre-drop dip | the last 0.4 s before a drop against the 1.5 s before that |
 | drop impact | the brightest frame in the first 0.25 s of a drop against the drop's typical brightness |
 | live drop delay, false drops | how late live mode calls each drop; switches into "drop" that are not a drop |
+| build ramp | a build-up's last bar (without its last beat, the planned dip) against its first bar |
+| drop countdown | live, on the feel song and `edm()`, `long-edm.js`, `majorPop()`, `minorBallad()` (the analyser alone): how long before each drop the prediction (`dropConf` 0.5 or more) already had the right time (within 0.25 s), the first warning, and predictions that didn't end at a drop |
 
 `--effects` also lists which effect showed when, and the live song parts.
 
@@ -136,8 +138,10 @@ shows progress; it is not a test.
 | effect changes on a 4-bar line | at least 75% |
 | effects shorter than one bar | none |
 | drop / breakdown brightness | at least 1.8 |
-| pre-drop dip | at most 0.7 |
+| pre-drop dip | at most 0.7 (whole song and live) |
 | live drop delay | at most 150 ms |
+| build ramp | at least 1.5 (whole song and live) |
+| drop countdown | at least 2 s of the right time before each drop of the EDM songs; no false prediction on pop and the ballad |
 
 ### Effect ratings: `node scripts/effect-score.js`
 

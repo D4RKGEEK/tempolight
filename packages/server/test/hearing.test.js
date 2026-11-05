@@ -61,7 +61,7 @@ test("hearing: reads ffmpeg's device lists, system_profiler, pactl and PowerShel
   const eps = parseWinEndpoints(fx("win-endpoints.json")); assert.deepEqual(eps.map(e => e.bluetooth), [false, true, true, false]);
   assert.deepEqual(winOutput(eps), { key: "win:Headphones (WH-1000XM4 Stereo)", name: "Headphones (WH-1000XM4 Stereo)", bluetooth: true, guess: true }, "the stereo endpoint, not the hands-free one");
 
-  assert.match(sourceFor("avf:BlackHole 2ch").cmd.join(" "), /^ffmpeg .*-f avfoundation -i :BlackHole 2ch -f s16le -ac 1 -ar 22050 -$/);
+  assert.match(sourceFor("avf:BlackHole 2ch").cmd.join(" "), /^ffmpeg .*-f avfoundation -i :BlackHole 2ch -f s16le -ac 2 -ar 22050 -$/); assert.equal(sourceFor("avf:BlackHole 2ch").channels, 2, "system sound comes in stereo");
   assert.ok(sourceFor("dshow:Stereo Mix (Realtek(R) Audio)").cmd.includes("audio=Stereo Mix (Realtek(R) Audio)") && sourceFor("dshow:x").cmd.includes("-audio_buffer_size"));
   assert.equal(sourceFor("parec-monitor"), null); assert.equal(sourceFor("auto"), null);
   assert.deepEqual(computerSource({ platform: "darwin", blackhole: { name: "BlackHole 2ch" }, ffmpeg: true }), { id: "avf:BlackHole 2ch" });

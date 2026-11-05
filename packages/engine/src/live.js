@@ -3,8 +3,10 @@
 // samples from a sound card, ffmpeg or a browser, and tests feed it synthetic songs.
 import { gridAt } from "./signals.js";
 import { FingerprintTap } from "./memory.js";
-import { ChromaTap, keyOf, moodOf } from "./tonal.js";
+import { ChromaTap, keyOf, moodOf, chordOf, chordFit } from "./tonal.js";
+import { StereoTap } from "./stereo.js";
 import { BeatTracker } from "./beat.js";
+import { DropPredictor } from "./drops.js";
 
 const NF = 1024, HOP = 256;
 const EDGES = (() => { const e = []; for (let i = 0; i <= 24; i++) e.push(40 * Math.pow(10000 / 40, i / 24)); return e; })();
@@ -33,7 +35,7 @@ export class LiveAnalyser {
     this.cosT = new Float32Array(NF / 2); this.sinT = new Float32Array(NF / 2);
     for (let i = 0; i < NF / 2; i++) { this.cosT[i] = Math.cos(-2 * Math.PI * i / NF); this.sinT[i] = Math.sin(-2 * Math.PI * i / NF); }
     this.ring = new Float32Array(NF); this.ringPos = 0; this.filled = 0; this.sinceHop = 0; this.decN = 0;
-    this.wave = new Float32Array(256); this.tap = new FingerprintTap(); this.ctap = new ChromaTap(this.sr); this.hopN = 0; this._lite = false;
+    this.wave = new Float32Array(256); this.tap = new FingerprintTap(); this.ctap = new ChromaTap(this.sr, 20, { bass: true }); this.chSum = new Float64Array(12); this.chBass = new Float64Array(12); this.hopN = 0; this._lite = false;
     this.reset();
   }
   /** Low-power mode (small computers): chroma every 2nd frame, the vocal estimate every 2nd hop. */
@@ -43,6 +45,7 @@ export class LiveAnalyser {
   reset() {
     this.samples = 0; this.t = 0; this.hasPrev = false; if (this.tap) this.tap.reset(); if (this.ctap) this.ctap.reset();
     this.keyAcc = new Float64Array(12); this.keyN = 0; this.keyCount = 0; this.keyEst = null; this.keyCand = null; this.brightS = null; this.mood = null; this.lastMoodT = -9;
+    this.chord = null; this.chordBar = null; this.chordMiss = 0; this.chordCount = 0; if (this.stereo) this.stereo.reset(); this.stereoAt = -1e12;
     this.hist = { k: [], s: [], h: [] }; this.lowHist = []; this.votes = []; this.last = { k: -9, s: -9, h: -9 };
     this.kicks = []; this.snares = []; this.hats = []; this.pulseN = 0;
     if (this.beat) this.beat.reset(); this.lb?.forEach(a => a.fill(0)); this.kickM = 0; this.kickPeak = 0; this.kickOn = false; this.kickTop = 0; this.kickTops = new Float32Array(8); this.kickSort = new Float32Array(8); this.kickTopI = 0; this.kickTopN = 0; this.kickS = 1; this.lowMax = 1e-6; this.kCandT = -9; this.kPendN = 0; this.kPendT = 0; this.kPendR0 = 0; this.kPendRp = 0; this.sweepPrev = 1;
@@ -53,10 +56,22 @@ export class LiveAnalyser {
     this.state = "silent"; this.cand2 = "silent"; this.candT = 0; this.stateT = 0; this.buildStart = 0; this.dropT = -9;
     this.domS = null; this.domHist = []; this.domHistT = -9; this.domBase = null; // domBase: pct(domHist, 0.3), kept until domHist changes
     this.styleStats = { env: [], envT: -9, drops: [] }; this.style = null; this.styleCand = null; this.styleN = 0; this.lastStyleT = -9; this.styleLock = null;
+    if (this.drops) this.drops.reset(); else this.drops = new DropPredictor(); // the drop countdown (drops.js)
   }
 
-  /** Feed samples. Accepts Float32Array (-1..1) or Int16Array. */
-  push(chunk) {
+  /**
+   * Feed samples. Accepts Float32Array (-1..1) or Int16Array. channels 2: interleaved left/right; the analysis hears
+   * them mixed, and a StereoTap keeps each side's level and low-band hits for the view's pan and lr (stereoOn = false:
+   * mixed only).
+   */
+  push(chunk, channels = 1) {
+    if (channels === 2) {
+      const k2 = chunk instanceof Int16Array ? 1 / 32768 : 1, n = chunk.length >> 1; let m = this.monoBuf; if (!m || m.length < n) m = this.monoBuf = new Float32Array(n);
+      const tap = this.stereoOn === false ? null : this.stereo || (this.stereo = new StereoTap(this.inRate));
+      if (tap) { for (let i = 0; i < n; i++) { const l = chunk[2 * i] * k2, r = chunk[2 * i + 1] * k2; m[i] = (l + r) * 0.5; tap.push(l, r); } this.stereoAt = this.samples; }
+      else for (let i = 0; i < n; i++) m[i] = (chunk[2 * i] + chunk[2 * i + 1]) * 0.5 * k2;
+      chunk = m.subarray(0, n);
+    }
     const isInt = chunk instanceof Int16Array, k = isInt ? 1 / 32768 : 1;
     for (let i = 0; i < chunk.length; i++) {
       let v = chunk[i] * k;
@@ -164,9 +179,11 @@ export class LiveAnalyser {
     }
     if (!this._lite || (++this.hopN & 1)) this.vocalHop(loudEnough, this._lite ? dt * 2 : dt); // (lite: every 2nd hop, covering two)
     this.sections(t, dt);
+    this.drops.hop(this, t);
     this.levels(t);
     if (t - this.lastStyleT > 2) { this.lastStyleT = t; this.estimateStyle(t); }
     if (t - this.lastMoodT > 2) { this.lastMoodT = t; this.estimateMood(t); }
+    if (this.ctap.count !== this.chordCount) { this.chordCount = this.ctap.count; this.liveChord(); }
   }
 
   // the loudness level for the view: from the loudness smoothed over ~1 s (it swings with every beat), with hysteresis
@@ -284,6 +301,24 @@ export class LiveAnalyser {
     const a = this.mood ? 1 - Math.exp(-2 / 15) : 1, m = this.mood || target;
     this.mood = { valence: Math.round((m.valence + (target.valence - m.valence) * a) * 100) / 100, energy: Math.round((m.energy + (target.energy - m.energy) * a) * 100) / 100 };
   }
+  // The chord now, from the chroma since the bar line (the 24 triads, as the whole-song analysis), judged from beat 2 of
+  // each bar on, at most one change a bar: a new chord must fit clearly (r 0.7 on under 6 frames, else 0.55) and beat
+  // the chord showing by 0.08 on the same notes; two bars with no clear chord and it is null again (unknown).
+  liveChord() {
+    const g = this.grid(this.now), c = this.ctap;
+    if (this.state === "silent" || !g.has) { if (this.state === "silent") { this.chord = null; this.chordMiss = 0; } return; }
+    const bar = g.idx - g.beatInBar; if (g.beatInBar < 1 || this.chordBar === bar) return;
+    const barT = g.beatT - g.beatInBar * g.P, end = (c.n - c.since) / this.sr, step = c.hop / this.sr, S = this.chSum, B = this.chBass, L = c.frames.length;
+    S.fill(0); B.fill(0); let n = 0;
+    for (let k = 0; k < L && end - k * step - 0.186 >= barT + 0.05; k++) { const f = c.frames[L - 1 - k], b = c.bassFrames[L - 1 - k]; for (let q = 0; q < 12; q++) { S[q] += f[q]; if (b) B[q] += b[q]; } n++; }
+    const last = g.beatInBar === 3; if (n < 3 && !last) return;
+    const ch = n ? chordOf(S, B) : null;
+    if (ch && ch.index === this.chord) { this.chordBar = bar; this.chordMiss = 0; return; }
+    const fit = this.chord != null ? chordFit(S, B, this.chord) : -9;
+    if (ch && ch.r >= (n < 6 ? 0.7 : 0.55) && ch.r - fit >= 0.08) { this.chord = ch.index; this.chordBar = bar; this.chordMiss = 0; return; }
+    if (!last) return;
+    this.chordBar = bar; if (!(fit >= 0.45)) { this.chordMiss++; if (this.chordMiss >= 2) this.chord = null; } else this.chordMiss = 0;
+  }
   /** No steady drums lately (a ballad, a piano piece): the live tempo is a guess. */
   drumless() { return this.kicks.filter(x => this.t - x < 15).length < 6; }
   /** What song memory's recognise()/matchAt() want besides the loudness fingerprint: the live tempo, chroma, drumless. */
@@ -319,30 +354,30 @@ export class LiveAnalyser {
    *   on time; when it isn't, the kicks heard drive the lights
    */
   view(t = this.now, o = {}) {
-    const g = this.grid(t), loud = Math.min(1, this.eFast / this.eMax);
+    const g = this.grid(t), loud = Math.min(1, this.eFast / this.eMax), nd = this.nextDrop(t);
     const ki = this.kicks.length - 1, kick = ki >= 0 ? this.kicks[ki] : -9, pulses = [], snares = [];
     for (let i = ki; i >= 0 && t - this.kicks[i] < 1; i--) pulses.push(this.kicks[i]);
     for (let i = this.snares.length - 1; i >= 0 && t - this.snares[i] < 0.7; i--) snares.push(this.snares[i]);
     const V = { g, bpm: this.bpm, conf: this.conf, style: this.style || "party", loud, level: this.levelS,
-      state: this.state, buildP: this.state === "build" ? Math.min(1, (t - this.buildStart) / 7) : 0, dropT: this.dropT, nextDrop: this.nextDrop(t), kickStrength: this.kickS,
+      state: this.state, buildP: this.state === "build" ? Math.min(1, (t - this.buildStart) / 7) : 0, dropT: this.dropT, nextDrop: nd, dropConf: nd != null ? this.drops.conf : 0, dropSource: nd != null ? "predicted" : null, kickStrength: this.kickS,
       kick, snare: this.snares.length ? this.snares[this.snares.length - 1] : -9, hat: this.hats.length ? this.hats[this.hats.length - 1] : -9,
       pulses, snares, pulseN: this.pulseN, vocal: this.vocal, quietFor: this.state === "silent" ? t - this.stateT : 0, live: true,
       key: this.keyEst ? this.keyEst.key : null, mode: this.keyEst ? this.keyEst.mode : null, keyConf: this.keyEst ? this.keyEst.confidence : 0, mood: this.mood,
-      styleSure: !!this.style, features: this.features || null }; // (what the style was chosen from: kickFrac, dyn, ...; for the director's live look)
+      styleSure: !!this.style, features: this.features || null, chord: this.chord }; // (features: what the style was chosen from: kickFrac, dyn, ...; for the director's live look)
+    // a stereo source: the balance of the hit or the level now, and the two levels (only while stereo keeps coming)
+    const sv = this.stereoView(); if (sv) { V.pan = sv.pan; V.lr = sv.lr; }
     if (o.predict && g.has && t - kick < 2 && this.conf > 0.3) { V.kick = g.beatT; V.pulses = [g.beatT, g.beatT - g.P]; V.pulseN = g.idx; }
     return V;
   }
 
   /**
-   * During a build-up with a sure beat grid: when the drop will probably come, else null. Build-ups run 4, 8 or 16
-   * bars from the bar line nearest their start, and the drop lands on the bar line after.
+   * When the next drop will probably come (on this analyser's clock), else null: the drop predictor's guess (drops.js:
+   * a riser, the phrase grid and the pre-drop dip) once it is fairly sure (dropConf).
    */
-  nextDrop(t) {
-    const B = this.beat; if (this.state !== "build" || !B.has || B.conf < 0.5) return null;
-    const bar = 4 * B.P, i0 = Math.round((this.buildStart - B.off) / B.P), j = Math.round((i0 - B.barOff) / 4) * 4 + B.barOff, b0 = B.off + j * B.P;
-    for (const n of [4, 8, 16]) { const d = b0 + n * bar; if (d > t + 0.02) return d; }
-    return null;
-  }
+  nextDrop(t) { const d = this.drops; return d.next != null && d.next > t - 0.5 && d.conf > 0 ? d.next : null; }
+
+  /** A stereo source's balance now: {pan: -1 left .. 1 right (the hit just now, else the levels), lr: [left, right] 0..1}, or null (mono). */
+  stereoView() { const sp = this.stereo; return sp && sp.stereo && this.samples - this.stereoAt < this.sr * 0.5 ? { pan: sp.pan, lr: sp.lr } : null; }
 
   /** Extra per-frame signals for buildSignals(): spectrum bands, waveform, bass level. */
   extras() { return { bands: this.bands, wave: this.wave, bassL: Math.min(1, this.bass / this.bassMax) }; }

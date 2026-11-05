@@ -2,7 +2,7 @@
 
 From nothing to lights moving with music in about ten minutes. You need a computer (Windows, Mac, Linux or a
 Raspberry Pi) on the same Wi-Fi as your lights. No lights yet? You can still try everything with a pretend room on
-screen, or in the [online demo](https://tempolight.pages.dev) without installing anything.
+screen, or in the [online demo](https://tempolight.pages.dev/demo/) without installing anything.
 
 ```mermaid
 flowchart LR
@@ -73,7 +73,7 @@ Each picture is a room layout drawn with your own controllers. Tap the one close
 
 Speakers (Bluetooth ones especially) play the sound a little late, so the lights would flash before you hear the beat.
 Turn the speakers up, tap **Start** and stay quiet for 5 seconds: Tempolight plays a few clicks, listens with the
-microphone and sets the delay. It says, for example, *Done. Speakers: 180 ms. Lights set +160 ms.*
+microphone and sets the delay. It says, for example, *Done. Speakers: 180 ms. Lights set -145 ms.*
 
 - *Nothing heard* or *The clicks were hard to hear*: turn the speakers up, move closer and tap **Again**.
 - *This browser can't use the microphone here*: browsers only allow the microphone on `localhost` or a secure (https)
@@ -116,7 +116,7 @@ kick, a ballad gets a calm one. The colours come from the song's mood.
 The effect stays for the whole song. It still moves with the music: it speeds up and slows down with the tempo, gets
 stronger in build-ups, changes colour at new parts of the song, and pumps and flashes at the drops.
 
-- **Music** shows the look under *What Tempolight hears*, for example *Kick Shockwave · Sunset (fast
+- **Music** shows the look under the song map in *In sync*, for example *Kick Shockwave · Sunset (fast
   four-on-the-floor, high energy)*.
 - Don't like it? Tap **Not this one**. You get the next best look, and that one won't come back for this song.
 - Like it? Tap **Keep**. The song keeps this look.
@@ -128,8 +128,52 @@ Want more change? Open **Effects** → *How effects are chosen* → **Variety**:
 - **Song parts**: one effect each for calm parts, build-ups and drops.
 - **Show (changes often)**: effects change with the song, every few bars.
 
+Two more under **Settings** → *Lighting*:
+
+- **Chord colours** (on): with *Automatic* colours, each chord gets its own shade of the palette, so the colour
+  steps on the bar line when the chord changes (a chorus that comes back gets the same colours). Live listening does
+  this too once it is sure of the chord.
+- **Stereo** (*Subtle*): when the sound comes in stereo (this computer's sound, a song played in the app), the side
+  of the room a hit came from lights up more. *Strong* leans further, *Off* turns it off. A microphone, mono sound or
+  a room drawn as one upright strip are unchanged.
+
+## Is it in sync?
+
+The **In sync** panel at the top of **Music** tells you how well Tempolight follows the beat.
+
+- **Locked**: the lights are on the beat.
+- **Finding the beat**: it is still working out the tempo. Give it a few seconds.
+- **Not hearing**: nothing to follow. Play a song or start listening.
+
+The bar shows how sure it is, from 0 to 100. The dot marked **1** flashes on the first beat of each bar.
+
+Under the meter, one line tells you why, or what to do:
+
+- *Too quiet — turn it up or move the mic closer*: the sound is too soft to hear the beat.
+- *No drums — following the melody*: a song without drums. The tempo is a guess, so it never says Locked.
+- *Finding the beat…*: it hears music, but the beat isn't clear yet.
+- *Following the song's beat map*: a song it knows. It knows every beat, build-up and drop ahead.
+- *Beat from DJ Link* (or MIDI clock, Ableton Link): the beat comes from your DJ gear or music app.
+
+On **Home**, a small dot before the status line shows the same thing: green is locked, amber is finding the beat,
+grey is not hearing. Tap it to open **Music**.
+
+### The song map
+
+Below the meter is a map of the song playing now.
+
+- The bars show how loud the song is.
+- The colours are the parts: blue is calm, amber is a build-up, pink is a drop.
+- The letters name the sections. Parts that repeat get the same letter, so a chorus that comes back is **B** again.
+- A small pink mark is a drop. The dashed line is the next drop, and the line under the map counts down to it.
+- The line with a dot on top is where the song is now. What is still to come is paler.
+
+For songs played here or remembered, the whole map is there from the start. For a song heard live that Tempolight
+doesn't know yet, the map grows as it plays.
+
 ## Where next
 
+- [What you can do](what-you-can-do.md): a tour of every feature, with where to find it
 - [Connect more kinds of lights](connect-lights.md): Hue, Nanoleaf, LIFX, DMX fixtures and more
 - [Draw your real room](room-and-zones.md), so effects move across it the way it really is
 - [Spotify](../spotify.md): the lights follow Spotify with the whole beat map

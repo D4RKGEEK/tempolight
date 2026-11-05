@@ -74,6 +74,10 @@
       "description": "The track music apps on this computer play, and the Spotify sign-in."
     },
     {
+      "name": "Music library",
+      "description": "Your own music folders, analysed ahead so every song is followed from its first play. Node server only, admin only."
+    },
+    {
       "name": "Spotify",
       "description": "Lights that follow the Spotify track with its beat map."
     },
@@ -3655,6 +3659,675 @@
         "x-tempolight-source": "packages/server/src/core.js"
       }
     },
+    "/api/library": {
+      "get": {
+        "tags": [
+          "Music library"
+        ],
+        "summary": "Get the music library",
+        "description": "The folders, what was found and analysed, the progress (`Analysing 34 of 210 · 1.2 s each`), whether ffmpeg is installed, and the songs with their tempo, key and look.\n\n**Access:** admin. Needs an unlock token (`x-tempolight-token`) while a PIN lock is set; without a lock, anyone can call it.",
+        "operationId": "getLibrary",
+        "parameters": [
+          {
+            "name": "songs",
+            "in": "query",
+            "required": false,
+            "description": "`0` leaves the song list out (for the progress).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Library"
+                },
+                "example": {
+                  "available": true,
+                  "folders": [
+                    {
+                      "path": "/music",
+                      "exists": true,
+                      "songs": 210
+                    }
+                  ],
+                  "watch": true,
+                  "paused": false,
+                  "ffmpeg": true,
+                  "ffprobe": true,
+                  "message": null,
+                  "counts": {
+                    "files": 214,
+                    "analysed": 210,
+                    "queued": 0,
+                    "errors": 1,
+                    "needsFfmpeg": 0,
+                    "skipped": 2,
+                    "duplicates": 1,
+                    "removed": 0
+                  },
+                  "cap": {
+                    "songs": 210,
+                    "maxSongs": 5000,
+                    "bytes": 5400000,
+                    "maxBytes": 209715200,
+                    "full": false
+                  },
+                  "progress": {
+                    "state": "idle",
+                    "waiting": null,
+                    "done": 0,
+                    "total": 0,
+                    "perSongMs": 0,
+                    "avgDecodeMs": 0,
+                    "avgAnalyseMs": 0,
+                    "workers": 0,
+                    "maxWorkers": 3,
+                    "inline": false,
+                    "current": [],
+                    "lastScan": {
+                      "at": 1762300000000,
+                      "files": 214
+                    }
+                  },
+                  "errors": [],
+                  "songs": [
+                    {
+                      "id": "l3f9a0c21d7",
+                      "name": "Daft Punk - One More Time",
+                      "bpm": 122.7,
+                      "dur": 320.4,
+                      "key": "D major",
+                      "look": {
+                        "main": "shock",
+                        "name": "Shockwave",
+                        "palette": "neon",
+                        "locked": false
+                      },
+                      "file": "Daft Punk/Discovery/01 One More Time.mp3"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Locked, or not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Settings are locked. Unlock with the PIN in Settings."
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ],
+        "x-tempolight-area": "admin",
+        "x-tempolight-source": "packages/server/src/library.js"
+      },
+      "patch": {
+        "tags": [
+          "Music library"
+        ],
+        "summary": "Change the folders",
+        "description": "Sets the music folders (the whole list) and whether new songs are noticed by themselves, then looks through them. Each folder must be a full path to an existing folder, not a whole disk; files are never read outside these folders (links that lead out are not followed). Taking a folder out takes its songs out of the library.\n\n**Access:** admin. Needs an unlock token (`x-tempolight-token`) while a PIN lock is set; without a lock, anyone can call it.",
+        "operationId": "patchLibrary",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "folders": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "description": "A full path on the computer Tempolight runs on (`~/Music` works)."
+                    }
+                  },
+                  "watch": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "example": {
+                "folders": [
+                  "/music"
+                ],
+                "watch": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Library"
+                },
+                "example": {
+                  "available": true,
+                  "folders": [
+                    {
+                      "path": "/music",
+                      "exists": true,
+                      "songs": 210
+                    }
+                  ],
+                  "watch": true,
+                  "paused": false,
+                  "ffmpeg": true,
+                  "ffprobe": true,
+                  "message": null,
+                  "counts": {
+                    "files": 214,
+                    "analysed": 210,
+                    "queued": 0,
+                    "errors": 1,
+                    "needsFfmpeg": 0,
+                    "skipped": 2,
+                    "duplicates": 1,
+                    "removed": 0
+                  },
+                  "cap": {
+                    "songs": 210,
+                    "maxSongs": 5000,
+                    "bytes": 5400000,
+                    "maxBytes": 209715200,
+                    "full": false
+                  },
+                  "progress": {
+                    "state": "idle",
+                    "waiting": null,
+                    "done": 0,
+                    "total": 0,
+                    "perSongMs": 0,
+                    "avgDecodeMs": 0,
+                    "avgAnalyseMs": 0,
+                    "workers": 0,
+                    "maxWorkers": 3,
+                    "inline": false,
+                    "current": [],
+                    "lastScan": {
+                      "at": 1762300000000,
+                      "files": 214
+                    }
+                  },
+                  "errors": [],
+                  "songs": [
+                    {
+                      "id": "l3f9a0c21d7",
+                      "name": "Daft Punk - One More Time",
+                      "bpm": 122.7,
+                      "dur": 320.4,
+                      "key": "D major",
+                      "look": {
+                        "main": "shock",
+                        "name": "Shockwave",
+                        "palette": "neon",
+                        "locked": false
+                      },
+                      "file": "Daft Punk/Discovery/01 One More Time.mp3"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body isn't valid JSON, or a value is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "There is no folder /musik on the computer Tempolight runs on"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Locked, or not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Settings are locked. Unlock with the PIN in Settings."
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ],
+        "x-tempolight-area": "admin",
+        "x-tempolight-source": "packages/server/src/library.js"
+      }
+    },
+    "/api/library/pause": {
+      "post": {
+        "tags": [
+          "Music library"
+        ],
+        "summary": "Pause analysing",
+        "description": "Stops the analysis at once (the songs being analysed start again on resume). Stays paused after a restart.\n\n**Access:** admin. Needs an unlock token (`x-tempolight-token`) while a PIN lock is set; without a lock, anyone can call it.",
+        "operationId": "postLibraryPause",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Library"
+                },
+                "example": {
+                  "available": true,
+                  "folders": [
+                    {
+                      "path": "/music",
+                      "exists": true,
+                      "songs": 210
+                    }
+                  ],
+                  "watch": true,
+                  "paused": false,
+                  "ffmpeg": true,
+                  "ffprobe": true,
+                  "message": null,
+                  "counts": {
+                    "files": 214,
+                    "analysed": 210,
+                    "queued": 0,
+                    "errors": 1,
+                    "needsFfmpeg": 0,
+                    "skipped": 2,
+                    "duplicates": 1,
+                    "removed": 0
+                  },
+                  "cap": {
+                    "songs": 210,
+                    "maxSongs": 5000,
+                    "bytes": 5400000,
+                    "maxBytes": 209715200,
+                    "full": false
+                  },
+                  "progress": {
+                    "state": "idle",
+                    "waiting": null,
+                    "done": 0,
+                    "total": 0,
+                    "perSongMs": 0,
+                    "avgDecodeMs": 0,
+                    "avgAnalyseMs": 0,
+                    "workers": 0,
+                    "maxWorkers": 3,
+                    "inline": false,
+                    "current": [],
+                    "lastScan": {
+                      "at": 1762300000000,
+                      "files": 214
+                    }
+                  },
+                  "errors": [],
+                  "songs": [
+                    {
+                      "id": "l3f9a0c21d7",
+                      "name": "Daft Punk - One More Time",
+                      "bpm": 122.7,
+                      "dur": 320.4,
+                      "key": "D major",
+                      "look": {
+                        "main": "shock",
+                        "name": "Shockwave",
+                        "palette": "neon",
+                        "locked": false
+                      },
+                      "file": "Daft Punk/Discovery/01 One More Time.mp3"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Locked, or not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Settings are locked. Unlock with the PIN in Settings."
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ],
+        "x-tempolight-area": "admin",
+        "x-tempolight-source": "packages/server/src/library.js"
+      }
+    },
+    "/api/library/resume": {
+      "post": {
+        "tags": [
+          "Music library"
+        ],
+        "summary": "Resume analysing",
+        "description": "Goes on analysing.\n\n**Access:** admin. Needs an unlock token (`x-tempolight-token`) while a PIN lock is set; without a lock, anyone can call it.",
+        "operationId": "postLibraryResume",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Library"
+                },
+                "example": {
+                  "available": true,
+                  "folders": [
+                    {
+                      "path": "/music",
+                      "exists": true,
+                      "songs": 210
+                    }
+                  ],
+                  "watch": true,
+                  "paused": false,
+                  "ffmpeg": true,
+                  "ffprobe": true,
+                  "message": null,
+                  "counts": {
+                    "files": 214,
+                    "analysed": 210,
+                    "queued": 0,
+                    "errors": 1,
+                    "needsFfmpeg": 0,
+                    "skipped": 2,
+                    "duplicates": 1,
+                    "removed": 0
+                  },
+                  "cap": {
+                    "songs": 210,
+                    "maxSongs": 5000,
+                    "bytes": 5400000,
+                    "maxBytes": 209715200,
+                    "full": false
+                  },
+                  "progress": {
+                    "state": "idle",
+                    "waiting": null,
+                    "done": 0,
+                    "total": 0,
+                    "perSongMs": 0,
+                    "avgDecodeMs": 0,
+                    "avgAnalyseMs": 0,
+                    "workers": 0,
+                    "maxWorkers": 3,
+                    "inline": false,
+                    "current": [],
+                    "lastScan": {
+                      "at": 1762300000000,
+                      "files": 214
+                    }
+                  },
+                  "errors": [],
+                  "songs": [
+                    {
+                      "id": "l3f9a0c21d7",
+                      "name": "Daft Punk - One More Time",
+                      "bpm": 122.7,
+                      "dur": 320.4,
+                      "key": "D major",
+                      "look": {
+                        "main": "shock",
+                        "name": "Shockwave",
+                        "palette": "neon",
+                        "locked": false
+                      },
+                      "file": "Daft Punk/Discovery/01 One More Time.mp3"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Locked, or not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Settings are locked. Unlock with the PIN in Settings."
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ],
+        "x-tempolight-area": "admin",
+        "x-tempolight-source": "packages/server/src/library.js"
+      }
+    },
+    "/api/library/scan": {
+      "post": {
+        "tags": [
+          "Music library"
+        ],
+        "summary": "Look for new songs",
+        "description": "Looks through the folders now. New and changed files are analysed; files already analysed (same path, size and time) are skipped, and copies are kept once.\n\n**Access:** admin. Needs an unlock token (`x-tempolight-token`) while a PIN lock is set; without a lock, anyone can call it.",
+        "operationId": "postLibraryScan",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Library"
+                },
+                "example": {
+                  "available": true,
+                  "folders": [
+                    {
+                      "path": "/music",
+                      "exists": true,
+                      "songs": 210
+                    }
+                  ],
+                  "watch": true,
+                  "paused": false,
+                  "ffmpeg": true,
+                  "ffprobe": true,
+                  "message": null,
+                  "counts": {
+                    "files": 214,
+                    "analysed": 210,
+                    "queued": 0,
+                    "errors": 1,
+                    "needsFfmpeg": 0,
+                    "skipped": 2,
+                    "duplicates": 1,
+                    "removed": 0
+                  },
+                  "cap": {
+                    "songs": 210,
+                    "maxSongs": 5000,
+                    "bytes": 5400000,
+                    "maxBytes": 209715200,
+                    "full": false
+                  },
+                  "progress": {
+                    "state": "idle",
+                    "waiting": null,
+                    "done": 0,
+                    "total": 0,
+                    "perSongMs": 0,
+                    "avgDecodeMs": 0,
+                    "avgAnalyseMs": 0,
+                    "workers": 0,
+                    "maxWorkers": 3,
+                    "inline": false,
+                    "current": [],
+                    "lastScan": {
+                      "at": 1762300000000,
+                      "files": 214
+                    }
+                  },
+                  "errors": [],
+                  "songs": [
+                    {
+                      "id": "l3f9a0c21d7",
+                      "name": "Daft Punk - One More Time",
+                      "bpm": 122.7,
+                      "dur": 320.4,
+                      "key": "D major",
+                      "look": {
+                        "main": "shock",
+                        "name": "Shockwave",
+                        "palette": "neon",
+                        "locked": false
+                      },
+                      "file": "Daft Punk/Discovery/01 One More Time.mp3"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body isn't valid JSON, or a value is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Add a music folder first"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Locked, or not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Settings are locked. Unlock with the PIN in Settings."
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ],
+        "x-tempolight-area": "admin",
+        "x-tempolight-source": "packages/server/src/library.js"
+      }
+    },
+    "/api/library/songs/{id}": {
+      "delete": {
+        "tags": [
+          "Music library"
+        ],
+        "summary": "Remove a song",
+        "description": "Takes the song out of the library. The file stays; it isn't added again unless it changes.\n\n**Access:** admin. Needs an unlock token (`x-tempolight-token`) while a PIN lock is set; without a lock, anyone can call it.",
+        "operationId": "deleteLibrarySongsById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The song's id (`l…`).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Locked, or not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Settings are locked. Unlock with the PIN in Settings."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "That song isn't in the library"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ],
+        "x-tempolight-area": "admin",
+        "x-tempolight-source": "packages/server/src/library.js"
+      }
+    },
     "/api/lock": {
       "post": {
         "tags": [
@@ -6669,6 +7342,78 @@
         "x-tempolight-source": "packages/server/src/core.js"
       }
     },
+    "/api/song/map": {
+      "get": {
+        "tags": [
+          "Music"
+        ],
+        "summary": "Get the playing song's map",
+        "description": "The map of what plays now: its loudness, sections (repeats share a label), drops and bars, and where it is. Known ahead for a song played here, a remembered song a music app plays, or one song memory recognised. A song heard live that Tempolight doesn't know gets a map made as it is heard (`growing: true`). `source: null` when nothing plays.\n\n**Access:** open to everyone who can reach Tempolight.",
+        "operationId": "getSongMap",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SongMap"
+                },
+                "example": {
+                  "source": "song",
+                  "id": "m9x2q1",
+                  "name": "One More Time",
+                  "playing": true,
+                  "growing": false,
+                  "pos": 42.5,
+                  "dur": 320.4,
+                  "env": [
+                    0.12,
+                    0.4,
+                    0.38
+                  ],
+                  "envStep": 0.67,
+                  "sections": [
+                    {
+                      "t0": 0,
+                      "t1": 30.1,
+                      "bar0": 0,
+                      "bar1": 16,
+                      "label": "A",
+                      "state": "calm"
+                    },
+                    {
+                      "t0": 30.1,
+                      "t1": 60.2,
+                      "bar0": 16,
+                      "bar1": 32,
+                      "label": "B",
+                      "state": "build"
+                    }
+                  ],
+                  "drops": [
+                    60.2
+                  ],
+                  "bars": [
+                    {
+                      "t0": 0,
+                      "state": "calm",
+                      "energy": 0.31
+                    }
+                  ],
+                  "phrase": {
+                    "len": 8,
+                    "first": 0
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-tempolight-area": "open",
+        "x-tempolight-source": "packages/server/src/core.js"
+      }
+    },
     "/api/songs": {
       "get": {
         "tags": [
@@ -6763,6 +7508,102 @@
           }
         ],
         "x-tempolight-area": "admin",
+        "x-tempolight-source": "packages/server/src/core.js"
+      }
+    },
+    "/api/songs/{id}/map": {
+      "get": {
+        "tags": [
+          "Music"
+        ],
+        "summary": "Get a song's map",
+        "description": "The map of a remembered song: its loudness, sections, drops and bars (`pos` is `null`).\n\n**Access:** open to everyone who can reach Tempolight.",
+        "operationId": "getSongsByIdMap",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "A song id (`m…`).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SongMap"
+                },
+                "example": {
+                  "source": "song",
+                  "id": "m9x2q1",
+                  "name": "One More Time",
+                  "playing": true,
+                  "growing": false,
+                  "pos": 42.5,
+                  "dur": 320.4,
+                  "env": [
+                    0.12,
+                    0.4,
+                    0.38
+                  ],
+                  "envStep": 0.67,
+                  "sections": [
+                    {
+                      "t0": 0,
+                      "t1": 30.1,
+                      "bar0": 0,
+                      "bar1": 16,
+                      "label": "A",
+                      "state": "calm"
+                    },
+                    {
+                      "t0": 30.1,
+                      "t1": 60.2,
+                      "bar0": 16,
+                      "bar1": 32,
+                      "label": "B",
+                      "state": "build"
+                    }
+                  ],
+                  "drops": [
+                    60.2
+                  ],
+                  "bars": [
+                    {
+                      "t0": 0,
+                      "state": "calm",
+                      "energy": 0.31
+                    }
+                  ],
+                  "phrase": {
+                    "len": 8,
+                    "first": 0
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "That song isn't remembered"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "x-tempolight-area": "open",
         "x-tempolight-source": "packages/server/src/core.js"
       }
     },
@@ -7561,6 +8402,13 @@
                   "part": "drop",
                   "beat": 2,
                   "level": 0.71,
+                  "drop": {
+                    "next": 3.2,
+                    "at": 61.9,
+                    "conf": 0.82,
+                    "source": "predicted",
+                    "building": true
+                  },
                   "power": true,
                   "brightness": 0.8,
                   "night": false,
@@ -10462,6 +11310,242 @@
           ]
         }
       },
+      "SongMap": {
+        "type": "object",
+        "description": "A song's map, for the Music page: its loudness, sections, drops and bars.",
+        "properties": {
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "song",
+              "memory",
+              "live",
+              null
+            ],
+            "description": "`song`: played here; `memory`: a remembered song (asked for by id, a music app plays it, or song memory recognised it); `live`: heard live and not known, made as it is heard; `null`: nothing plays."
+          },
+          "id": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The remembered song's id."
+          },
+          "name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "playing": {
+            "type": "boolean"
+          },
+          "growing": {
+            "type": "boolean",
+            "description": "A live map: it grows as the song is heard."
+          },
+          "pos": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "description": "Where the song is now, in seconds (`null` for a song asked for by id)."
+          },
+          "dur": {
+            "type": "number",
+            "description": "Seconds (a live map: heard so far)."
+          },
+          "env": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "minimum": 0,
+              "maximum": 1
+            },
+            "description": "Loudness 0-1, at most 480 values."
+          },
+          "envStep": {
+            "type": "number",
+            "description": "Seconds per `env` value."
+          },
+          "sections": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "t0": {
+                  "type": "number"
+                },
+                "t1": {
+                  "type": "number"
+                },
+                "bar0": {
+                  "type": "integer"
+                },
+                "bar1": {
+                  "type": "integer"
+                },
+                "label": {
+                  "type": "string",
+                  "description": "`A`, `B`, …: repeats share a label (a live map: one per part)."
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "calm",
+                    "build",
+                    "drop"
+                  ]
+                }
+              }
+            }
+          },
+          "drops": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            },
+            "description": "When the drops come, in seconds."
+          },
+          "bars": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "t0": {
+                  "type": "number"
+                },
+                "state": {
+                  "type": "string"
+                },
+                "energy": {
+                  "type": "number",
+                  "minimum": 0,
+                  "maximum": 1
+                }
+              }
+            },
+            "description": "Empty for a live map."
+          },
+          "phrase": {
+            "type": [
+              "object",
+              "null"
+            ],
+            "description": "The phrase grid: phrases of `len` bars from bar `first`.",
+            "properties": {
+              "len": {
+                "type": "integer"
+              },
+              "first": {
+                "type": "integer"
+              }
+            }
+          }
+        },
+        "example": {
+          "source": "song",
+          "id": "m9x2q1",
+          "name": "One More Time",
+          "playing": true,
+          "growing": false,
+          "pos": 42.5,
+          "dur": 320.4,
+          "env": [
+            0.12,
+            0.4,
+            0.38
+          ],
+          "envStep": 0.67,
+          "sections": [
+            {
+              "t0": 0,
+              "t1": 30.1,
+              "bar0": 0,
+              "bar1": 16,
+              "label": "A",
+              "state": "calm"
+            },
+            {
+              "t0": 30.1,
+              "t1": 60.2,
+              "bar0": 16,
+              "bar1": 32,
+              "label": "B",
+              "state": "build"
+            }
+          ],
+          "drops": [
+            60.2
+          ],
+          "bars": [
+            {
+              "t0": 0,
+              "state": "calm",
+              "energy": 0.31
+            }
+          ],
+          "phrase": {
+            "len": 8,
+            "first": 0
+          }
+        }
+      },
+      "Sync": {
+        "type": "object",
+        "description": "How locked on the beat it is (the Music page's meter). Eased over about a second; `locked` from 65, and it stays locked down to 50.",
+        "properties": {
+          "score": {
+            "type": "integer",
+            "description": "0 to 100.",
+            "minimum": 0,
+            "maximum": 100
+          },
+          "state": {
+            "type": "string",
+            "enum": [
+              "locked",
+              "finding",
+              "none"
+            ],
+            "description": "`none`: nothing to follow (not hearing)."
+          },
+          "hint": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "One plain sentence: why, or what to do.",
+            "example": "Too quiet — turn it up or move the mic closer"
+          },
+          "source": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "song",
+              "memory",
+              "djlink",
+              "midiclock",
+              "link",
+              "live",
+              "metronome",
+              null
+            ],
+            "description": "Where the beat comes from."
+          }
+        },
+        "example": {
+          "score": 92,
+          "state": "locked",
+          "hint": null,
+          "source": "live"
+        }
+      },
       "SongShow": {
         "type": "object",
         "properties": {
@@ -10972,6 +12056,10 @@
             "type": "boolean",
             "description": "Drops change look every 2 bars (colour flip, mirror) between effect changes."
           },
+          "dropCountdown": {
+            "type": "boolean",
+            "description": "The Live pads page shows \"Drop in 4 · 3 · 2 · 1\" before a drop."
+          },
           "punch": {
             "type": "number",
             "description": "How hard the kick pumps the room in drops.",
@@ -10998,6 +12086,19 @@
           },
           "moodColours": {
             "type": "boolean"
+          },
+          "chordColours": {
+            "type": "boolean",
+            "description": "With the automatic palette, colours step with the song's chords on bar lines."
+          },
+          "stereo": {
+            "type": "string",
+            "enum": [
+              "off",
+              "subtle",
+              "strong"
+            ],
+            "description": "With a stereo source, the side of the room a hit came from brightens."
           },
           "requests": {
             "type": "boolean"
@@ -11325,6 +12426,10 @@
             "type": "boolean",
             "description": "Drops change look every 2 bars (colour flip, mirror) between effect changes."
           },
+          "dropCountdown": {
+            "type": "boolean",
+            "description": "The Live pads page shows \"Drop in 4 · 3 · 2 · 1\" before a drop."
+          },
           "punch": {
             "type": "number",
             "description": "How hard the kick pumps the room in drops.",
@@ -11351,6 +12456,19 @@
           },
           "moodColours": {
             "type": "boolean"
+          },
+          "chordColours": {
+            "type": "boolean",
+            "description": "With the automatic palette, colours step with the song's chords on bar lines."
+          },
+          "stereo": {
+            "type": "string",
+            "enum": [
+              "off",
+              "subtle",
+              "strong"
+            ],
+            "description": "With a stereo source, the side of the room a hit came from brightens."
           },
           "requests": {
             "type": "boolean"
@@ -11740,6 +12858,48 @@
             "minimum": 0,
             "maximum": 1
           },
+          "drop": {
+            "type": "object",
+            "description": "The next drop (see docs/internals/live-analyser.md, the drop countdown). All `null`, `conf` 0 when none is expected.",
+            "properties": {
+              "next": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "Seconds until the next drop."
+              },
+              "at": {
+                "type": [
+                  "number",
+                  "null"
+                ],
+                "description": "When it comes, on the music's clock (the song's position, or the live analyser's clock)."
+              },
+              "conf": {
+                "type": "number",
+                "description": "How sure: 1 when known.",
+                "minimum": 0,
+                "maximum": 1
+              },
+              "source": {
+                "type": [
+                  "string",
+                  "null"
+                ],
+                "enum": [
+                  "memory",
+                  "predicted",
+                  null
+                ],
+                "description": "`memory`: known ahead (an analysed or remembered song, a show's cue, the Build & drop pad); `predicted`: heard coming while listening live."
+              },
+              "building": {
+                "type": "boolean",
+                "description": "The lights are building toward it."
+              }
+            }
+          },
           "bands": {
             "type": [
               "array",
@@ -11863,6 +13023,9 @@
                 "type": "null"
               }
             ]
+          },
+          "sync": {
+            "$ref": "#/components/schemas/Sync"
           },
           "nowPlaying": {
             "type": [
@@ -12120,6 +13283,13 @@
           "part": "drop",
           "beat": 2,
           "level": 0.71,
+          "drop": {
+            "next": 3.2,
+            "at": 61.9,
+            "conf": 0.82,
+            "source": "predicted",
+            "building": true
+          },
           "power": true,
           "brightness": 0.8,
           "night": false,
@@ -12425,6 +13595,289 @@
           }
         }
       },
+      "Library": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "folders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "exists": {
+                  "type": "boolean"
+                },
+                "songs": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "watch": {
+            "type": "boolean",
+            "description": "New songs in the folders are noticed by themselves."
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "ffmpeg": {
+            "type": "boolean",
+            "description": "ffmpeg is installed: every format can be read (else WAV only)."
+          },
+          "ffprobe": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "“Install ffmpeg to analyse MP3/AAC/FLAC; WAV works now.” when it isn't."
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "files": {
+                "type": "integer"
+              },
+              "analysed": {
+                "type": "integer"
+              },
+              "queued": {
+                "type": "integer"
+              },
+              "errors": {
+                "type": "integer"
+              },
+              "needsFfmpeg": {
+                "type": "integer"
+              },
+              "skipped": {
+                "type": "integer"
+              },
+              "duplicates": {
+                "type": "integer"
+              },
+              "removed": {
+                "type": "integer"
+              }
+            }
+          },
+          "cap": {
+            "type": "object",
+            "properties": {
+              "songs": {
+                "type": "integer"
+              },
+              "maxSongs": {
+                "type": "integer"
+              },
+              "bytes": {
+                "type": "integer"
+              },
+              "maxBytes": {
+                "type": "integer"
+              },
+              "full": {
+                "type": "boolean"
+              }
+            }
+          },
+          "progress": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "idle",
+                  "scanning",
+                  "analysing",
+                  "waiting",
+                  "paused"
+                ]
+              },
+              "waiting": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "done": {
+                "type": "integer"
+              },
+              "total": {
+                "type": "integer"
+              },
+              "perSongMs": {
+                "type": "integer",
+                "description": "Wall time per song in this batch."
+              },
+              "avgDecodeMs": {
+                "type": "integer"
+              },
+              "avgAnalyseMs": {
+                "type": "integer"
+              },
+              "workers": {
+                "type": "integer"
+              },
+              "maxWorkers": {
+                "type": "integer"
+              },
+              "inline": {
+                "type": "boolean"
+              },
+              "current": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "lastScan": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": true,
+                "description": "`{at, files}`."
+              }
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "type": "string",
+                  "description": "Relative to its folder."
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "error",
+                    "needs",
+                    "skipped"
+                  ]
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "songs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "bpm": {
+                  "type": "number"
+                },
+                "dur": {
+                  "type": "number"
+                },
+                "key": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "look": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": true,
+                  "description": "`{main, name, palette, locked}`."
+                },
+                "file": {
+                  "type": "string",
+                  "description": "Relative to its folder."
+                }
+              }
+            },
+            "description": "Left out with `?songs=0`."
+          }
+        },
+        "example": {
+          "available": true,
+          "folders": [
+            {
+              "path": "/music",
+              "exists": true,
+              "songs": 210
+            }
+          ],
+          "watch": true,
+          "paused": false,
+          "ffmpeg": true,
+          "ffprobe": true,
+          "message": null,
+          "counts": {
+            "files": 214,
+            "analysed": 210,
+            "queued": 0,
+            "errors": 1,
+            "needsFfmpeg": 0,
+            "skipped": 2,
+            "duplicates": 1,
+            "removed": 0
+          },
+          "cap": {
+            "songs": 210,
+            "maxSongs": 5000,
+            "bytes": 5400000,
+            "maxBytes": 209715200,
+            "full": false
+          },
+          "progress": {
+            "state": "idle",
+            "waiting": null,
+            "done": 0,
+            "total": 0,
+            "perSongMs": 0,
+            "avgDecodeMs": 0,
+            "avgAnalyseMs": 0,
+            "workers": 0,
+            "maxWorkers": 3,
+            "inline": false,
+            "current": [],
+            "lastScan": {
+              "at": 1762300000000,
+              "files": 214
+            }
+          },
+          "errors": [],
+          "songs": [
+            {
+              "id": "l3f9a0c21d7",
+              "name": "Daft Punk - One More Time",
+              "bpm": 122.7,
+              "dur": 320.4,
+              "key": "D major",
+              "look": {
+                "main": "shock",
+                "name": "Shockwave",
+                "palette": "neon",
+                "locked": false
+              },
+              "file": "Daft Punk/Discovery/01 One More Time.mp3"
+            }
+          ]
+        }
+      },
       "NowPlaying": {
         "type": "object",
         "properties": {
@@ -12472,7 +13925,7 @@
               "null"
             ],
             "additionalProperties": true,
-            "description": "`{source, app, device, title, artist, album, dur, pos, playing, posKnown, remembered, following}`."
+            "description": "`{source, app, device, title, artist, album, dur, pos, playing, posKnown, file, remembered, following}` (file: the local file the player says it plays, when it says)."
           },
           "spotify": {
             "type": "object",

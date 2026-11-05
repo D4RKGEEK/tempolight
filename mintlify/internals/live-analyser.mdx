@@ -12,7 +12,7 @@ WebSocket, or the server's sound card through `capture.js`. It has no I/O; tests
 
 ```js
 const an = new LiveAnalyser(22050); // any rate from 16 to 96 kHz: above 32 kHz it keeps 1 sample in 2, above 64 kHz 1 in 4
-an.push(int16OrFloat32Chunk);       // as often as samples arrive
+an.push(int16OrFloat32Chunk);       // as often as samples arrive (an.push(interleaved, 2) for stereo: V.pan, V.lr)
 const V = an.view(an.sampleT, { predict: true }); // sampleT (= now): the newest sample's time
 an.conf;                            // 0-1: how sure the beat grid is
 const extra = an.extras();          // {bands, wave, bassL} for buildSignals()
@@ -151,10 +151,50 @@ tracker carries on from it.
 The state changes only when the candidate holds for 70% of a window: 0.12 s for a drop, 0.2 s for silence, 0.6 s for
 the rest, so drops and silence switch fast and a flickering cue can't freeze the state. A drop on beat 1 after a
 build-up switches at once. After a change the vote starts afresh, so the state can't bounce straight back. A drop
-after a build-up or silence (or after more than 4 s in another state) records `dropT`. `buildP` in the view is the build's age over 7 s, capped at 1. `nextDrop` is a guess during a build-up with a
-sure grid (`conf > 0.5`): build-ups run 4, 8 or 16 bars from the bar line nearest their start, so the next of those
-bar lines; null otherwise. `quietFor` is how long it has been silent; the runtime
-goes idle after `settings.idleAfterSec` (default 8 s).
+after a build-up or silence (or after more than 4 s in another state) records `dropT`. `buildP` in the view is the build's age over 7 s, capped at 1. `nextDrop` comes from the drop
+countdown (below). `quietFor` is how long it has been silent; the runtime goes idle after `settings.idleAfterSec`
+(default 8 s).
+
+## Drop countdown
+
+[`drops.js`](https://github.com/D4RKGEEK/tempolight/blob/main/packages/engine/src/drops.js) (`an.drops`, a `DropPredictor`) notices a drop coming a few
+seconds ahead, for songs it has never heard. `hop()` runs every analysis hop and gathers 0.25 s blocks of the
+spectral centroid (200 Hz-10 kHz, from the 24 band levels), the energy above 3 kHz, the total energy, the RMS and the
+snares of the last second. Every block:
+
+- **Riser score**: least-squares slopes over the last 4 s (16 blocks), per second.
+  `0.6 * sqrt(clamp(centroid slope / 0.12) * clamp(high-energy slope / 0.15)) + 0.4 * clamp(snare-rate slope / 0.6)`
+  (the snare term only while both others rise), plus 0.15 when the song part reads `build` and the score is over
+  0.3. Held over 0.6 for 2 s, the riser is on; under 0.2 for 2 s, the build-up fizzled. No score in the first 3 s of a
+  drop. (From the audit prototype `lab/structure/exp2c_riser.mjs`: 3.2-5.2 s warning before drops, no false alarm on
+  pop.)
+- **Phrase grid**: beats are counted from an anchor, the first sound after silence (weak: the app may have joined
+  mid-song) or a drop that lasted 2 bars (strong: at the predicted time when it came within a bar of it). Beats, not
+  the grid's bar lines: without kicks the tracker's downbeat is often a beat or two out, its beats rarely are. With the
+  riser on, the prediction is the 4-bar line from the anchor at least a bar ahead that scores best: 16 bars from the
+  anchor 1, 8 bars 0.95, 4 bars 0.55, times `exp(-(time ahead) / 8 bars)`. No anchor: the grid's next bar lines.
+- **Pre-drop dip**: after a steady second (the last 4 blocks within 0.6x of each other: a roll or a riser, not single
+  hits), a block under half their loudest. The drop is then in the next bar: the predicted time if it is there (a dip
+  heard late, at the drop itself), else the anchor's phrase line, else the grid's next bar line. `conf` goes to 0.9.
+- **Hysteresis**: a prediction stays put until the dip moves it, the drop is heard (within 4 beats of it; a "drop"
+  heard much earlier during a build-up that goes on is a roll's loud stretch and is ignored), the predicted time
+  passes by 0.6 beat without one (then the next phrase line, once, unless a dip said "now"; then it is dropped), or the
+  riser fizzles. After a dip or a second miss it waits for a new riser.
+- **Confidence** `conf`: `0.3 + 0.2 * (riser age / 3 s) + 0.15 * (score / 0.8) + 0.15 * (phrase alignment) + 0.15 *
+  (anchor: a drop 1, the song start 0.5) - 0.15 * misses`, at least 0.9 after a dip, times the grid's sureness
+  (`(conf - 0.3) / 0.4`). Party, pop/rock and hip-hop only; calm and emotional songs only from 0.85. Before the
+  style is known, hi-hats (1.5 a second or more) make a song one for the countdown, a drumless one is calm.
+
+The view has `nextDrop` (the predicted time on the analyser's clock, null when there is none), `dropConf` (0..1) and
+`dropSource: "predicted"`; whole-song views (`songView`) have `dropConf: 1` and `dropSource: "memory"` whenever a
+drop lies ahead. Lights and effects act from `dropConf` 0.5 (`S.dropIn` is 99 below that). The runtime's status
+reports it as `drop: {next, at, conf, source, building}` (see the [API](/api)).
+
+Measured by `npm run eval:feel` (scripts/feel-eval.js), live, on the synthetic songs: the right drop time
+5.2 s ahead of both feel-song drops and of `edm()`'s, 12.9 s ahead of long-edm's first; long-edm's second drop comes
+28 bars after the first (off the 8-bar grid), so the countdown first points 4 bars later and the dip corrects it only
+0.2 s ahead. No false prediction on any of them, majorPop() or minorBallad(). The Python test track
+(scripts/test-songs/edm_track.py, a noise riser and a roll): 4.2 and 4.4 s ahead.
 
 ## Style
 
@@ -199,7 +239,7 @@ See [song memory](/internals/song-memory).
 ## The view
 
 `view(t, {predict})` (t defaults to `sampleT`) returns the `songView()` shape with live values: `g` from the beat
-tracker, `conf`, `state`, `buildP`, `dropT`, `nextDrop` (see above), the last kick/snare/hat, `kickStrength`, `pulses`, `vocal`,
+tracker, `conf`, `state`, `buildP`, `dropT`, `nextDrop`, `dropConf`, `dropSource` (see above), the last kick/snare/hat, `kickStrength`, `pulses`, `vocal`,
 `quietFor`, `live: true`, the key and mood.
 
 `level` comes from the loudness smoothed over ~1 s (it swings with every beat): `low` under 0.4, `mid` under 0.75,
@@ -214,4 +254,6 @@ late. When the tracker is unsure, the kicks heard drive the lights instead.
 `packages/engine/test/live.test.js` pushes synthetic songs through it and checks the tempo, the drop and the style of
 an EDM track (also at 48 kHz), that a break holds the beat grid, that a slow ballad is never treated as silence, and the vocal estimate (high for singing
 over drums, low for drums, a steady pad or piano); `memory.test.js` and `tonal.test.js` cover the taps.
+`drops.test.js` covers the drop countdown: at least 2 s of the right time before the feel song's and `edm()`'s
+drops, nothing on pop or a ballad, no flapping, a build-up that fizzles out cancelled, and the director's build ramp.
 `beat.test.js` runs the beat-tracking evaluation (`npm run eval:beat`) against its saved baseline. See [testing](/internals/testing).

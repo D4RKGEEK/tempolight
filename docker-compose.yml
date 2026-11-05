@@ -6,6 +6,10 @@ services:
     network_mode: host        # needed to find WLED (mDNS) and send UDP to it
     volumes:
       - tempolight:/data
+      # your own music (Music → Your own music): mount the folder read-only and tell Tempolight where it is
+      # - /home/you/Music:/music:ro
+    # environment:
+    #   - TEMPOLIGHT_MUSIC=/music
     # to listen to a USB sound card on the host (Raspberry Pi), uncomment:
     # devices:
     #   - /dev/snd:/dev/snd

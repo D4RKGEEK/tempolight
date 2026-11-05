@@ -1,0 +1,131 @@
+/* Settings (dashboard v2, #/settings2): sections on the left, one section on the right; list → detail on phones.
+   Rows: label + one line of help on the left, the control on the right, hairlines between, in one card per group. */
+.st2 { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 36px; align-items: start; max-width: 1240px; width: 100%; }
+
+/* ---------------------------------------------------------------- the section list */
+.st-nav { position: sticky; top: 16px; }
+.st-nav ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.st-nav a { display: grid; grid-template-columns: 40px minmax(0, 1fr) 16px; align-items: center; gap: 12px; padding: 10px 12px 10px 10px; border-radius: 16px; color: var(--text-2); text-decoration: none;
+  transition: background var(--t-out) var(--ease), color var(--t-out) var(--ease), box-shadow var(--t-out) var(--ease); -webkit-tap-highlight-color: transparent; }
+.st-nav a:hover { background: color-mix(in oklab, var(--surface) 70%, transparent); color: var(--text); transition-duration: var(--t-in); }
+.st-nav a[aria-current] { background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); }
+.st-nav-ic { width: 40px; height: 40px; display: grid; place-items: center; border-radius: 12px; background: var(--sunk); box-shadow: inset 0 0 0 1px var(--hair); color: var(--text-2); }
+.st-nav-ic .ui-ic { width: 20px; height: 20px; }
+.st-nav a[aria-current] .st-nav-ic { color: var(--label); background: color-mix(in oklab, var(--accent) 12%, var(--sunk)); }
+.st-nav-t { display: flex; flex-direction: column; min-width: 0; }
+.st-nav-t b { font-size: 15px; font-weight: 500; letter-spacing: -0.01em; }
+.st-nav-t small { display: none; font-size: 13px; color: var(--text-3); line-height: 1.35; }
+.st-nav-go { color: var(--text-3); opacity: 0; }
+.st-nav-go .ui-ic { width: 16px; height: 16px; }
+
+/* ---------------------------------------------------------------- one section */
+.st-detail { display: flex; flex-direction: column; gap: 28px; min-width: 0; outline: none; padding-bottom: 32px; }
+.st-dh { display: flex; align-items: center; gap: 14px; }
+.st-dh h2 { font-size: 26px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.15; }
+.st-dh p { font-size: 15px; color: var(--text-2); margin-top: 2px; }
+.st-back { display: none; }
+.st-body { display: flex; flex-direction: column; gap: 28px; }
+.st-body.locked { opacity: .55; pointer-events: none; }
+
+.st-group { display: flex; flex-direction: column; gap: 10px; }
+.st-group[hidden] { display: none; }
+.st-group-h { display: flex; align-items: baseline; gap: 10px; padding: 0 6px; }
+.st-group-h h3 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; color: var(--text); }
+.st-group-h span { font-size: 13px; color: var(--text-3); }
+.st-card { background: var(--surface); border-radius: 20px; box-shadow: var(--shadow-card); overflow: hidden; }
+.st-card :is(.st-row, .st-actions, .st-more) { box-shadow: 0 -1px 0 var(--hair); } /* the first one's line is clipped by the card */
+.st-card .st-row-c input.st-num, .st-card .st-row-c input.st-short { width: 120px !important; }
+
+.st-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 24px; min-height: 68px; padding: 14px 20px 14px 22px; }
+.st-row-t { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.st-row-t b, .st-row-t label { font-size: 15.5px; font-weight: 500; letter-spacing: -0.005em; color: var(--text); }
+.st-row-t small { font-size: 13.5px; color: var(--text-2); line-height: 1.45; max-width: 62ch; }
+.st-row-t small .mono, .st-row-t .mono { font-family: var(--mono); font-size: 12.5px; }
+.st-row-c { display: flex; align-items: center; justify-content: flex-end; gap: 10px; min-width: 0; }
+.st-row-c:empty { display: none; }
+.st-row-c select { width: 260px; max-width: 100%; }
+.st-row-c input:not([type=range]):not([type=checkbox]) { width: 260px; max-width: 100%; }
+.st-row-c input.st-short, .st-row-c input.st-num { width: 120px; }
+.st-row-c .btn .ui-ic { width: 16px; height: 16px; margin-right: 6px; }
+.st-row-c .ui-seg { min-width: 0; }
+
+/* a compact slider with its value */
+.st-range { display: flex; align-items: center; gap: 14px; width: 300px; max-width: 100%; }
+.st-range input { flex: 1; min-width: 0; }
+.st-range output { min-width: 56px; text-align: right; font-family: var(--mono); font-size: 13.5px; color: var(--text); font-variant-numeric: tabular-nums; }
+.st-range input::-webkit-slider-runnable-track { background: linear-gradient(90deg, color-mix(in oklab, var(--accent) 70%, var(--sunk)) var(--p, 50%), var(--sunk) var(--p, 50%)); }
+.st-range input::-moz-range-progress { background: color-mix(in oklab, var(--accent) 70%, var(--sunk)); }
+
+.st-inline { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+.st-inline input { width: 140px !important; }
+.st-row-stack .st-inline input { width: 150px !important; }
+.st-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; padding: 12px 20px 14px 22px; }
+.st-actions > .st-live { margin-right: auto; }
+.st-pinrow input { width: 240px; }
+.st-live { font-size: 13.5px; color: var(--text-2); }
+.st-live[data-state="connected"] { color: var(--ok); } .st-live[data-state="error"] { color: var(--bad); }
+.st-changes { margin: 6px 0 0 18px; padding: 0; }
+.st-note { font-size: 13.5px; color: var(--text-3); padding: 0 6px; }
+.st-note a { color: var(--text-2); }
+
+/* more options inside a card */
+.st-more > summary { list-style: none; display: flex; align-items: center; gap: 8px; min-height: 52px; padding: 0 22px; font-size: 14.5px; font-weight: 500; color: var(--text-2); cursor: pointer; user-select: none; }
+.st-more > summary::-webkit-details-marker { display: none; }
+.st-more > summary::after { content: ""; width: 7px; height: 7px; border-right: 1.6px solid currentColor; border-bottom: 1.6px solid currentColor; transform: rotate(45deg) translateY(-2px); transition: transform var(--t-out) var(--ease); }
+.st-more[open] > summary::after { transform: rotate(225deg) translateY(-1px); }
+.st-more > summary:hover { color: var(--text); background: var(--surface-2); }
+.st-more-b { background: color-mix(in oklab, var(--sunk) 45%, var(--surface)); box-shadow: 0 -1px 0 var(--hair); }
+.st-card > .st-more:first-child > summary { min-height: 56px; }
+
+/* the PIN prompt when locked */
+.st-unlock { flex-direction: row; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; padding: 20px 22px; box-shadow: 0 0 0 1.5px color-mix(in oklab, var(--accent) 50%, transparent), var(--shadow-card); }
+.st-unlock > div:first-child { display: flex; flex-direction: column; gap: 2px; }
+.st-unlock b { font-size: 16px; font-weight: 600; } .st-unlock small { font-size: 13.5px; color: var(--text-2); }
+.st-unlock input { width: 160px !important; }
+
+/* About */
+.st-hero { flex-direction: row; align-items: center; gap: 20px; padding: 28px; }
+.st-hero h3 { font-size: 22px; font-weight: 600; letter-spacing: -0.025em; }
+.st-hero p { color: var(--text-2); font-size: 15px; margin-top: 2px; }
+.st-lamp { width: 18px; height: 18px; border-radius: 50%; flex: none; margin: 0 10px; background: var(--accent); box-shadow: 0 0 0 7px color-mix(in oklab, var(--accent) 16%, transparent), 0 0 34px 6px color-mix(in oklab, var(--accent) 70%, transparent); }
+
+/* Apple Home pairing */
+.st-hk-pair { grid-template-columns: auto minmax(0, 1fr); align-items: start; }
+.st-qr { width: 132px; height: 132px; padding: 8px; border-radius: 14px; background: #fff; display: grid; place-items: center; }
+.st-qr svg { width: 100%; height: 100%; }
+.st-code { font-size: 22px !important; letter-spacing: 2px; color: var(--text); }
+
+.st-row.spot, .st-group.spot { border-radius: 0; animation: st-spot 1.8s var(--ease) 1; }
+@keyframes st-spot { 0%, 35% { background: color-mix(in oklab, var(--accent) 16%, var(--surface)); box-shadow: inset 3px 0 0 var(--accent); } 100% { background: transparent; } }
+
+/* ---------------------------------------------------------------- tablet: narrower list */
+@media (max-width: 1100px) { .st2 { grid-template-columns: 240px minmax(0, 1fr); gap: 24px; } .st-range { width: 220px; } .st-row-c select, .st-row-c input:not([type=range]):not([type=checkbox]) { width: 200px; } }
+
+/* ---------------------------------------------------------------- phone: the list, then one section pushed over it */
+@media (max-width: 760px) {
+  .st2 { grid-template-columns: minmax(0, 1fr); gap: 0; }
+  .st-nav { position: static; }
+  .st-nav ul { gap: 1px; background: var(--hair); border-radius: 20px; overflow: hidden; box-shadow: var(--shadow-card); }
+  .st-nav a, .st-nav a[aria-current] { border-radius: 0; background: var(--surface); box-shadow: none; padding: 12px 14px; min-height: 68px; color: var(--text); }
+  .st-nav a[aria-current] .st-nav-ic { color: var(--text-2); background: var(--sunk); }
+  .st-nav-t small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .st-nav-go { opacity: 1; }
+  .st2.has-sec .st-nav { display: none; }
+  .st2:not(.has-sec) .st-detail { display: none; }
+  .st-back { display: grid; }
+  .st-dh h2 { font-size: 24px; } .st-dh p { font-size: 14px; }
+  .st-detail, .st-body { gap: 22px; }
+  .st-row { grid-template-columns: minmax(0, 1fr); gap: 12px; padding: 14px 16px; min-height: 0; }
+  .st-row:has(> .st-row-c > .switch), .st-row:has(.st-short), .st-row:has(.st-num) { grid-template-columns: minmax(0, 1fr) auto; }
+  .st-row-c { justify-content: flex-start; }
+  .st-card .st-row-c input.st-num, .st-card .st-row-c input.st-short { width: 96px !important; }
+  .st-row-c select, .st-row-c input:not([type=range]):not([type=checkbox]):not(.st-short):not(.st-num),.st-range, .st-row-c .ui-seg { width: 100% !important; }
+  .st-row-c .ui-seg { display: flex; }
+  .st-inline { justify-content: flex-start; width: 100%; } .st-inline input { flex: 1; width: auto !important; min-width: 0; }
+  .st-actions { justify-content: flex-start; padding: 12px 16px 14px; }
+  .st-actions .btn { flex: 1; } .st-pinrow input { width: 100%; }
+  .st-more > summary { padding: 0 16px; }
+  .st-hero { padding: 22px; gap: 14px; }
+  .st-hk-pair { grid-template-columns: minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) { .st-row.spot, .st-group.spot { animation: none; background: color-mix(in oklab, var(--accent) 12%, var(--surface)); } .st-nav a { transition: none; } }

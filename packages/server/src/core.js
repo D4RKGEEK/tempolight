@@ -8,6 +8,7 @@ import { ROOM_PRESETS, buildPreset, cleanTimeline, SHOW_VERSION, VARIETIES } fro
 import { createPro } from "./pro-api.js";
 import { createLights } from "./lights.js";
 
+const STEREO = ["off", "subtle", "strong"]; // settings.stereo
 const SHAPE_TYPES = new Set(["line", "pole", "free", "circle", "rect", "hex", "tri", "matrix", "points"]);
 export class HttpError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
 
@@ -33,8 +34,8 @@ export function createCore({ store, runtime, env }) {
   const need = (ctx, area) => { if (!authorised(ctx, area)) throw new HttpError(403, "Settings are locked. Unlock with the PIN in Settings."); };
   const effectIds = () => new Set(runtime.effects.list.map(e => e.id));
   const pub = () => {
-    const d = data();
-    return { version: env.version, canQuit: !!env.quit, settings: { ...d.settings, mqtt: { ...d.settings.mqtt, password: "", hasPassword: !!d.settings.mqtt?.password } }, show: d.show, devices: d.devices.map(x => safeDev(x)), room: d.room, scenes: d.scenes,
+    const d = data(); // (settings.library is left out: the music folders are for an admin only, through GET /api/library)
+    return { version: env.version, canQuit: !!env.quit, settings: { ...d.settings, mqtt: { ...d.settings.mqtt, password: "", hasPassword: !!d.settings.mqtt?.password }, library: undefined }, show: d.show, devices: d.devices.map(x => safeDev(x)), room: d.room, scenes: d.scenes,
       schedules: d.schedules.map(s => ({ ...s, next: nextRun(s, new Date(), d.settings.location)?.toISOString() || null })), locked: locked(),
       effects: runtime.effects.list, styles: Object.fromEntries(Object.entries(runtime.effects.styles).map(([k, v]) => [k, v.name])),
       palettes: Object.keys(runtime.effects.palettes), presets: Object.values(ROOM_PRESETS), captureSources: env.listSources().map(({ id, label }) => ({ id, label })), firstRun: store.firstRun && !d.devices.length };
@@ -152,7 +153,7 @@ export function createCore({ store, runtime, env }) {
     if (b.idleBrightness !== undefined) s.idleBrightness = num(b.idleBrightness, 0, 1);
     for (const k of ["punch", "dynamics"]) if (b[k] !== undefined) s[k] = num(b[k], 0, 1); // the feel: kick pump in drops, brightness following the song part
     if (b.idleAfterSec !== undefined) s.idleAfterSec = num(b.idleAfterSec, 1, 600);
-    for (const k of ["safe", "predict", "dropFlash", "variations", "audioSync", "autoDiscover", "setupDone"]) if (b[k] !== undefined) s[k] = !!b[k];
+    for (const k of ["safe", "predict", "dropFlash", "variations", "dropCountdown", "audioSync", "autoDiscover", "setupDone"]) if (b[k] !== undefined) s[k] = !!b[k];
     if (b.ambient !== undefined) { if (b.ambient !== "off" && !effectIds().has(b.ambient)) throw new HttpError(400, `Unknown effect "${b.ambient}"`); s.ambient = b.ambient; }
     if (b.capture) Object.assign(s.capture, { enabled: b.capture.enabled ?? s.capture.enabled, source: b.capture.source ?? s.capture.source, command: b.capture.command ?? s.capture.command });
     if (b.metronome) Object.assign(s.metronome, { enabled: b.metronome.enabled ?? s.metronome.enabled, bpm: b.metronome.bpm !== undefined ? num(b.metronome.bpm, 40, 220) : s.metronome.bpm });
@@ -167,6 +168,8 @@ export function createCore({ store, runtime, env }) {
         maxBrightness: b.night.maxBrightness !== undefined ? num(b.night.maxBrightness, 0.02, 1) : s.night.maxBrightness, warm: b.night.warm ?? s.night.warm }); }
     if (b.songMemory !== undefined) s.songMemory = !!b.songMemory;
     if (b.moodColours !== undefined) s.moodColours = !!b.moodColours;
+    if (b.chordColours !== undefined) s.chordColours = !!b.chordColours;
+    if (b.stereo !== undefined) { if (!STEREO.includes(b.stereo)) throw new HttpError(400, "Stereo is off, subtle or strong"); s.stereo = b.stereo; }
     if (b.requests !== undefined) s.requests = !!b.requests;
     if (b.shows !== undefined) s.shows = !!b.shows;
     if (b.djlink) Object.assign(s.djlink, { enabled: b.djlink.enabled !== undefined ? b.djlink.enabled === true : s.djlink.enabled, port: b.djlink.port !== undefined && Number.isFinite(Number(b.djlink.port)) ? Math.round(num(b.djlink.port, 1024, 65535)) : s.djlink.port });
@@ -231,10 +234,12 @@ export function createCore({ store, runtime, env }) {
   route("POST", "/api/wifi/setup", "admin", async () => { if (!env.wifi) throw new HttpError(400, "Wi-Fi setup is only on the Tempolight Raspberry Pi image"); try { return await env.wifi.setup(); } catch (e) { throw new HttpError(e.code === 400 ? 400 : 502, e.message); } });
   route("GET", "/api/songs", null, () => data().songs.map(e => ({ id: e.id, name: e.name, bpm: e.bpm, dur: e.dur, style: e.style, drops: e.drops.length, at: e.at,
     ...(e.spotifyId ? { spotifyId: e.spotifyId } : {}), ...(e.src ? { src: e.src } : {}), ...(e.cov ? { cover: Math.round(Math.min(1, e.cov.reduce((n, c) => n + c[1] - c[0], 0) / e.dur) * 100) } : {}), ...(e.look ? { look: { main: e.look.main, palette: e.look.palette || null, locked: !!e.look.locked } } : {}) }))); // src: "learned" | "shared" | "spotify-analysis" (from spotify.js); cover: percent of a partly learned song
-  const songById = id => { const e = data().songs.find(x => x.id === id); if (!e) throw new HttpError(404, "That song isn't remembered"); return e; };
+  const songById = id => { const e = runtime.songById ? runtime.songById(id) : data().songs.find(x => x.id === id); if (!e) throw new HttpError(404, "That song isn't remembered"); return e; }; // (a library song too)
   // a song's show: effect blocks (`show`, as before) plus the timeline editor's colour blocks, cues and brightness keyframes
   const hex2 = c => "#" + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0")).join("");
   const showOf = e => ({ id: e.id, name: e.name, dur: e.dur, edited: !!e.showEdited, show: e.show || [], colors: e.colors || [], cues: e.cues || [], bright: e.bright || [] });
+  // the song map (the Music page): loudness, sections, drops and bars of a remembered song
+  route("GET", "/api/songs/:id/map", null, (ctx, p) => runtime.songMapNow(songById(p.id).id));
   route("GET", "/api/songs/:id/show", null, (ctx, p) => { const e = runtime.freshShow(songById(p.id));
     // what the editor draws: the beat grid, bars, drops, loudness (10 a second, base64 bytes) and the palettes' colours
     return { ...showOf(e), bpm: e.bpm, P: e.P, off: e.off, barOff: e.barOff, style: e.style, drops: e.drops, bars: e.bars, env: e.env,
@@ -242,8 +247,8 @@ export function createCore({ store, runtime, env }) {
   const cleanShow = (e, b) => { try { return cleanTimeline(b || {}, { dur: e.dur, effects: effectIds(), palettes: runtime.effects.palettes }); } catch (err) { if (err.code === 400) throw new HttpError(400, err.message); throw err; } };
   route("PUT", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id), c = cleanShow(e, ctx.body);
     if (!c.show) throw new HttpError(400, "show is a list of {t0, t1, effect}");
-    Object.assign(e, c); e.showEdited = true; runtime.setDraft(null); changed("songs"); return { ok: true, ...showOf(e) }; });
-  route("DELETE", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id); e.show = runtime.planFor(e); e.showV = SHOW_VERSION; e.showEdited = false; delete e.colors; delete e.cues; delete e.bright; runtime.setDraft(null); changed("songs"); return { ok: true, ...showOf(e) }; });
+    Object.assign(e, c); e.showEdited = true; runtime.setDraft(null); runtime.saveSong?.(e); changed("songs"); return { ok: true, ...showOf(e) }; });
+  route("DELETE", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id); e.show = runtime.planFor(e); e.showV = SHOW_VERSION; e.showEdited = false; delete e.colors; delete e.cues; delete e.bright; runtime.setDraft(null); runtime.saveSong?.(e); changed("songs"); return { ok: true, ...showOf(e) }; });
   // the editor's unsaved version plays on the lights for two minutes (it sends it again while it's open), without being saved
   route("PUT", "/api/songs/:id/show/draft", "effects", (ctx, p) => { const e = songById(p.id), c = cleanShow(e, ctx.body);
     runtime.setDraft({ id: e.id, show: c.show || e.show || [], colors: c.colors ?? e.colors ?? [], cues: c.cues ?? e.cues ?? [], bright: c.bright ?? e.bright ?? [] }); return { ok: true }; });
@@ -414,6 +419,8 @@ export function createCore({ store, runtime, env }) {
   route("POST", "/api/song", null, async (ctx) => { const b = ctx.body; if (!b.analysis || !(b.analysis.bpm > 0)) throw new HttpError(400, "Send the song's analysis"); runtime.setSong(b, b.clientId || null); return { ok: true }; });
   route("POST", "/api/song/clock", null, async (ctx) => { runtime.songClock(ctx.body); return { ok: true }; });
   route("DELETE", "/api/song", null, () => { runtime.clearSong(); return { ok: true }; });
+  // the map of the song playing now: known ahead (played here, remembered, recognised), or made as it is heard live
+  route("GET", "/api/song/map", null, () => runtime.songMapNow(null));
   // the song's look (one effect for the whole song, looks.js): "Not this one" picks the next best and remembers the one
   // turned down; "Keep" keeps it. For the song playing now, or a remembered song by id.
   const lookId = b => b && b.id != null ? String(b.id) : null;
@@ -446,7 +453,7 @@ export function createCore({ store, runtime, env }) {
     return {
       /** @param {string|Int16Array} msg text, or 16-bit samples */
       message(msg, binary) {
-        if (binary) { if (c.data.audio) runtime.pushPcm(msg, "browser", c.data.audio.label, c.data.id, c.data.audio.rate, c.data.audio.latencyMs); return; }
+        if (binary) { if (c.data.audio) runtime.pushPcm(msg, "browser", c.data.audio.label, c.data.id, c.data.audio.rate, c.data.audio.latencyMs, c.data.audio.channels); return; }
         let m; try { m = JSON.parse(msg); } catch { return; }
         if (m.type === "preview") { if (m.on) runtime.previewClients.add(c); else runtime.previewClients.delete(c); }
         else if (m.type === "screen") { // screen sync: a small picture, or {end: true} when sharing stops
@@ -457,7 +464,8 @@ export function createCore({ store, runtime, env }) {
               if (runtime.setScreen(Number(m.w) | 0, Number(m.h) | 0, px, String(m.label || "").slice(0, 80), c.data.id) === "busy") tell("busy", "Another browser is already sharing its screen. Stop it there first."); } catch {} } } }
         else if (m.type === "map") { if (c.data.auth(null)) runtime.mapLight(m.end ? null : String(m.device), m.led ?? -1, m.level, c.data.id); } // camera mapping (admin)
         else if (m.type === "phone") { if (m.on) { if (!runtime.phones.has(c)) { runtime.phones.add(c); runtime.note(`A phone joined as a light (${runtime.phones.size} now)`); } } else runtime.phones.delete(c); }
-        else if (m.type === "audio-start") { c.data.audio = { rate: Number(m.rate) || 22050, label: String(m.label || "Browser audio").slice(0, 80), latencyMs: Math.max(0, Math.min(2000, Number(m.latencyMs) || 0)) }; }
+        else if (m.type === "audio-start") { c.data.audio = { rate: Number(m.rate) || 22050, label: String(m.label || "Browser audio").slice(0, 80), latencyMs: Math.max(0, Math.min(2000, Number(m.latencyMs) || 0)), channels: m.channels === 2 ? 2 : 1 }; }
+        else if (m.type === "audio-format") { if (c.data.audio) c.data.audio.channels = m.channels === 2 ? 2 : 1; } // the browser's tap went stereo or back to mono (its chunks after this)
         else if (m.type === "audio-stop") { c.data.audio = null; runtime.stopLive(c.data.id); }
         else if (m.type === "clock") runtime.songClock(m, null);
         else if (m.type === "action" && m.action) { if (c.data.auth("pads")) { try { runtime.action(m.action); } catch {} } }

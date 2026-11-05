@@ -3,44 +3,82 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#12081f">
+<meta name="theme-color" content="#0f0d0b" media="(prefers-color-scheme: dark)">
+<meta name="theme-color" content="#f8f4ee" media="(prefers-color-scheme: light)">
 <title>Request a song</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@400..700&display=swap">
 <style>
-  :root { color-scheme: dark; --bg: #12081f; --card: #1d1030; --line: #34234d; --text: #f4eefc; --muted: #b9aecb; --acc: #ff8a4c; --acc2: #ff5fa2; }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.45 system-ui, -apple-system, "Segoe UI", sans-serif; }
-  main { max-width: 520px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) 16px max(28px, env(safe-area-inset-bottom)); }
-  h1 { font-size: 26px; margin: 8px 0 4px; letter-spacing: -.01em; }
-  p.lead { margin: 0 0 18px; color: var(--muted); }
-  form { display: grid; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
-  label { font-size: 13px; color: var(--muted); }
-  input { width: 100%; font: inherit; color: var(--text); background: #0d0618; border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
-  input:focus-visible, button:focus-visible { outline: 2px solid var(--acc); outline-offset: 2px; }
-  button { font: inherit; font-weight: 650; border: 0; border-radius: 10px; padding: 12px 16px; cursor: pointer; }
-  .go { color: #1b0a12; background: linear-gradient(135deg, var(--acc), var(--acc2)); }
-  .go:disabled { opacity: .6; }
-  h2 { font-size: 15px; margin: 24px 0 8px; color: var(--muted); font-weight: 600; }
-  ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-  li { display: flex; align-items: center; gap: 10px; background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; }
-  li .t { flex: 1; min-width: 0; overflow-wrap: anywhere; }
-  li .by { display: block; font-size: 12.5px; color: var(--muted); }
-  .vote { background: #2a1840; color: var(--text); padding: 8px 12px; min-width: 64px; }
-  .vote[aria-pressed="true"] { background: #3b2160; color: var(--acc); }
-  #msg { min-height: 1.4em; font-size: 14px; color: var(--acc); margin: 4px 0 0; }
-  .empty { color: var(--muted); font-size: 14px; }
+  /* tokens from design/tokens.md */
+  :root { color-scheme: dark; --bg: #0f0d0b; --bg-deep: #0a0807; --surface: #17140f; --surface-2: #1e1a14; --sunk: #0b0a08;
+    --text: #f4efe8; --text-2: rgb(244 239 232 / .64); --text-3: rgb(244 239 232 / .42);
+    --hair: rgb(255 255 255 / .07); --ring: 0 0 0 1px rgb(255 255 255 / .06);
+    --accent: #ff8a1f; --accent-ink: #1a0e08; --label: #ffb366; --focus: #ffb366; --ok: #3ecf7a; --bad: #ff5c5c;
+    --shadow-card: var(--ring), 0 1px 2px rgb(0 0 0 / .3), 0 18px 40px -28px rgb(0 0 0 / .8);
+    --shadow-lift: 0 0 0 1px rgb(255 255 255 / .1), 0 1px 2px rgb(0 0 0 / .3), 0 24px 44px -26px rgb(0 0 0 / .9);
+    --sans: "Google Sans Flex", -apple-system, "Segoe UI", system-ui, sans-serif; --mono: "Google Sans Code", ui-monospace, Menlo, monospace;
+    --r-btn: 11px; --r-field: 11px; --r-card: 24px; --r-inner: 18px; --r-pill: 999px; --ease: cubic-bezier(.2,.8,.2,1); --t-in: .14s; --t-out: .2s; }
+  @media (prefers-color-scheme: light) { :root { color-scheme: light; --bg: #f8f4ee; --bg-deep: #140a05; --surface: #ffffff; --surface-2: #fffaf6; --sunk: #f3eee7;
+    --text: #1a0e08; --text-2: rgb(26 14 8 / .62); --text-3: rgb(26 14 8 / .42);
+    --hair: rgb(20 10 5 / .06); --ring: 0 0 0 1px rgb(20 10 5 / .05);
+    --accent: #ff5b14; --accent-ink: #ffffff; --label: #c2410c; --focus: #c2410c; --ok: #1f6b37; --bad: #c0262d;
+    --shadow-card: var(--ring), 0 1px 2px rgb(20 10 5 / .04), 0 18px 40px -28px rgb(80 30 5 / .25);
+    --shadow-lift: 0 0 0 1px rgb(20 10 5 / .08), 0 1px 2px rgb(20 10 5 / .05), 0 24px 44px -26px rgb(80 30 5 / .34); } }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  main { max-width: 560px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) 16px max(32px, env(safe-area-inset-bottom)); }
+  .brand { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 44px; font-weight: 600; font-size: 15px; letter-spacing: -.02em; color: var(--text-2); }
+  .brand span { display: flex; align-items: center; gap: 10px; }
+  .brand i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgb(255 138 31 / .16), 0 0 14px var(--accent); }
+  .brand a { font-weight: 500; color: var(--label); text-underline-offset: 3px; }
+  .hero { margin: 20px -16px 20px; padding: 36px 16px 28px; border-radius: 0 0 28px 28px; background: radial-gradient(ellipse 90% 90% at 50% 0%, #2a1406 0%, #0f0b08 60%, #070605 100%); color: #f4efe8; }
+  @media (min-width: 592px) { .hero { margin: 20px 0; border-radius: 28px; padding: 40px 28px 32px; } }
+  h1 { font-size: 44px; font-weight: 600; margin: 0 0 10px; letter-spacing: -.045em; line-height: 1.02; }
+  p.lead { margin: 0; color: rgb(244 239 232 / .72); font-size: 17px; max-width: 30ch; }
+  form { display: grid; gap: 14px; background: var(--surface); box-shadow: var(--shadow-card); border-radius: var(--r-card); padding: 20px; }
+  label { display: block; font-size: 14px; font-weight: 500; color: var(--text-2); margin-bottom: 6px; }
+  input { width: 100%; font: 400 17px var(--sans); color: var(--text); background: var(--sunk); border: 0; box-shadow: var(--ring); border-radius: var(--r-field); padding: 0 16px; min-height: 56px; }
+  #title { font-size: 19px; min-height: 64px; }
+  input::placeholder { color: var(--text-3); }
+  input:focus-visible, button:focus-visible, a:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  button { font: 500 16px var(--sans); letter-spacing: -.01em; border: 0; border-radius: var(--r-btn); min-height: 56px; padding: 0 20px; cursor: pointer; transition: transform var(--t-out) var(--ease), box-shadow var(--t-out) var(--ease), filter var(--t-out) var(--ease), background var(--t-out) var(--ease); }
+  button:hover:not(:disabled) { transform: translateY(-1px); transition-duration: var(--t-in); }
+  button:active:not(:disabled) { transform: translateY(1px) scale(.985); transition-duration: .09s; }
+  .go { color: var(--accent-ink); background: var(--accent); box-shadow: 0 1px 2px rgb(0 0 0 / .2), 0 14px 30px -14px var(--accent); font-size: 17px; min-height: 60px; }
+  .go:hover:not(:disabled) { filter: brightness(1.05); }
+  .go:disabled { opacity: .5; cursor: default; }
+  .sec { display: flex; align-items: baseline; justify-content: space-between; margin: 36px 0 12px; }
+  h2 { font-size: 20px; margin: 0; font-weight: 600; letter-spacing: -.025em; }
+  .sec span { font-size: 13px; color: var(--text-3); }
+  ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 1px; background: var(--hair); border-radius: var(--r-card); overflow: hidden; box-shadow: var(--shadow-card); counter-reset: q; }
+  li { display: flex; align-items: center; gap: 14px; background: var(--surface); padding: 12px 12px 12px 18px; min-height: 76px; }
+  li:not(.empty)::before { counter-increment: q; content: counter(q); flex: none; width: 28px; font: 500 15px var(--mono); color: var(--text-3); font-variant-numeric: tabular-nums; }
+  li:first-child:not(.empty)::before { color: var(--label); }
+  li .t { flex: 1; min-width: 0; overflow-wrap: anywhere; font-weight: 500; font-size: 17px; line-height: 1.3; }
+  li .by { display: block; font-size: 13.5px; font-weight: 400; color: var(--text-2); margin-top: 2px; }
+  .vote { flex: none; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; width: 64px; min-height: 60px; padding: 0; background: var(--sunk); color: var(--text); box-shadow: var(--ring);
+    font: 500 15px var(--mono); font-variant-numeric: tabular-nums; }
+  .vote svg { width: 20px; height: 20px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .vote:hover:not(:disabled) { box-shadow: var(--shadow-lift); background: var(--surface-2); }
+  .vote[aria-pressed="true"] { background: color-mix(in srgb, var(--accent) 14%, var(--surface)); color: var(--label); box-shadow: inset 0 0 0 1.5px var(--label); }
+  #msg { min-height: 1.4em; font-size: 15px; color: var(--text-2); margin: -2px 0 0; text-align: center; }
+  #msg:empty { display: none; }
+  .empty { color: var(--text-2); font-size: 15px; padding: 22px 20px; }
+  @media (prefers-reduced-motion: reduce) { button { transition: none; } }
 </style>
 </head>
 <body>
 <main>
-  <h1>Request a song</h1>
-  <p class="lead">Tell the host what to play next. Songs with more votes go to the top.</p>
+  <div class="brand"><span><i aria-hidden="true"></i>Tempolight</span><a href="/phone">Be a light</a></div>
+  <div class="hero"><h1>Request a song</h1>
+  <p class="lead">Tell the host what to play next. Songs with more votes go to the top.</p></div>
   <form id="f" autocomplete="off">
-    <div><label for="title">Song</label><input id="title" name="title" maxlength="120" placeholder="Artist – Song" required></div>
+    <div><label for="title">Song</label><input id="title" name="title" maxlength="120" placeholder="Artist and song" required></div>
     <div><label for="by">Your name (optional)</label><input id="by" name="by" maxlength="40" placeholder="So the host can shout you out"></div>
     <button class="go" id="send" type="submit">Send request</button>
     <div id="msg" role="status"></div>
   </form>
-  <h2>Up next</h2>
+  <div class="sec"><h2>Up next</h2><span>Tap a song to vote for it</span></div>
   <ol id="list"><li class="empty">Loading…</li></ol>
 </main>
 <script type="module">
@@ -54,14 +92,14 @@ async function load() {
   if (demo) { $("#list").innerHTML = '<li class="empty">Requests go to a Tempolight running at home or at the party. This online demo has none.</li>'; $("#send").disabled = true; return; }
   try { const r = await call("GET", "/api/requests");
     if (!r.enabled) { $("#send").disabled = true; $("#msg").textContent = "The host has turned song requests off."; }
-    $("#list").innerHTML = r.requests.length ? r.requests.map(q => `<li><span class="t">${esc(q.title)}${q.by ? `<span class="by">from ${esc(q.by)}</span>` : ""}</span><button class="vote" type="button" data-id="${q.id}" aria-pressed="${voted.has(q.id)}" aria-label="Vote for ${esc(q.title)}">▲ ${q.votes}</button></li>`).join("")
-      : '<li class="empty">No requests yet. Be the first!</li>';
+    $("#list").innerHTML = r.requests.length ? r.requests.map(q => `<li><span class="t">${esc(q.title)}${q.by ? `<span class="by">from ${esc(q.by)}</span>` : ""}</span><button class="vote" type="button" data-id="${q.id}" aria-pressed="${voted.has(q.id)}" aria-label="Vote for ${esc(q.title)}"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 15l6-6 6 6"/></svg>${q.votes}</button></li>`).join("")
+      : '<li class="empty">No requests yet. Send the first one.</li>';
     document.querySelectorAll(".vote").forEach(b => b.onclick = async () => { if (voted.has(b.dataset.id)) return; try { await call("POST", `/api/requests/${b.dataset.id}/vote`); voted.add(b.dataset.id); saveVotes(); load(); } catch (e) { $("#msg").textContent = e.message; } });
   } catch (e) { $("#list").innerHTML = `<li class="empty">Can't reach Tempolight right now (${esc(e.message)}).</li>`; }
 }
 $("#f").onsubmit = async e => { e.preventDefault(); const title = $("#title").value.trim(), by = $("#by").value.trim(); if (!title) return;
   $("#send").disabled = true; try { localStorage.setItem("tl.name", by); } catch {}
-  try { const r = await call("POST", "/api/requests", { title, by }); voted.add(r.id); saveVotes(); $("#title").value = ""; $("#msg").textContent = r.merged ? "Someone asked for that already: your vote was added." : "Sent! Thanks."; load(); }
+  try { const r = await call("POST", "/api/requests", { title, by }); voted.add(r.id); saveVotes(); $("#title").value = ""; $("#msg").textContent = r.merged ? "Someone asked for that already: your vote was added." : "Sent. The host sees it now."; load(); }
   catch (err) { $("#msg").textContent = err.message; } finally { $("#send").disabled = false; } };
 load(); setInterval(load, 10000);
 </script>

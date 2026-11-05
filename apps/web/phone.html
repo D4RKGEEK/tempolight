@@ -3,65 +3,238 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#0a0807">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title>Tempolight phone light</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@400..700&family=Google+Sans+Code:wght@400;500&display=swap">
 <style>
-  :root { color-scheme: dark; }
-  html, body { margin: 0; height: 100%; background: #000; color: #fff; font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; overflow: hidden; }
-  #light { position: fixed; inset: 0; background: #000; }
-  #intro { position: fixed; inset: 0; display: grid; place-items: center; padding: 24px; text-align: center; background: radial-gradient(circle at 50% 35%, #2a1640, #000 70%); }
-  #intro h1 { font-size: 26px; margin: 0 0 8px; letter-spacing: -.01em; }
-  #intro p { margin: 0 auto 22px; max-width: 30ch; color: #c9c2d6; }
-  #go { font: inherit; font-weight: 650; font-size: 18px; color: #12051f; background: linear-gradient(135deg, #ffb35c, #ff5fa2 55%, #8a7bff); border: 0; border-radius: 999px; padding: 16px 34px; cursor: pointer; }
-  #go:focus-visible { outline: 3px solid #fff; outline-offset: 3px; }
-  #note { position: fixed; left: 0; right: 0; bottom: max(14px, env(safe-area-inset-bottom)); text-align: center; font-size: 13px; color: rgba(255,255,255,.55); pointer-events: none; text-shadow: 0 1px 3px #000; }
+  /* tokens from design/tokens.md, dark only: the phone is a light (or a remote) in a dark room */
+  :root { color-scheme: dark; --bg: #0f0d0b; --bg-deep: #0a0807; --surface: #17140f; --surface-2: #1e1a14; --sunk: #0b0a08;
+    --text: #f4efe8; --text-2: rgb(244 239 232 / .64); --text-3: rgb(244 239 232 / .42);
+    --hair: rgb(255 255 255 / .07); --ring: 0 0 0 1px rgb(255 255 255 / .06);
+    --accent: #ff8a1f; --accent-ink: #1a0e08; --label: #ffb366; --focus: #ffb366; --ok: #3ecf7a; --bad: #ff5c5c; --drop: #ff4f8b;
+    --shadow-card: var(--ring), 0 1px 2px rgb(0 0 0 / .3), 0 18px 40px -28px rgb(0 0 0 / .8);
+    --shadow-lift: 0 0 0 1px rgb(255 255 255 / .1), 0 1px 2px rgb(0 0 0 / .3), 0 24px 44px -26px rgb(0 0 0 / .9);
+    --sans: "Google Sans Flex", -apple-system, "Segoe UI", system-ui, sans-serif; --mono: "Google Sans Code", ui-monospace, Menlo, monospace;
+    --r-btn: 11px; --r-card: 24px; --r-inner: 18px; --r-pill: 999px; --ease: cubic-bezier(.2,.8,.2,1); --ease-out-expo: cubic-bezier(.16,1,.3,1); --t-in: .14s; --t-out: .2s; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; min-height: 100%; background: var(--bg-deep); color: var(--text); font: 16px/1.5 var(--sans); -webkit-font-smoothing: antialiased; }
+  body.lit { overflow: hidden; }
+  button { font: inherit; color: inherit; }
+  :focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; }
   .hidden { display: none !important; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  svg.ic { width: 26px; height: 26px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; flex: none; }
+
+  /* the light */
+  #light { position: fixed; inset: 0; background: #000; transition: background 40ms linear; }
+  #stop { position: fixed; z-index: 3; top: max(16px, env(safe-area-inset-top)); left: 16px; height: 44px; padding: 0 18px; border: 0; border-radius: var(--r-pill); background: rgb(10 8 7 / .7);
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / .14); font-size: 15px; font-weight: 500; opacity: 0; pointer-events: none; transition: opacity var(--t-out) var(--ease); }
+  #stop.show { opacity: 1; pointer-events: auto; }
+
+  /* screens */
+  .screen { position: relative; min-height: 100vh; min-height: 100svh; max-width: 520px; margin: 0 auto; padding: max(20px, env(safe-area-inset-top)) 16px max(24px, env(safe-area-inset-bottom)); display: flex; flex-direction: column; }
+  #intro { background: radial-gradient(ellipse 90% 45% at 50% 18%, #2a1406 0%, rgb(10 8 7 / 0) 70%); max-width: none; }
+  #intro > * { width: 100%; max-width: 488px; margin-left: auto; margin-right: auto; }
+  #intro > .lamp { width: 84px; margin-left: max(0px, calc((100% - 488px) / 2)); }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; font-size: 15px; letter-spacing: -.02em; color: var(--text-2); }
+  .brand i { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 4px rgb(255 138 31 / .16), 0 0 14px var(--accent); }
+  .lamp { width: 84px; height: 84px; border-radius: 50%; margin: 48px 0 32px; background: radial-gradient(circle at 50% 45%, #fff3e0 0%, #ffb366 32%, var(--accent) 62%, rgb(255 138 31 / 0) 72%);
+    box-shadow: 0 0 70px 16px rgb(255 138 31 / .32); animation: breathe 3.2s var(--ease) infinite alternate; }
+  @keyframes breathe { from { transform: scale(.92); opacity: .82; } to { transform: scale(1.04); opacity: 1; } }
+  h1 { font-size: 44px; font-weight: 600; letter-spacing: -.045em; line-height: 1.02; margin: 0 0 12px; }
+  .lead { margin: 0 0 28px; color: var(--text-2); font-size: 17px; max-width: 30ch; }
+  .choices { display: grid; gap: 14px; }
+  .choice { position: relative; display: flex; align-items: center; gap: 18px; width: 100%; min-height: 112px; padding: 20px; border: 0; border-radius: var(--r-card); text-align: left; cursor: pointer;
+    background: var(--surface); box-shadow: var(--shadow-card); transition: transform var(--t-out) var(--ease), box-shadow var(--t-out) var(--ease); }
+  .choice:hover { transform: translateY(-2px); box-shadow: var(--shadow-lift); transition-duration: var(--t-in); }
+  .choice:active { transform: scale(.985); transition-duration: .09s; }
+  .choice .tic { flex: none; width: 60px; height: 60px; border-radius: 18px; display: grid; place-items: center; background: var(--sunk); box-shadow: var(--ring); color: var(--label); }
+  .choice.main { background: var(--accent); color: var(--accent-ink); box-shadow: 0 1px 2px rgb(0 0 0 / .3), 0 22px 48px -22px var(--accent); }
+  .choice.main .tic { background: rgb(26 14 8 / .12); box-shadow: none; color: var(--accent-ink); }
+  .choice.main small { color: rgb(26 14 8 / .72); }
+  .choice span { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+  .choice b { font-size: 19px; font-weight: 600; letter-spacing: -.025em; line-height: 1.2; }
+  .choice small { font-size: 14.5px; color: var(--text-2); line-height: 1.4; }
+  .alt { margin: auto 0 0; padding-top: 28px; font-size: 15px; color: var(--text-2); text-align: center; }
+  .alt a { color: var(--label); text-underline-offset: 3px; font-weight: 500; }
+
+  /* the remote */
+  #rm { gap: 16px; }
+  .rm-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; }
+  .back { display: inline-flex; align-items: center; gap: 6px; height: 44px; padding: 0 14px 0 8px; margin-left: -8px; border: 0; border-radius: var(--r-btn); background: none; color: var(--text-2); font-size: 15px; font-weight: 500; cursor: pointer; }
+  .back svg.ic { width: 20px; height: 20px; }
+  .back:hover { background: var(--surface); color: var(--text); }
+  .np { position: relative; overflow: hidden; padding: 22px 20px 20px; border-radius: var(--r-card); background: radial-gradient(ellipse 90% 120% at 50% 0%, #2a1406 0%, #0f0b08 55%, #070605 100%);
+    box-shadow: 0 0 0 1px rgb(255 255 255 / .06), 0 30px 60px -40px rgb(0 0 0 / .9); }
+  .np-glow { position: absolute; inset: -40% -20% auto; height: 120%; background: radial-gradient(closest-side, var(--glow, rgb(255 94 58 / .55)), transparent); opacity: .5; transition: opacity 90ms linear; pointer-events: none; }
+  .np > :not(.np-glow) { position: relative; }
+  .np-state { display: flex; align-items: center; gap: 9px; font-size: 14px; font-weight: 500; color: var(--text-2); }
+  .np-state i { width: 8px; height: 8px; border-radius: 50%; box-shadow: inset 0 0 0 1.5px var(--text-3); }
+  .np-state.on i { background: var(--ok); box-shadow: 0 0 10px rgb(62 207 122 / .7); }
+  .np b { display: block; margin-top: 14px; font-size: 26px; font-weight: 600; letter-spacing: -.035em; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .np-sub { display: block; font-size: 15px; color: var(--text-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .np-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; }
+  .bpm { font-size: 13px; color: var(--text-3); } .bpm b { display: inline; margin: 0; font: 500 17px var(--mono); color: var(--text); letter-spacing: 0; }
+  .beats { display: flex; gap: 6px; } .beats i { width: 12px; height: 12px; border-radius: 50%; background: rgb(255 255 255 / .12); transition: background 60ms linear; }
+  .beats i.on { background: var(--text); } .beats i.on:first-child { background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+  .look { display: flex; align-items: center; gap: 14px; padding: 16px 16px 16px 20px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); }
+  .look span { flex: 1; min-width: 0; display: flex; flex-direction: column; } .look small { font-size: 13px; color: var(--text-3); }
+  .look strong { font-size: 18px; font-weight: 600; letter-spacing: -.02em; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .btn { flex: none; display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; padding: 0 18px; border: 0; border-radius: var(--r-btn); cursor: pointer; font-size: 15.5px; font-weight: 500;
+    background: var(--accent); color: var(--accent-ink); box-shadow: 0 1px 2px rgb(0 0 0 / .3), 0 12px 28px -14px var(--accent); transition: transform var(--t-out) var(--ease), filter var(--t-out) var(--ease); }
+  .btn:hover { transform: translateY(-1px); filter: brightness(1.05); } .btn:active { transform: translateY(1px) scale(.985); transition-duration: .09s; }
+  .pads { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+  .pad { position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-start; gap: 2px; min-height: 116px; padding: 16px 18px; border: 0; border-radius: var(--r-inner); text-align: left; cursor: pointer;
+    background: var(--surface-2); box-shadow: var(--shadow-card); user-select: none; -webkit-user-select: none; touch-action: manipulation; transition: transform 90ms var(--ease), background var(--t-out) var(--ease), box-shadow var(--t-out) var(--ease); }
+  .pad b { font-size: 20px; font-weight: 600; letter-spacing: -.025em; } .pad small { font-size: 13.5px; color: var(--text-2); }
+  .pad::before { content: ""; position: absolute; top: 16px; left: 18px; width: 10px; height: 10px; border-radius: 50%; background: var(--c, var(--text-3)); opacity: .5; }
+  .pad.down, .pad:active { transform: scale(.97); background: color-mix(in srgb, var(--c, #fff) 22%, var(--surface-2)); }
+  .pad[aria-pressed="true"] { background: color-mix(in srgb, var(--c, #fff) 18%, var(--surface-2)); box-shadow: inset 0 0 0 2px var(--c, var(--text)); }
+  .pad[aria-pressed="true"]::before, .pad.down::before { opacity: 1; box-shadow: 0 0 12px var(--c); }
+  .bri { display: flex; align-items: center; gap: 14px; padding: 0 20px; height: 64px; border-radius: var(--r-inner); background: var(--surface); box-shadow: var(--shadow-card); }
+  .bri label { font-size: 15px; font-weight: 500; flex: none; }
+  .bri output { font: 500 14px var(--mono); color: var(--text-2); width: 4ch; text-align: right; font-variant-numeric: tabular-nums; }
+  .bri input { flex: 1; min-width: 0; height: 44px; accent-color: var(--accent); }
+  #rm-msg { min-height: 1.4em; font-size: 14px; color: var(--text-2); text-align: center; margin: 0; }
+  #rm-msg:empty { display: none; }
+
+  #note { position: fixed; z-index: 4; left: 50%; transform: translateX(-50%); bottom: max(16px, env(safe-area-inset-bottom)); width: max-content; max-width: calc(100% - 32px); padding: 10px 16px; border-radius: var(--r-pill);
+    background: rgb(10 8 7 / .82); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); text-align: center; font-size: 14px; color: var(--text-2); pointer-events: none; }
+  #note:empty { display: none; }
+  @media (min-width: 700px) { h1 { font-size: 56px; } #intro .lamp { margin-top: 72px; } }
+  @media (prefers-reduced-motion: reduce) { .lamp { animation: none; } * { transition-duration: 0s !important; } }
 </style>
 </head>
 <body>
-<div id="light" aria-hidden="true"></div>
-<div id="intro">
-  <div>
-    <h1>Be a light</h1>
-    <p>Your screen joins the room's lights and changes colour with the music. Turn your brightness up and hold the phone up high.</p>
-    <button id="go" type="button">Start</button>
-    <p style="margin:18px 0 0"><a href="/request" style="color:#ffb35c">Request a song instead</a></p>
+<div id="light" class="hidden" aria-hidden="true"></div>
+<button id="stop" type="button">Stop being a light</button>
+
+<main id="intro" class="screen">
+  <div class="brand"><i aria-hidden="true"></i>Tempolight</div>
+  <span class="lamp" aria-hidden="true"></span>
+  <h1>Your phone joins the show</h1>
+  <p class="lead">Be one more light in the room, or play the room from where you stand.</p>
+  <div class="choices">
+    <button class="choice main" id="go" type="button"><span class="tic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10.5c.8.8 1 1.5 1 2.5h6c0-1 .2-1.7 1-2.5A6 6 0 0 0 12 3z"/></svg></span>
+      <span><b>Turn my screen into a light</b><small>It changes colour with the music. Turn the brightness up and hold it high.</small></span></button>
+    <button class="choice" id="remote" type="button"><span class="tic"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z"/></svg></span>
+      <span><b>Use it as a remote</b><small>The pads, the look and the brightness, from the dance floor.</small></span></button>
   </div>
-</div>
+  <p class="alt"><a href="/request">Request a song instead</a></p>
+</main>
+
+<main id="rm" class="screen hidden" aria-label="Remote">
+  <div class="rm-top"><button class="back" id="rm-back" type="button"><svg class="ic" viewBox="0 0 24 24" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>Back</button><div class="brand"><i aria-hidden="true"></i>Tempolight</div></div>
+  <section class="np" aria-live="polite">
+    <div class="np-glow" id="np-glow" aria-hidden="true"></div>
+    <div class="np-state" id="np-state"><i></i><span id="np-src">Connecting…</span></div>
+    <b id="np-t">Nothing playing</b><span class="np-sub" id="np-s"></span>
+    <div class="np-row"><span class="bpm"><b id="np-bpm">–</b> BPM</span><span class="beats" id="np-beats" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div>
+  </section>
+  <div class="look"><span><small>Look</small><strong id="rm-look">–</strong></span><button class="btn" id="rm-next" type="button">Try another look</button></div>
+  <div class="pads" id="rm-pads">
+    <button class="pad" type="button" data-pad="flash" style="--c:#ffffff"><b>Flash</b><small>A white hit</small></button>
+    <button class="pad" type="button" data-pad="strobe" data-hold style="--c:#f4efe8"><b>Strobe</b><small>While you hold it</small></button>
+    <button class="pad" type="button" data-pad="build" style="--c:#f5b83d"><b>Build</b><small>Then a drop</small></button>
+    <button class="pad" type="button" data-pad="drop" style="--c:#ff4f8b"><b>Drop</b><small>Full energy</small></button>
+    <button class="pad" type="button" data-pad="blackout" aria-pressed="false" style="--c:#5b8cff"><b>Blackout</b><small>On or off</small></button>
+    <button class="pad" type="button" data-pad="freeze" aria-pressed="false" style="--c:#3ecf7a"><b>Freeze</b><small>Hold the frame</small></button>
+  </div>
+  <div class="bri"><label for="rm-bri">Brightness</label><input id="rm-bri" type="range" min="0" max="100" step="1" value="80"><output id="rm-bri-o">80%</output></div>
+  <p id="rm-msg" role="status"></p>
+</main>
 <div id="note" role="status"></div>
 <script type="module">
-const light = document.getElementById("light"), note = document.getElementById("note"), intro = document.getElementById("intro");
+const $ = id => document.getElementById(id);
+const light = $("light"), note = $("note"), intro = $("intro"), rm = $("rm");
 const demo = !!document.querySelector('meta[name="tempolight-demo"]') || new URLSearchParams(location.search).has("demo");
-let sock = null, lock = null, fade = null, last = 0;
+const token = new URLSearchParams(location.search).get("token");
+const wsUrl = () => `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws${token ? `?token=${encodeURIComponent(token)}` : ""}`;
+let sock = null, lock = null, fade = null, last = 0, mode = "";
 const show = (r, g, b) => { light.style.background = `rgb(${r},${g},${b})`; last = performance.now(); };
 const say = t => { note.textContent = t; clearTimeout(fade); if (t) fade = setTimeout(() => note.textContent = "", 4000); };
 
+// ---------------------------------------------------------------- the phone as a light
 function connectServer() {
-  const token = new URLSearchParams(location.search).get("token");
-  sock = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/ws${token ? `?token=${encodeURIComponent(token)}` : ""}`);
-  sock.binaryType = "arraybuffer";
-  sock.onopen = () => { sock.send(JSON.stringify({ type: "phone", on: true })); say("Connected. Enjoy the show!"); };
+  sock = new WebSocket(wsUrl()); sock.binaryType = "arraybuffer";
+  sock.onopen = () => { sock.send(JSON.stringify({ type: "phone", on: true })); say("Connected. Hold your phone up high."); };
   sock.onmessage = e => { if (typeof e.data === "string") return; const a = new Uint8Array(e.data); if (a[0] === 2) show(a[1], a[2], a[3]); };
-  sock.onclose = () => { show(0, 0, 0); say("Lost the connection. Trying again…"); setTimeout(connectServer, 2000); };
+  sock.onclose = () => { if (mode !== "light") return; show(0, 0, 0); say("Lost the connection. Trying again…"); setTimeout(() => mode === "light" && connectServer(), 2000); };
 }
 // the online demo has no server: it talks to the demo running in another tab of this browser
+let ch = null, hello = 0;
 function connectDemo() {
-  const ch = new BroadcastChannel("tempolight-phones"), id = Math.random().toString(36).slice(2);
+  ch = new BroadcastChannel("tempolight-phones"); const id = Math.random().toString(36).slice(2);
   ch.onmessage = e => { const m = e.data; if (m && m.to === id) show(...m.c); };
-  const hello = () => ch.postMessage({ type: "join", id }); hello(); setInterval(hello, 2000);
-  addEventListener("pagehide", () => ch.postMessage({ type: "leave", id }));
-  setTimeout(() => { if (!last) say("Open the online demo in another tab of this browser to see this work. At home, phones join the Tempolight on your network."); }, 2500);
+  const hi = () => ch.postMessage({ type: "join", id }); hi(); hello = setInterval(hi, 2000);
+  addEventListener("pagehide", () => ch?.postMessage({ type: "leave", id }));
+  setTimeout(() => { if (!last && mode === "light") say("Open the online demo in another tab of this browser to see this work. At home, phones join the Tempolight on your network."); }, 2500);
 }
 async function wake() { try { lock = await navigator.wakeLock?.request("screen"); } catch {} }
-document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && sock !== undefined) wake(); });
-document.getElementById("go").onclick = async () => {
-  intro.classList.add("hidden");
+document.addEventListener("visibilitychange", () => { if (document.visibilityState === "visible" && mode === "light") wake(); });
+$("go").onclick = async () => {
+  mode = "light"; intro.classList.add("hidden"); light.classList.remove("hidden"); document.body.classList.add("lit");
   try { await document.documentElement.requestFullscreen?.({ navigationUI: "hide" }); } catch {}
   wake(); if (demo) connectDemo(); else connectServer();
 };
+let stopT = 0; // a tap on the light shows the way back for a few seconds
+light.addEventListener("click", () => { $("stop").classList.add("show"); clearTimeout(stopT); stopT = setTimeout(() => $("stop").classList.remove("show"), 3000); });
+$("stop").onclick = () => { mode = ""; $("stop").classList.remove("show"); try { sock?.close(); } catch {} try { lock?.release(); } catch {} clearInterval(hello); ch?.close(); ch = null;
+  try { document.exitFullscreen?.(); } catch {} light.classList.add("hidden"); document.body.classList.remove("lit"); intro.classList.remove("hidden"); last = 0; };
 setInterval(() => { if (last && performance.now() - last > 3000) light.style.background = "#000"; }, 1000);
+
+// ---------------------------------------------------------------- the phone as a remote (guest permissions: pads, looks, brightness)
+async function call(method, path, body) {
+  const r = await fetch(path, { method, headers: { "content-type": "application/json", ...(token ? { "x-tempolight-token": token } : {}) }, body: body && JSON.stringify(body) });
+  const j = await r.json().catch(() => ({})); if (!r.ok) throw Object.assign(new Error(j.error || `Error ${r.status}`), { status: r.status }); return j;
+}
+const msg = t => { $("rm-msg").textContent = t; };
+const why = e => e.status === 403 || e.status === 401 ? "The host has turned this off for guests." : e.message;
+function act(a) { if (sock?.readyState === 1 && mode === "remote") sock.send(JSON.stringify({ type: "action", action: a })); else call("POST", "/api/action", a).catch(e => msg(why(e))); }
+function connectRemote() {
+  sock = new WebSocket(wsUrl()); sock.binaryType = "arraybuffer";
+  sock.onopen = () => { $("np-src").textContent = "Connected"; };
+  sock.onmessage = e => { if (typeof e.data !== "string") return; let m; try { m = JSON.parse(e.data); } catch { return; } if (m.type === "status" || m.type === "hello") status(m); };
+  sock.onclose = () => { if (mode !== "remote") return; $("np-state").classList.remove("on"); $("np-src").textContent = "Reconnecting…"; setTimeout(() => mode === "remote" && connectRemote(), 2000); };
+}
+let briBusy = 0;
+function status(m) {
+  if (!m || m.type !== "status") return;
+  const song = m.song?.name || (m.nowPlaying?.title ? (m.nowPlaying.artist ? `${m.nowPlaying.artist}, ${m.nowPlaying.title}` : m.nowPlaying.title) : null) || m.recognised?.name || null;
+  const playing = m.source !== "idle";
+  $("np-state").classList.toggle("on", playing); $("np-src").textContent = playing ? m.sourceLabel || "Playing" : "Nothing playing";
+  $("np-t").textContent = song || (playing ? m.sourceLabel : "Waiting for music");
+  $("np-s").textContent = [m.effectName, m.part && m.part !== "idle" ? { calm: "calm part", build: "build-up", drop: "drop" }[m.part] : null].filter(Boolean).join(" · ");
+  $("np-bpm").textContent = m.bpm ? Math.round(m.bpm) : "–";
+  [...$("np-beats").children].forEach((d, i) => d.classList.toggle("on", !!m.beat && i < m.beat));
+  $("np-glow").style.opacity = (0.25 + 0.75 * Math.min(1, m.level || 0)).toFixed(2);
+  $("rm-look").textContent = m.look?.mainName || m.look?.label || m.effectName || "–";
+  const o = m.overlay || {}; document.querySelector('[data-pad="blackout"]').setAttribute("aria-pressed", String(!!o.blackout)); document.querySelector('[data-pad="freeze"]').setAttribute("aria-pressed", String(!!o.freeze));
+  if (Date.now() - briBusy > 1500 && typeof m.brightness === "number") { $("rm-bri").value = Math.round(m.brightness * 100); $("rm-bri-o").textContent = $("rm-bri").value + "%"; }
+}
+$("remote").onclick = () => {
+  if (demo) { say("The remote works with a Tempolight at home or at the party. Open the online demo to try the pads."); return; }
+  mode = "remote"; intro.classList.add("hidden"); rm.classList.remove("hidden"); scrollTo(0, 0); connectRemote(); wake();
+};
+$("rm-back").onclick = () => { mode = ""; try { sock?.close(); } catch {} rm.classList.add("hidden"); intro.classList.remove("hidden"); };
+$("rm-next").onclick = async () => { msg("");
+  try { const r = await call("POST", "/api/song/look/next", {}); msg(`Now: ${r.mainName || r.label || "a new look"}`); }
+  catch (e) { if (e.status === 404) act({ type: "next" }); else msg(why(e)); } };
+for (const p of document.querySelectorAll("[data-pad]")) {
+  const id = p.dataset.pad, hold = p.hasAttribute("data-hold");
+  if (hold) {
+    const up = () => { if (!p.classList.contains("down")) return; p.classList.remove("down"); act({ type: id, on: false }); };
+    p.addEventListener("pointerdown", e => { e.preventDefault(); p.setPointerCapture?.(e.pointerId); p.classList.add("down"); act({ type: id, on: true }); navigator.vibrate?.(10); });
+    p.addEventListener("pointerup", up); p.addEventListener("pointercancel", up); p.addEventListener("lostpointercapture", up);
+    p.addEventListener("keydown", e => { if ((e.key === " " || e.key === "Enter") && !e.repeat) { e.preventDefault(); p.classList.add("down"); act({ type: id, on: true }); } });
+    p.addEventListener("keyup", e => { if (e.key === " " || e.key === "Enter") up(); });
+  } else p.onclick = () => { act({ type: id }); navigator.vibrate?.(10); if (p.hasAttribute("aria-pressed")) p.setAttribute("aria-pressed", String(p.getAttribute("aria-pressed") !== "true")); };
+}
+$("rm-bri").oninput = () => { briBusy = Date.now(); $("rm-bri-o").textContent = $("rm-bri").value + "%"; };
+$("rm-bri").onchange = () => { briBusy = Date.now(); call("POST", "/api/brightness", { value: $("rm-bri").value / 100 }).catch(e => msg(why(e))); };
 </script>
 </body>
 </html>

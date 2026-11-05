@@ -16,7 +16,7 @@ hero:
       link: /getting-started
     - theme: alt
       text: Try the online demo
-      link: https://tempolight.pages.dev
+      link: https://tempolight.pages.dev/demo/
     - theme: alt
       text: GitHub
       link: https://github.com/D4RKGEEK/tempolight
@@ -24,7 +24,7 @@ hero:
 features:
   - icon: 🎵
     title: It knows what's coming
-    details: Songs are analysed before they play, Spotify songs are learned on their first play, and songs heard before are recognised live, so the room explodes exactly on the drop.
+    details: Songs are analysed before they play, songs heard before are recognised in about 8 seconds, and for a new song it hears the build-up and counts down to the drop 3 to 5 seconds ahead. A live beat tracker lands on 91% of beats.
   - icon: 🏠
     title: One room, not one strip
     details: Draw your room once (or map it with a phone camera) and 95 effects sweep across walls, spin around rings and ripple out from the centre.
@@ -40,6 +40,8 @@ features:
 
 Pick the path that sounds like you. Every path starts with Tempolight running somewhere: [Install](install.md) lists
 every way (a one-file app, Homebrew, winget, Docker, a Raspberry Pi image, the Home Assistant add-on, or from source).
+Or paste one prompt into Claude and let it do the setup: [Set up Tempolight with Claude](setup-with-claude.md).
+Every feature, with where to find it in the app: [What you can do](guides/what-you-can-do.md).
 
 <div class="tl-paths">
 <div class="tl-path">

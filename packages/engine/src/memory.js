@@ -82,7 +82,8 @@ export function memoryAnalysis(e) {
   return out;
 }
 /** A remembered song without steady drums: its stored tempo can't be trusted. */
-export function drumlessEntry(e) { return e.style === "emotional" || e.style === "chill" || !(e.kicks && e.kicks.length >= (e.dur || 0) * 0.3); }
+export function drumlessEntry(e) { if (typeof e.drumless === "boolean") return e.drumless; // (a light entry that has no kicks says so itself: see the music library)
+  return e.style === "emotional" || e.style === "chill" || !(e.kicks && e.kicks.length >= (e.dur || 0) * 0.3); }
 
 // ---- what was heard, prepared once per query (the same arrays for every song): per speed, the loudness shape over
 // the window (stretched to song time), and per speed and note shift, the chroma

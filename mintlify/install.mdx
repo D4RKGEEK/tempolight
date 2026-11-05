@@ -19,9 +19,14 @@ in the same place (`~/.tempolight`, or `%USERPROFILE%\.tempolight` on Windows), 
 | [Docker](#docker) | Docker | rebuild or pull the image ([docker.md](/guides/docker#update)) |
 | [Installer scripts](#installer-scripts) | nothing (installs Node.js) | one click in Settings |
 | [From source](#from-source) | Node.js 20+, git | `git pull`, or one click in Settings |
+| [Raspberry Pi image](#raspberry-pi-image) | a Raspberry Pi and an SD card | one click in Settings |
+| [Home Assistant add-on](#home-assistant-add-on) | Home Assistant OS or Supervised | the add-on store |
 
 Whichever you choose: when Windows or macOS asks whether Tempolight may accept incoming connections, allow it (on
 private networks), so your phone can open it and your lights can be found. Then follow [Your first show](/guides/first-run).
+
+Rather not do it by hand? Paste one prompt into Claude and it installs and sets up Tempolight for you, asking before
+it installs anything system-wide: [Set up Tempolight with Claude](/setup-with-claude).
 
 ## One-file app
 
@@ -119,6 +124,32 @@ host networking is off by default: add controllers by IP on the Devices page). T
 
 Every command, updating, and what doesn't work in Docker Desktop (discovery, Apple Home, now playing) and why:
 [docker.md](/guides/docker).
+
+## Raspberry Pi image
+
+Flash `tempolight-<version>-pi-arm64.img.xz` from the [releases](https://github.com/D4RKGEEK/tempolight/releases) with
+Raspberry Pi Imager and power the Pi on. Join the **Tempolight-Setup** Wi-Fi from your phone to pick your network, then
+open **http://tempolight.local**. Works on a Pi 5, 4, 3, Zero 2 W and Pi 400/500. Everything else:
+[raspberry-pi.md](/raspberry-pi).
+
+## Home Assistant add-on
+
+In Home Assistant: **Settings → Add-ons → Add-on store → ⋮ → Repositories**, add
+`https://github.com/D4RKGEEK/tempolight`, then install **Tempolight**. With the Mosquitto broker add-on it shows up in
+Home Assistant by itself. Details: [smart-home.md](/guides/smart-home#the-home-assistant-add-on).
+
+## ffmpeg (optional)
+
+Tempolight needs nothing else to run. One free tool adds two things: [ffmpeg](https://ffmpeg.org/download.html) lets
+[your own music](/guides/your-music) read MP3, M4A, FLAC and other files (WAV works without it), and lets the server
+listen to a sound card or this computer's sound.
+
+| Computer | Install ffmpeg |
+| --- | --- |
+| Mac | `brew install ffmpeg` |
+| Windows | `winget install ffmpeg` |
+| Raspberry Pi OS, Debian, Ubuntu | `sudo apt install ffmpeg` |
+| Docker, the Pi image, the Home Assistant add-on | already inside |
 
 ## Installer scripts
 

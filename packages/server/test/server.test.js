@@ -92,7 +92,7 @@ test("WebSocket: a browser can stream audio, get status and preview frames", { s
     await s.call("POST", "/api/devices", { virtual: true });
     const ws = new WebSocket(`ws://127.0.0.1:${s.port}/ws`); ws.binaryType = "arraybuffer";
     const got = { hello: false, status: 0, frames: 0 };
-    ws.onmessage = e => { if (typeof e.data === "string") { const m = JSON.parse(e.data); if (m.type === "hello") got.hello = true; if (m.type === "status") got.status++; } else if (new Uint8Array(e.data)[0] === 1) got.frames++; };
+    ws.onmessage = e => { if (typeof e.data === "string") { const m = JSON.parse(e.data); if (m.type === "hello") got.hello = true; if (m.type === "status") { got.status++; got.drop = m.drop; } } else if (new Uint8Array(e.data)[0] === 1) got.frames++; };
     await new Promise(r => ws.onopen = r);
     ws.send(JSON.stringify({ type: "preview", on: true })); ws.send(JSON.stringify({ type: "audio-start", rate: 22050, label: "Test browser" }));
     const song = edm(22050), x = song.x;
@@ -101,10 +101,34 @@ test("WebSocket: a browser can stream audio, get status and preview frames", { s
     await until(() => got.hello && got.status > 0 && got.frames > 0, 8000); // slow CI machines need a moment
     const st = s.app.runtime.status();
     assert.ok(got.hello && got.status > 0 && got.frames > 0, JSON.stringify(got));
+    assert.deepEqual(Object.keys(got.drop || {}).sort(), ["at", "building", "conf", "next", "source"], "the status message carries the drop countdown");
     assert.equal(st.source, "browser"); assert.ok(Math.abs(st.bpm - 128) < 3, `bpm ${st.bpm}`); assert.ok(st.bands.some(v => v > 0));
     ws.send(JSON.stringify({ type: "action", action: { type: "blackout", on: true } })); await sleep(100); assert.ok(s.app.runtime.status().overlay.blackout);
     ws.close(); await sleep(200); assert.equal(s.app.runtime.rt.live, null, "closing the page stops its audio");
   } finally { await s.done(); }
+});
+
+test("chord colours and stereo: settings reach the director; stereo audio gives the view a balance, mono none", async () => {
+  const s = await setup();
+  try {
+    await s.call("POST", "/api/devices", { virtual: true });
+    const set = s.app.store.data.settings, D = s.app.runtime.director.settings;
+    assert.deepEqual([set.chordColours, set.stereo, D.chordColours, D.stereo], [true, "subtle", true, "subtle"], "defaults");
+    assert.equal((await s.call("PATCH", "/api/settings", { stereo: "loud" })).status, 400);
+    await s.call("PATCH", "/api/settings", { chordColours: false, stereo: "strong" });
+    assert.deepEqual([s.app.runtime.director.settings.chordColours, s.app.runtime.director.settings.stereo], [false, "strong"]);
+    const song = edm(22050, { kickLeft: true }), from = Math.floor(15 * 22050), n = Math.floor(6 * 22050), tapped = [];
+    s.app.runtime.rt.pcmTap = a => tapped.push(a.length);
+    for (let i = 0; i < n; i += 1024) { const m = Math.min(1024, n - i), b = new Int16Array(2 * m);
+      for (let k = 0; k < m; k++) { b[2 * k] = Math.round(song.l[from + i + k] * 30000); b[2 * k + 1] = Math.round(song.r[from + i + k] * 30000); }
+      s.app.runtime.pushPcm(b, "browser", "Stereo test", "c1", 22050, 0, 2); }
+    const an = s.app.runtime.rt.live.an, V = an.view();
+    assert.ok(Math.abs(an.bpm - 128) < 3, `the mix is analysed (${an.bpm})`); assert.ok(V.lr && typeof V.pan === "number", "stereo: pan and lr");
+    assert.ok(tapped.length && tapped.slice(0, -1).every(k => k === 1024), "taps get mono samples");
+    await s.call("PATCH", "/api/settings", { stereo: "off" }); s.app.runtime.stopLive();
+    for (let i = 0; i < n; i += 1024) { const m = Math.min(1024, n - i), b = new Int16Array(m); for (let k = 0; k < m; k++) b[k] = Math.round(song.x[from + i + k] * 30000); s.app.runtime.pushPcm(b, "browser", "Mono test", "c1"); }
+    const V2 = s.app.runtime.rt.live.an.view(); assert.ok(!V2.lr && V2.pan === undefined, "mono: no balance");
+  } finally { delete s.app.runtime.rt.pcmTap; await s.done(); }
 });
 
 test("songs analysed in the browser follow the playback clock", async () => {
@@ -115,7 +139,15 @@ test("songs analysed in the browser follow the playback clock", async () => {
     assert.equal((await s.call("POST", "/api/song", { name: "Synth", analysis: { ...pre, env: Array.from(pre.env) } })).status, 200);
     await s.call("POST", "/api/song/clock", { pos: 20, playing: true }); await sleep(100);
     const st = s.app.runtime.status(); assert.equal(st.source, "song"); assert.equal(st.part, "drop"); assert.equal(st.song.name, "Synth");
+    assert.deepEqual(st.drop, { next: null, at: null, conf: 0, source: null, building: false }, "no drop ahead after the last one");
+    // the drop countdown: before the song's drop, /api/status and the WebSocket's status say when it comes
+    await s.call("POST", "/api/song/clock", { pos: 3, playing: true }); await sleep(100);
+    const d = (await s.call("GET", "/api/status")).body.drop;
+    assert.deepEqual(Object.keys(d).sort(), ["at", "building", "conf", "next", "source"]);
+    assert.equal(d.source, "memory"); assert.equal(d.conf, 1); assert.ok(Math.abs(d.at - pre.drops[0]) < 0.05, `at ${d.at}`); assert.ok(d.next > 11 && d.next < 12.5, `next ${d.next}`); assert.equal(typeof d.building, "boolean");
+    await s.call("POST", "/api/song/clock", { pos: 20, playing: true }); await sleep(100);
     await s.call("POST", "/api/action", { type: "build", seconds: 2 }); await sleep(100); assert.equal(s.app.runtime.status().part, "build");
+    { const b = s.app.runtime.status().drop; assert.equal(b.source, "memory"); assert.ok(b.next > 1 && b.next <= 2, `next ${b.next}`); assert.equal(b.building, true, "the Build & drop pad builds toward its drop"); }
     await sleep(2100); assert.equal(s.app.runtime.status().part, "drop", "build-up ends in a drop");
   } finally { await s.done(); }
 });

@@ -36,7 +36,8 @@ flowchart TD
 | Listen on the server | Music → Listen on the server | what a sound card on the Tempolight computer hears | a Raspberry Pi or PC with no browser open |
 | Now playing on this computer | Music → Now playing on this computer | which song an app plays and where it is in it | songs it has heard before: exact without listening |
 | Sync with Spotify | Music → Sync with Spotify | the Spotify track, its position, and its learned beat map | Spotify on this computer, your phone or a speaker |
-| Song memory | Music → Song memory | recognises a remembered song in about 15 s while listening live | the same songs again, from any source |
+| Song memory | Music → Song memory | recognises a remembered song in about 8 s while listening live, through EQ and up to 6% faster or slower | the same songs again, from any source |
+| Your own music | Music → Your own music | every song in your music folders, analysed ahead | a music collection on the Tempolight computer: [Your own music](/guides/your-music) |
 | Pro DJ Link | Settings → Integrations | tempo and bar position from the decks | Pioneer CDJ / XDJ setups |
 | Ableton Link (beta) | Settings → Integrations | tempo and beat of a Link session | Live, Traktor, Bitwig, Link apps |
 | MIDI clock | Live pads → MIDI controller | the beat (24 clocks a beat), bar from Start | DJ software, drum machines |
@@ -53,7 +54,7 @@ before it plays (*Analysing … 40%*), so Tempolight knows the whole song: drops
 lights build up to them. Nothing is uploaded; only the beat map goes to the server.
 
 Every song played this way is **remembered** (Music → Song memory): when it plays again from anywhere else (Spotify,
-a DJ, the radio) while Tempolight listens live, it's recognised in about 15 seconds and followed with its full beat
+a DJ, the radio) while Tempolight listens live, it's recognised in about 8 seconds (half of them sooner) and followed with its full beat
 map. Each remembered song also gets an automatic **show** (a timeline of effects, one block per part of the song),
 which you can change under the song or in the show editor (**Edit show**).
 
@@ -76,11 +77,15 @@ can't share their system sound; they can use the microphone on a secure page.
 
 ![Timing](/images/guides/timing.png)
 
-With a microphone, the lights see the music after the speakers play it, so **fix the timing** once: **Music → Timing
-→ Fix the timing automatically** (speakers up, quiet for 5 seconds). By hand: move **Light timing** right if the
-lights come after the beat; Bluetooth speakers often need +150 to +250 ms. **Predict beats when listening live**
-(on by default) makes the lights land on the beat instead of just after it. It also lets slow lights (Hue, WiZ) and
-fast ones (WLED) flash together: see [slow and fast lights](/guides/troubleshooting#slow-and-fast-lights-together).
+Speakers add their own delay, Bluetooth ones most of all, so **fix the timing** once: **Music → Timing → Fix the
+timing automatically** (speakers up, quiet for 5 seconds). By hand: move **Light timing** right if the lights come
+after the beat, left if they come before it. Bluetooth speakers play late, so they often need -150 to -250 ms. Each
+speaker keeps its own timing. **Predict beats when listening live** (on by default) makes the lights land on the
+beat instead of just after it. It also lets slow lights (Hue, WiZ) and fast ones (WLED) flash together: see
+[slow and fast lights](/guides/troubleshooting#slow-and-fast-lights-together).
+
+Check how well it follows in **Music → In sync**: *Locked* means on the beat. The line under the meter says what to
+do when it isn't ([Is it in sync?](/guides/first-run#is-it-in-sync)).
 
 ## Listen on the server
 

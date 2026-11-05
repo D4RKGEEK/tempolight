@@ -1,0 +1,35 @@
+# Tempolight
+
+> Tempolight is free, open-source (MIT) music-reactive lighting for WLED and smart lights: an alternative to LedFx. It finds the beat, the bars, the build-ups and the drops, picks one look per song, and plays it across every light in a room as one canvas. Plain JavaScript for Node.js 20+ with zero dependencies; runs on Windows, macOS, Linux, a Raspberry Pi, in Docker or as a Home Assistant add-on, and is used from a browser or as a phone app (PWA).
+
+Key facts:
+
+- Lights: WLED (DDP, E1.31, Art-Net), any E1.31/Art-Net receiver, DMX fixtures through an Art-Net or sACN node, Philips Hue (basic and Entertainment), Nanoleaf, Govee (beta), LIFX, WiZ, TP-Link Kasa, Yeelight, Twinkly, OpenRGB, and phones as lights.
+- Music in: songs analysed before they play, live listening (this computer's sound, a microphone, a sound card on a Raspberry Pi), Sync with Spotify, now playing from music apps, song memory, a music folder analysed ahead, Pioneer Pro DJ Link, Ableton Link, MIDI clock, OSC.
+- Smart home and creators: Home Assistant (MQTT discovery and an add-on), Apple Home (a HomeKit bridge, so Siri works), OBS, Stream Deck, Twitch, Discord, CS2 and Dota 2 game events.
+- Web UI and API on port 8080 by default (http://localhost:8080, or http://tempolight.local on the Raspberry Pi image). Settings are kept in ~/.tempolight.
+- Start it: `npx tempolight --open` (Node.js 20+), or the one-file app, Homebrew, winget, Scoop, Docker (`ghcr.io/d4rkgeek/tempolight`), the Raspberry Pi image or the Home Assistant add-on.
+
+## Set it up for someone
+
+- [Set up with Claude](https://tempolight.pages.dev/setup-with-claude.txt): a step-by-step prompt to install Tempolight, find the lights, pick how it hears music, set the room and play a test song, using the HTTP API.
+
+## Docs
+
+- [Documentation](https://tempolight.pages.dev/docs/): every guide
+- [Install](https://github.com/D4RKGEEK/tempolight/blob/main/docs/install.md): every way to install, with commands
+- [Getting started](https://github.com/D4RKGEEK/tempolight/blob/main/docs/getting-started.md): first lights, hardware tips, troubleshooting
+- [How Tempolight hears your music](https://github.com/D4RKGEEK/tempolight/blob/main/docs/hearing-music.md)
+- [API reference](https://github.com/D4RKGEEK/tempolight/blob/main/docs/api.md): every HTTP and WebSocket call
+- [Protocols](https://github.com/D4RKGEEK/tempolight/blob/main/docs/protocols.md): how each kind of light is driven
+- [Effects](https://github.com/D4RKGEEK/tempolight/blob/main/docs/effects.md): the 95 built-in effects
+- [Raspberry Pi image](https://github.com/D4RKGEEK/tempolight/blob/main/docs/raspberry-pi.md)
+- [Architecture](https://github.com/D4RKGEEK/tempolight/blob/main/docs/architecture.md)
+
+## Optional
+
+- [Online demo](https://tempolight.pages.dev/demo/): the real app with pretend lights, running in the browser
+- [Source code](https://github.com/D4RKGEEK/tempolight)
+- [Releases](https://github.com/D4RKGEEK/tempolight/releases)
+- [Changelog](https://github.com/D4RKGEEK/tempolight/blob/main/CHANGELOG.md)
+- [Licence: MIT](https://github.com/D4RKGEEK/tempolight/blob/main/LICENSE)

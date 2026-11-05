@@ -20,7 +20,8 @@ flowchart LR
 ## Before the party
 
 1. **Fix the timing** where the speakers are: Music → Timing → **Fix the timing automatically**. A party PA or
-   Bluetooth speaker adds a delay the lights must know about.
+   Bluetooth speaker adds a delay the lights must know about. The delay of each light (slow Hue bulbs, fast WLED
+   strips) is set by itself, so they all flash together.
 2. **Pick the music source** ([music-sources.md](music-sources.md)). Song files in the app (or songs Tempolight
    already remembers) give the best drops: they're known before they come.
 3. **Save scenes** for the moods you'll want: set up effects, colours and brightness, then Home → **Save as scene**
@@ -36,6 +37,11 @@ flowchart LR
    *Photosensitive-safe mode (at most 3 flashes a second)*. Over the whole show (pads, drops, games and chat), big
    jumps in brightness are held to 3 a second; strobes from chat become a single flash; DMX strobes and lasers stay
    off.
+6. **Set the feel**: Settings → Lighting → **Punch** (how hard the room pumps on each kick in a drop) and **Drama**
+   (how much brighter drops are than calm parts, with a dip just before each drop). Turn both up for a club, down for
+   a dinner.
+7. **Check the sync** with a song from the night: Music → **In sync** should say *Locked*. The song map under it
+   shows the parts and the next drop.
 
 ## Live pads
 
@@ -60,6 +66,14 @@ work while the page is open:
 
 **Colour hold**: tap a colour to keep the whole room in it, tap again to let go. The pads work from a phone too: open
 Tempolight on the phone and keep the Live pads page open.
+
+**Drop countdown**: when a drop is coming, the Live pads page shows a big **Drop in 4 · 3 · 2 · 1** (from 8 seconds
+before it). It knows the drops of songs it has analysed or remembered, and while listening live it hears a build-up
+coming (a riser, a snare roll speeding up) and guesses the drop a few seconds ahead, on the phrase line. Meanwhile the
+lights build toward it by themselves: brighter and faster over the last bars, tighter pulses in the last bar, a dip,
+then the drop flash. Time a flash or a fog burst with it. Turn the countdown off in Settings → Lighting → **Show drop
+countdown**. Calm songs and ballads don't get a countdown, and Drama, Punch, safe mode and night mode set how big the
+build is.
 
 ## MIDI pads
 

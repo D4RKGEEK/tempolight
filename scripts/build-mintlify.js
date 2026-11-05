@@ -17,7 +17,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DOCS = path.join(root, "docs");
 const OUT = path.join(root, "mintlify");
 const REPO = "https://github.com/D4RKGEEK/tempolight";
-const DEMO = "https://tempolight.pages.dev";
+const SITE = "https://tempolight.pages.dev", DEMO = `${SITE}/demo/`;
 const PAGES_SITE = "https://d4rkgeek.github.io/tempolight/";   // the VitePress site, which also serves /flash/
 export const HAND_WRITTEN = new Set(["index.mdx", "custom.css", "openapi.json"]);
 const GENERATED_NOTE = "{/* Generated from docs/SOURCE by scripts/build-mintlify.js. Edit that file, then run: node scripts/build-mintlify.js */}";
@@ -44,10 +44,13 @@ const META = {
   "getting-started": { icon: "flag", description: "The short version: what you need, WLED settings, the setup wizard, music sources and the first fixes." },
   install: { icon: "download", sidebarTitle: "Install" },
   "guides/first-run": { icon: "play", sidebarTitle: "Your first show" },
+  "setup-with-claude": { icon: "sparkles", sidebarTitle: "Set up with Claude" },
+  "guides/what-you-can-do": { icon: "list-checks", sidebarTitle: "What you can do" },
   "guides/overview": { icon: "map", sidebarTitle: "All guides" },
   "guides/connect-lights": { icon: "lightbulb" },
   "guides/room-and-zones": { icon: "layout-grid" },
   "guides/music-sources": { icon: "music", sidebarTitle: "Music sources" },
+  "guides/your-music": { icon: "list-music", sidebarTitle: "Your own music" },
   "hearing-music": { icon: "ear", sidebarTitle: "Hearing the music" },
   spotify: { icon: "disc-3", sidebarTitle: "Spotify" },
   effects: { icon: "wand-sparkles" },
@@ -87,11 +90,11 @@ const META = {
 // listed land in Guides → More, so a new page in docs/ always shows up.
 const NAV = [
   { tab: "Start", icon: "rocket", groups: [
-    { group: "Get started", pages: ["index", "overview", "install", "guides/first-run", "getting-started"] },
+    { group: "Get started", pages: ["index", "setup-with-claude", "overview", "install", "guides/first-run", "guides/what-you-can-do", "getting-started"] },
   ] },
   { tab: "Guides", icon: "book-open", groups: [
     { group: "Guides", pages: ["guides/overview"] },
-    { group: "Lights and music", pages: ["guides/connect-lights", "guides/room-and-zones", "guides/music-sources", "hearing-music", "spotify", "effects"] },
+    { group: "Lights and music", pages: ["guides/connect-lights", "guides/room-and-zones", "guides/music-sources", "guides/your-music", "hearing-music", "spotify", "effects"] },
     { group: "Run it anywhere", pages: ["guides/docker", "raspberry-pi", "tempolight-lite", "deploy-cloudflare"] },
     { group: "Smart home", pages: ["guides/smart-home", "voice", "wake-up"] },
     { group: "Parties and streams", pages: ["guides/party-and-dj", "guides/creators", "streamdeck", "integrations"] },
@@ -198,7 +201,7 @@ export function rewriteHref(href, ctx) {
   if (!inDocs) return github();
   const docsRel = posix(path.relative(DOCS, abs));
   if (docsRel === "flash" || docsRel.startsWith("flash/")) return `${PAGES_SITE}flash/`;
-  if (docsRel === "index.html") return `${DEMO}/about/`;
+  if (docsRel === "index.html") return `${SITE}/`;
   if (/^(public\/)?images\//.test(docsRel)) return "/" + docsRel.replace(/^public\//, "");
   let md = docsRel;
   if (!md.endsWith(".md")) {
@@ -477,7 +480,7 @@ function docsJson(pageSlugs, warnings) {
       const dir = p.slice(0, -1);
       return [...pageSlugs].filter(s => s.startsWith(dir) && !placed.has(s)).sort().map(s => (placed.add(s), s));
     }
-    if (!pageSlugs.has(p)) { if (p !== "index") warnings.push(`docs.json: page "${p}" is in the navigation but doesn't exist; left out`); return []; }
+    if (!pageSlugs.has(p)) { if (p !== "index" && p !== "setup-with-claude") warnings.push(`docs.json: page "${p}" is in the navigation but doesn't exist; left out`); return []; }
     if (placed.has(p)) return [];
     placed.add(p); return [p];
   };
@@ -511,13 +514,13 @@ function docsJson(pageSlugs, warnings) {
     styling: { eyebrows: "section", codeblocks: "system", latex: false },
     navbar: {
       links: [{ type: "github", href: REPO }],
-      primary: { type: "button", label: "Try the demo", href: DEMO },
+      primary: { type: "button", label: "Try the demo", href: `${DEMO}/demo/` },
     },
     navigation: {
       global: {
         anchors: [
           { anchor: "GitHub", icon: "github", href: REPO },
-          { anchor: "Online demo", icon: "monitor-play", href: DEMO },
+          { anchor: "Online demo", icon: "monitor-play", href: `${DEMO}/demo/` },
           { anchor: "Releases", icon: "tag", href: `${REPO}/releases` },
         ],
       },

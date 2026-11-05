@@ -1,0 +1,98 @@
+# Your own music
+
+Point Tempolight at your music folder. It listens to every song once, ahead of time. After that, each song is
+followed exactly from its first play: the lights know every beat, build-up and drop before they come.
+
+This needs Tempolight installed on your computer, Raspberry Pi or server. The online demo runs in a browser and
+can't read folders on your disk.
+
+## Add a folder
+
+1. Open **Music** and find **Your own music**.
+2. Type the folder's full path, for example `/home/you/Music`, `C:\Users\you\Music` or `~/Music`.
+3. Press **Add**.
+
+You have to type the path. A web page can't open a folder picker on the computer Tempolight runs on (it may not
+even be the computer in front of you).
+
+Tempolight now looks through the folder and its subfolders and analyses each song. The bar shows how far it is:
+*Analysing 34 of 210 · 1.2 s each*. You can keep using the lights meanwhile.
+
+## What happens next
+
+- **A music player here plays the file**: the lights follow it at once, at the player's position. VLC, Rhythmbox,
+  mpv and other Linux players say which file they play; so does Music on a Mac for songs in your library.
+- **The player only says the title**: the song is found by its title, artist and length. This is how Spotify,
+  Windows players and browsers work. The names come from the songs' tags, so keep them tidy.
+- **The music comes from somewhere else** (a speaker in the room, a DJ, another computer): when Tempolight listens
+  live, it recognises the song after a few seconds and follows its beat map from there.
+
+Each song also gets its own look (an effect and colours that fit it) and a show. Press **Show** next to a song to
+edit its show on the timeline.
+
+## ffmpeg: every kind of file
+
+Tempolight reads WAV files by itself. For MP3, AAC (M4A), FLAC, OGG, Opus and the rest it needs
+[ffmpeg](https://ffmpeg.org/download.html):
+
+| Computer | Install ffmpeg |
+| --- | --- |
+| Mac | `brew install ffmpeg` |
+| Windows | `winget install ffmpeg` |
+| Raspberry Pi, Debian, Ubuntu | `sudo apt install ffmpeg` |
+| Docker | already inside the Tempolight image |
+
+Without ffmpeg the panel says *Install ffmpeg to analyse MP3/AAC/FLAC; WAV works now.* Songs it couldn't read wait.
+Install ffmpeg and press **Look for new songs**: they are analysed then. ffmpeg also gives the song names from the
+tags (*Artist - Title*). Without it the file name is used.
+
+## New songs
+
+With **Notice new songs in these folders by itself** on, songs you add to the folders are found within a minute,
+and the folders are looked through every 15 minutes anyway. Or press **Look for new songs**.
+
+Songs already analysed are skipped. A moved or renamed file keeps its analysis. A copy of a song, or the same song
+in another format, is kept once. A changed file is analysed again.
+
+**Remove** takes a song out of the library. The file stays where it is, and it won't come back unless it changes.
+
+## Pause
+
+**Pause** stops the analysis at once, for example during a party on a small computer. It stays paused until you
+press **Resume**, even after a restart.
+
+Tempolight also waits by itself while the lights are busy. On a Raspberry Pi it analyses one song at a time; on a
+bigger computer a few at once, at the lowest priority, so everything else comes first.
+
+## Docker
+
+A container only sees the folders you give it. Mount your music folder into the container, read-only, and tell
+Tempolight where it is. In `docker-compose.yml`:
+
+```yaml
+services:
+  tempolight:
+    volumes:
+      - tempolight:/data
+      - /home/you/Music:/music:ro     # your music folder on the host : where the container sees it
+    environment:
+      - TEMPOLIGHT_MUSIC=/music       # added to the library at every start
+```
+
+Or with `docker run`: add `-v /home/you/Music:/music:ro -e TEMPOLIGHT_MUSIC=/music`. You can also type `/music` in
+the panel instead of setting `TEMPOLIGHT_MUSIC`. Type the path inside the container (`/music`), not the one on
+your computer. More in [Docker](docker.md).
+
+## Advanced
+
+- **How fast**: about a second or two per three-minute song on a laptop. The bar shows the real figure. ffmpeg
+  decodes the next song while the current one is analysed.
+- **Where it's kept**: `library.json` (the files seen) and `library/` (one small file per song) in the data folder.
+  The settings file doesn't grow. Up to 5,000 songs (1,500 in low-power mode).
+- **Safety**: only the folders you chose are read. Links that lead out of them are not followed. Only an admin can
+  see or change the library (the PIN lock applies).
+- **Long files**: files over 30 minutes (DJ mixes) and under 20 seconds are skipped.
+- **Recognising live** with a big library takes longer than with a few songs: the library is searched in the
+  background, a little at a time, so the lights never stutter. Songs whose tempo can't match are skipped.
+- **The API**: `GET /api/library`, `PATCH /api/library`, `POST /api/library/scan`, `/pause`, `/resume` and
+  `DELETE /api/library/songs/:id`. See the [API](../api.md#music-library).

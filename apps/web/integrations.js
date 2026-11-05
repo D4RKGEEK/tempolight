@@ -6,15 +6,18 @@ import { app, api, act, toast, esc, panel, opt, $, $$, unlocked, DEMO, route } f
 const DOCS = "https://github.com/D4RKGEEK/tempolight/blob/main/docs/";
 let styled = false;
 function style() { if (styled) return; styled = true; const s = document.createElement("style"); s.textContent = `
-.ig-st { font-size: 12.5px; color: var(--muted); }
-.ig-steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; font-size: 13px; }
-.ig-url { font: 12px var(--mono); word-break: break-all; background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 6px; padding: 6px 8px; }
-.ig-code { font: 600 22px var(--mono); letter-spacing: .12em; }
-.ig-map td { padding: 4px 6px 4px 0; } .ig-map input, .ig-map select { width: 100%; min-width: 120px; }
-.ig-map input.ig-col, .ig-col { width: 44px; min-width: 0; height: 32px; padding: 0; border: 1px solid var(--line); border-radius: 6px; background: none; flex: none; }
-.ig-ev { display: flex; flex-wrap: wrap; gap: 6px 14px; }
-.ig-game { display: grid; gap: 12px; }
-@media (max-width: 820px) { .ig-map input, .ig-map select { min-width: 90px; } }`; document.head.appendChild(s); }
+.ig-st { font-size: 13px; color: var(--text-2); }
+.ig-steps { margin: 0; padding-left: 22px; display: grid; gap: 6px; font-size: 14px; color: var(--text-2); }
+.ig-steps li::marker { font: 500 13px var(--mono); color: var(--text-3); }
+.ig-steps code, .ig-steps .mono { color: var(--text); }
+.ig-url { font: 12.5px var(--mono); word-break: break-all; background: var(--sunk); box-shadow: var(--ring); border-radius: var(--r-field); padding: 8px 12px; color: var(--text); }
+.ig-code { font: 500 26px var(--mono); letter-spacing: .14em; font-variant-numeric: tabular-nums; }
+.ig-map td { padding: 6px 8px 6px 0; } .ig-map input, .ig-map select { width: 100%; min-width: 120px; }
+.ig-map input.ig-col, .ig-col { width: 44px; min-width: 0; height: 34px; padding: 3px; border: 0; border-radius: var(--r-field); background: var(--sunk); box-shadow: var(--ring); flex: none; }
+.ig-ev { display: flex; flex-wrap: wrap; gap: 8px 16px; }
+.ig-game { display: grid; gap: 14px; padding: 18px; border-radius: var(--r-inner); background: var(--sunk); box-shadow: var(--ring); align-content: start; }
+.ig-hr { border: 0; height: 1px; background: var(--hair); width: 100%; margin: 8px 0; }
+@media (max-width: 820px) { .ig-map input, .ig-map select { min-width: 90px; } .ig-game { padding: 14px; } }`; document.head.appendChild(s); }
 
 const badge = (ok, text, warn) => `<span class="badge ${ok ? "live" : warn ? "warn" : ""}"><i></i>${esc(text)}</span>`;
 const ago = t => { if (!t) return "never"; const s = Math.round((Date.now() - t) / 1000); return s < 2 ? "just now" : s < 60 ? `${s} s ago` : s < 3600 ? `${Math.round(s / 60)} min ago` : `${Math.round(s / 3600)} h ago`; };
@@ -40,7 +43,7 @@ export function integrationsPage(el) {
       <p style="margin:0">Scenes, effects and live pads (flash, strobe, blackout, build-up and drop, pressed or held) on keys, the lights' power, and brightness on a Stream Deck + dial. The keys show what the lights are doing: the active scene lit, the effect playing, strobe on.</p>
       <ol class="ig-steps"><li>Stream Deck 6.4 or later, on Windows or a Mac.</li><li>Open the downloaded <span class="mono">.streamDeckPlugin</span> file: Stream Deck installs it.</li><li>Drag Tempolight's actions onto keys (the Tempolight group).</li>
       <li>In a key's settings, enter this address: <span class="mono">${esc(location.host)}</span>${st().locked ? ", and the PIN (Tempolight is locked)" : ""}. All Tempolight keys share it.</li></ol>
-      <p class="faint" style="margin:0;font-size:12.5px">${sd.available ? "" : "This Tempolight was installed without the plugin's files: the button opens the releases page. "}<a href="${DOCS}streamdeck.md" target="_blank" rel="noopener">More about the plugin</a></p></div>`)}
+      <p class="faint" style="margin:0;font-size:13px">${sd.available ? "" : "This Tempolight was installed without the plugin's files: the button opens the releases page. "}<a href="${DOCS}streamdeck.md" target="_blank" rel="noopener">More about the plugin</a></p></div>`)}
 
     ${panel("OBS Studio", "", `<span id="obs-st"></span>`, `<div class="pb stack">
       <p style="margin:0" class="faint">OBS 28 or later has the WebSocket server built in: in OBS, Tools → WebSocket Server Settings → Enable, and Show Connect Info for the password.</p>
@@ -84,7 +87,7 @@ export function integrationsPage(el) {
         <span class="help">Read-only and anonymous: no account needed. The streamer is never held back by cooldowns; mods skip the per-user one. ${st().settings.safe ? "Photosensitive-safe mode is on, so !strobe is refused." : ""}</span></div>
       <div class="field"><span class="lbl">Scenes chat may pick (none ticked: all)</span><div class="ig-ev">${scenes().map(s => `<label class="check"><input type="checkbox" data-tsc="${esc(s.id)}" ${tw.chat.scenes.includes(s.id) ? "checked" : ""}> ${esc(s.name)}</label>`).join("")}</div></div>
       <div class="row"><button class="btn primary" id="tw-save" type="button">Save chat settings</button><span class="ig-st" id="tw-last"></span></div>
-      <hr style="border:0;border-top:1px solid var(--line-2);width:100%">
+      <hr class="ig-hr">
       <div class="field"><span class="lbl">Follows, subs, raids and cheers (EventSub)</span><span class="help">Needs a sign-in with a Twitch application of your own: on <a href="https://dev.twitch.tv/console/apps" target="_blank" rel="noopener">dev.twitch.tv/console</a>, Register Your Application, Client Type <b>Public</b>, any OAuth redirect (for example http://localhost), then paste its Client ID here. <a href="${DOCS}integrations.md#twitch" target="_blank" rel="noopener">Step by step</a></span></div>
       <div class="controls">
         <div class="field"><label for="tw-cid">Client ID</label><input id="tw-cid" value="${esc(tw.clientId)}" spellcheck="false" autocomplete="off"></div>
@@ -104,12 +107,12 @@ export function integrationsPage(el) {
         <div class="field"><span class="lbl">Post</span><label class="check"><input type="checkbox" id="dc-np" ${dc.nowPlaying ? "checked" : ""}> Now playing</label><label class="check"><input type="checkbox" id="dc-sc" ${dc.scenes ? "checked" : ""}> Scene changes</label><label class="check"><input type="checkbox" id="dc-tw" ${dc.twitch ? "checked" : ""}> Twitch follows, subs and raids</label></div>
       </div>
       <div class="row"><button class="btn primary" id="dc-save" type="button">Save</button><button class="btn" id="dc-test" type="button" ${dc.hasWebhook ? "" : "disabled"}>Send a test message</button>${dc.hasWebhook ? `<button class="btn sm" id="dc-clr" type="button">Remove webhook</button>` : ""}</div>
-      <p class="faint" style="margin:0;font-size:12.5px">Commands from Discord (a bot) aren't there yet: see <a href="${DOCS}integrations.md#discord" target="_blank" rel="noopener">the plan</a>.</p>
+      <p class="faint" style="margin:0;font-size:13px">Commands from Discord (a bot) aren't there yet: see <a href="${DOCS}integrations.md#discord" target="_blank" rel="noopener">the plan</a>.</p>
     </div>`)}
 
     ${panel("Docs site", "The API reference's Try it panel", "", `<div class="pb stack">
       <label class="check"><input type="checkbox" id="docs-try" ${I.docs?.tryIt ? "checked" : ""}> Let the docs site try API calls</label>
-      <p class="faint" style="margin:0;font-size:12.5px">Browsers may not call Tempolight from other websites. Turn this on to send requests from the <a href="https://tempolight.pages.dev/docs/api-reference/" target="_blank" rel="noopener">API reference</a> (${(I.docs?.origins || []).map(esc).join(", ")}) to this Tempolight; the PIN lock still applies. Turn it off again when you're done.</p>
+      <p class="faint" style="margin:0;font-size:13px">Browsers may not call Tempolight from other websites. Turn this on to send requests from the <a href="https://tempolight.pages.dev/docs/api-reference/" target="_blank" rel="noopener">API reference</a> (${(I.docs?.origins || []).map(esc).join(", ")}) to this Tempolight; the PIN lock still applies. Turn it off again when you're done.</p>
     </div>`)}`;
     bind(); update();
   }
@@ -129,7 +132,7 @@ export function integrationsPage(el) {
       </div>
       <div class="ig-ev">${evs.map(([k, n]) => `<label class="check"><input type="checkbox" data-g="${k}" ${c[k] !== false ? "checked" : ""}> ${n}</label>`).join("")}</div>
       <div class="row"><button class="btn sm primary" type="button" data-cfg="${g}">Download the config file</button><button class="btn sm" type="button" data-tok="${g}">New token</button></div>
-      <span class="help" style="font-size:12px;color:var(--faint)">Put <span class="mono">${esc(c.file)}</span> in <span class="mono">Steam/steamapps/common/${dota ? "dota 2 beta" : "Counter-Strike Global Offensive"}/${esc(c.folder)}/</span>${dota ? ", and add <span class=\"mono\">-gamestateintegration</span> to Dota 2's launch options" : ""}. The game must reach <span class="mono">${esc(location.origin)}</span>.</span>
+      <span class="help" style="font-size:13px;color:var(--text-2)">Put <span class="mono">${esc(c.file)}</span> in <span class="mono">Steam/steamapps/common/${dota ? "dota 2 beta" : "Counter-Strike Global Offensive"}/${esc(c.folder)}/</span>${dota ? ", and add <span class=\"mono\">-gamestateintegration</span> to Dota 2's launch options" : ""}. The game must reach <span class="mono">${esc(location.origin)}</span>.</span>
       <div class="row"><span class="ig-st">Try:</span>${tries.map(([k, n]) => `<button class="btn sm" type="button" data-try="${g}:${k}" ${c.enabled ? "" : "disabled"}>${n}</button>`).join("")}</div>
     </div>`;
   }
@@ -196,7 +199,7 @@ export function integrationsPage(el) {
     if (!I || gone) return; const o = I.obs.status, tw = I.twitch, dc = I.discord.status;
     const os = $("#obs-st"); if (os) os.innerHTML = !I.obs.enabled ? badge(false, "Off") : o?.connected ? badge(true, `Connected · ${o.scene || "?"}${o.streaming ? " · live" : ""}${o.recording ? " · recording" : ""}`) : badge(false, o?.error || "Connecting…", true);
     for (const g of ["cs2", "dota2"]) { const e = $(`#g-st-${g}`), c = I.games[g], s = c.status; if (!e) continue;
-      e.innerHTML = !c.enabled ? badge(false, "Off") : s.live ? badge(true, `${s.map || "In game"}${s.health != null ? ` · ${s.health} HP` : ""}${s.bomb ? " · bomb!" : ""}`) : badge(false, s.lastAt ? `Last heard ${ago(s.lastAt)}` : "Waiting for the game", !s.lastAt ? false : true); }
+      e.innerHTML = !c.enabled ? badge(false, "Off") : s.live ? badge(true, `${s.map || "In game"}${s.health != null ? ` · ${s.health} HP` : ""}${s.bomb ? " · bomb planted" : ""}`) : badge(false, s.lastAt ? `Last heard ${ago(s.lastAt)}` : "Waiting for the game", !s.lastAt ? false : true); }
     const ts = $("#tw-st"); if (ts) { const c = tw.status; ts.innerHTML = !tw.chat.enabled ? badge(false, "Chat off") : c?.joined ? badge(true, `Reading #${c.channel}`) : badge(false, c?.error || "Connecting…", true); }
     const tl = $("#tw-last"); if (tl && tw.last) tl.textContent = `Last: ${tw.last.user} used !${tw.last.cmd}${tw.last.ok ? "" : ` (refused: ${{ off: "turned off", role: "not allowed", cooldown: "cooldown", "user-cooldown": "their cooldown", unknown: "not found", missing: "nothing after it", safe: "safe mode" }[tw.last.why] || tw.last.why})`} ${ago(tw.last.at)}`;
     const ta = $("#tw-auth"); if (ta && !ta.contains(document.activeElement)) {

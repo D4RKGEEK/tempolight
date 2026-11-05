@@ -2,7 +2,7 @@
 // this computer's sound or a microphone. Samples go to the server over the WebSocket; the server does the lighting.
 
 export function createAudio({ ws, api, onChange }) {
-  let ctx = null, tap = null, tapReady = null;
+  let ctx = null, tap = null, tapReady = null, chans = 1;
   const S = { mode: null, label: "", queue: [], index: -1, song: null, analysing: 0, error: null, stream: null };
   const emit = () => onChange && onChange(S);
 
@@ -13,7 +13,8 @@ export function createAudio({ ws, api, onChange }) {
       // the tap has one silent output to the speakers: browsers only run nodes that lead to the destination
       tap = new AudioWorkletNode(ctx, "pcm-tap", { numberOfInputs: 1, numberOfOutputs: 1 });
       const mute = ctx.createGain(); mute.gain.value = 0; tap.connect(mute).connect(ctx.destination);
-      tap.port.onmessage = e => ws.sendBinary(e.data);
+      // chunks of 16-bit samples, or {channels} when the tap goes stereo (the two channels differ) or back to mono
+      tap.port.onmessage = e => { if (e.data instanceof ArrayBuffer) ws.sendBinary(e.data); else if (e.data && e.data.channels) { chans = e.data.channels; ws.send({ type: "audio-format", channels: chans }); } };
     });
     await tapReady; return ctx;
   }
@@ -21,8 +22,8 @@ export function createAudio({ ws, api, onChange }) {
   let rttMs = 0;
   const latencyMs = () => Math.round(((ctx?.baseLatency || 0) * 1000) + (S.mode === "mic" || S.mode === "system" ? 10 : 0) + 512 / 22050 * 1000 + rttMs / 2);
   async function measureRtt() { const t = []; for (let k = 0; k < 3; k++) { const t0 = performance.now(); try { await api("GET", "/api/health"); } catch { return; } t.push(performance.now() - t0); } rttMs = Math.min(...t); }
-  function startStream(label) { ws.send({ type: "audio-start", rate: 22050, label, latencyMs: latencyMs() });
-    measureRtt().then(() => { if (S.mode && S.label === label.replace(/^Song: /, "")) ws.send({ type: "audio-start", rate: 22050, label, latencyMs: latencyMs() }); }); }
+  function startStream(label) { ws.send({ type: "audio-start", rate: 22050, label, latencyMs: latencyMs(), channels: chans });
+    measureRtt().then(() => { if (S.mode && S.label === label.replace(/^Song: /, "")) ws.send({ type: "audio-start", rate: 22050, label, latencyMs: latencyMs(), channels: chans }); }); }
   function stopStream() { ws.send({ type: "audio-stop" }); }
 
   // ---------------------------------------------------------------- songs
@@ -130,6 +131,6 @@ export function createAudio({ ws, api, onChange }) {
     try { if (S.song) S.song.gain.connect(recDest); if (S.stream) S.stream.src.connect(recDest); } catch {}
     return recDest.stream;
   }
-  return { captureStream, state: S, addFiles, addUrl, playIndex, toggle, seek, next, prev, pos, remove, listen, stopLive, stopSong, listInputs, level, calibrate, latencyMs,
+  return { captureStream, state: S, addFiles, addUrl, playIndex, toggle, seek, next, prev, pos, remove, listen, stopLive, stopSong, listInputs, level, calibrate, latencyMs, channels: () => chans,
     get duration() { return S.song ? S.song.item.buffer.duration : 0; } };
 }

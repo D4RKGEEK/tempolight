@@ -6,9 +6,12 @@ the clicks and ends with an *Advanced* part.
 | Guide | For |
 | --- | --- |
 | [Your first show](first-run.md) | install, open, the setup wizard, the first song |
+| [What you can do](what-you-can-do.md) | a tour of every feature, with where to find it in the app |
+| [Set up with Claude](../setup-with-claude.md) | one prompt, and Claude installs and sets up Tempolight |
 | [Connect your lights](connect-lights.md) | WLED, Govee, OpenRGB, Nanoleaf, Hue, LIFX, WiZ, Kasa, Yeelight, Twinkly, DMX, phones |
 | [Your room and zones](room-and-zones.md) | presets, the shape editor, camera mapping, zones |
 | [Where the music comes from](music-sources.md) | songs, live listening, now playing, Spotify, DJ Link, Link, MIDI clock |
+| [Your own music](your-music.md) | a music folder analysed ahead: every song followed from its first play |
 | [Sync with Spotify](../spotify.md) | connecting Spotify, learning songs, shared beat maps |
 | [Docker](docker.md) | Docker on Linux and Docker Desktop |
 | [Smart home](smart-home.md) | Home Assistant, Apple Home, voice, wake-up |

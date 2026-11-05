@@ -41,7 +41,7 @@
     "primary": {
       "type": "button",
       "label": "Try the demo",
-      "href": "https://tempolight.pages.dev"
+      "href": "https://tempolight.pages.dev/demo//demo/"
     }
   },
   "navigation": {
@@ -55,7 +55,7 @@
         {
           "anchor": "Online demo",
           "icon": "monitor-play",
-          "href": "https://tempolight.pages.dev"
+          "href": "https://tempolight.pages.dev/demo//demo/"
         },
         {
           "anchor": "Releases",
@@ -73,9 +73,11 @@
             "group": "Get started",
             "pages": [
               "index",
+              "setup-with-claude",
               "overview",
               "install",
               "guides/first-run",
+              "guides/what-you-can-do",
               "getting-started"
             ]
           }
@@ -97,6 +99,7 @@
               "guides/connect-lights",
               "guides/room-and-zones",
               "guides/music-sources",
+              "guides/your-music",
               "hearing-music",
               "spotify",
               "effects"

@@ -18,6 +18,7 @@ import { startHomeKit } from "./homekit/index.js";
 import { createUpdater } from "./update.js";
 import { startProLink } from "./prolink.js";
 import { startNowPlaying } from "./nowplaying.js";
+import { startLibrary } from "./library.js";
 import { startHearing } from "./hearing.js";
 import { startSpotify } from "./spotify.js";
 import { startLink } from "./ableton-link.js";
@@ -98,6 +99,7 @@ export async function createApp(opts) {
   const ha = startHomeAssistant({ core, store, runtime, version: pkg.version });
   const hk = startHomeKit({ core, store, runtime, version: pkg.version, dataDir: opts.dataDir, ...opts.homekit }); // Apple Home; opts.homekit: {mdns, host, port} (tests)
   const integ = startIntegrations({ core, store, runtime, root: ROOT, ...opts.integrations }); // OBS, games, Twitch, Discord, Stream Deck (opts.integrations: pretend services in tests)
+  const library = startLibrary({ core, store, runtime, dataDir: opts.dataDir, ...opts.library }); // your own music folders, analysed ahead (opts.library: test tools, pool size)
   const np = startNowPlaying({ core, store, runtime, dataDir: opts.dataDir, port: () => server.address()?.port || 8080, ...opts.nowPlaying }); // opts.nowPlaying: test runner/platform
   const hearing = startHearing({ core, store, runtime, ...(opts.hearing || {}) }); // how Tempolight hears music, and the sound output (opts.hearing: pretend computer)
   const spotify = startSpotify({ core, store, runtime, nowPlaying: np, dataDir: opts.dataDir, fetch: opts.nowPlaying?.fetch, ...opts.spotify }); // Sync with Spotify (opts.spotify: test clock)
@@ -158,9 +160,9 @@ export async function createApp(opts) {
 
   closeApp = () => api.close();
   const api = {
-    server, runtime, store, core, discovery: core.discovery, nowPlaying: np, hearing, homekit: hk, spotify, integrations: integ,
+    server, runtime, store, core, discovery: core.discovery, nowPlaying: np, library, hearing, homekit: hk, spotify, integrations: integ,
     listen(port, host) { return new Promise((res, rej) => { server.once("error", rej); server.listen(port, host, () => res(server.address().port)); }); },
-    async close() { ha.close(); spotify.close(); np.close(); hearing.close(); await hk.close(); integ.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
+    async close() { ha.close(); spotify.close(); np.close(); library.close(); hearing.close(); await hk.close(); integ.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
   };
   return api;
 }
