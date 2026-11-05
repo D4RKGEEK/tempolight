@@ -952,7 +952,7 @@ export function route() {
 }
 // deep links from Home's "What's new" card: #/settings/punch scrolls to that setting and makes it glow once
 const ANCHORS = { music: { sync: "#m-sync", library: "#lib, #lib-demo" }, effects: { variety: "#e-var" },
-  settings: { lighting: "#s-punch", punch: "#s-punch", drama: "#s-dyn", chords: "#s-chordc", stereo: "#s-stereo", countdown: "#s-dropcd" } };
+  settings: { lighting: "#s-punch", punch: "#s-punch", drama: "#s-dyn", chords: "#s-chordc", stereo: "#s-stereo", countdown: "#s-dropcd", about: "#s-upd" } };
 function spotlight(sel, tries = 30) {
   const el = $(sel); if (!el) { if (tries > 0) setTimeout(() => spotlight(sel, tries - 1), 100); return; }
   const box = el.closest(".setrow, .field, .panel") || el;

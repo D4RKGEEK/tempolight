@@ -19,7 +19,7 @@
 .rail-nav a[aria-current] .ui-ic, .tabs a[aria-current] .ui-ic { stroke: var(--label); }
 .rail-host { margin-top: auto; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 10px 4px; text-align: center; font-size: 11.5px; color: var(--text-3); line-height: 1.3; }
 .rail-host b { color: var(--text-2); font-weight: 500; font-size: 11.5px; }
-.rail-host .mono, .rail-host small { font-size: 10.5px; word-break: break-all; }
+.rail-host .mono, .rail-host small { font-size: 10.5px; overflow-wrap: anywhere; }
 .rail-host .dot { width: 7px; height: 7px; }
 .ui-ic { width: 18px; height: 18px; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; flex: none; }
 
@@ -54,12 +54,13 @@
     background: color-mix(in oklab, var(--bg) 88%, transparent); -webkit-backdrop-filter: blur(16px) saturate(1.3); backdrop-filter: blur(16px) saturate(1.3); box-shadow: 0 -1px 0 var(--hair); }
   .tabs a { min-height: 64px; gap: 4px; font-size: 11.5px; border-radius: 0; }
   .tabs a[aria-current] .ui-ic { filter: drop-shadow(0 0 8px color-mix(in oklab, var(--accent) 60%, transparent)); }
-  .v2shell .top { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "back title power theme" "chip chip chip chip" "bright bright bright bright"; row-gap: 10px; column-gap: 10px; padding: max(12px, env(safe-area-inset-top)) 16px 14px; }
-  .v2shell .top:not(:has(.back:not([hidden]))) { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "title power theme" "chip chip chip" "bright bright bright"; }
+  .v2shell .top { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; grid-template-areas: "back title power theme" "chip chip bright bright"; row-gap: 10px; column-gap: 10px; padding: max(12px, env(safe-area-inset-top)) 16px 14px; }
+  .v2shell .top:not(:has(.back:not([hidden]))) { grid-template-columns: minmax(0, 1fr) auto auto; grid-template-areas: "title power theme" "chip bright bright"; }
   .v2shell .top .back { grid-area: back; } .v2shell .top .title { grid-area: title; font-size: 26px; }
   .v2shell .top .master { grid-area: power; order: 0; } .v2shell #theme { grid-area: theme; order: 0; }
   .v2shell .top .hchip { grid-area: chip; max-width: none; justify-self: stretch; }
-  .v2shell .top .bright { grid-area: bright; order: 0; } .v2shell .bright input { width: auto; flex: 1; }
+  .v2shell .top .bright { grid-area: bright; order: 0; padding: 0 12px; gap: 8px; } .v2shell .bright input { width: 92px; flex: 1; } .v2shell .bright output { display: none; }
+  .v2shell .top .hchip { padding: 0 14px 0 12px; font-size: 14px; }
   .v2shell .iconbtn.menu { display: none; }
   .toast { bottom: calc(80px + env(safe-area-inset-bottom)); }
 }
