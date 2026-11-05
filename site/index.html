@@ -121,53 +121,73 @@ code, pre, .mono { font-family: var(--mono); }
 .fact { margin-top: 28px; font-size: 15px; color: var(--text-2); display: flex; flex-wrap: wrap; gap: 6px 10px; }
 .fact span + span::before { content: "·"; margin-right: 10px; color: var(--text-3); }
 
-/* showcase frame: a live piece of the Music page */
-.frame { border-radius: 26px; padding: 6px; background: rgb(255 255 255 / .05); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .08), 0 40px 90px -40px rgb(0 0 0 / .9); }
-.stage { border-radius: 20px; background: var(--surface); box-shadow: var(--ring); padding: 18px 18px 16px; font-size: 13px; }
-.bar { display: flex; align-items: center; gap: 10px; color: var(--text-2); font-size: 12px; }
-.bar .title { color: var(--text); font-weight: 500; font-size: 13px; }
-.bar .spacer { flex: 1; }
-.ghost { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: var(--surface-2); box-shadow: var(--ring); color: var(--text-2); font: 500 12px/1 var(--sans); cursor: pointer; transition: color var(--t-out) var(--ease), transform var(--t-out) var(--ease); }
+/* showcase frame: a live piece of the Stage, the dashboard's main screen */
+.frame { border-radius: 30px; padding: 6px; background: rgb(255 255 255 / .05); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .08), 0 40px 90px -40px rgb(0 0 0 / .9); }
+.shot { display: grid; gap: 6px; }
+.stg { position: relative; isolation: isolate; overflow: hidden; border-radius: 24px; aspect-ratio: 16 / 10; color: #f4efe8;
+  background: radial-gradient(ellipse 80% 75% at 50% 40%, #17130e 0%, #0a0807 62%, #050404 100%); box-shadow: 0 0 0 1px rgb(255 255 255 / .05); }
+.stg::after { content: ""; position: absolute; inset: 0; z-index: 1; pointer-events: none; border-radius: inherit; box-shadow: inset 0 0 80px 20px rgb(0 0 0 / .55); }
+.room { position: absolute; left: 6%; right: 6%; top: 6%; height: 64%; }
+.room .lyr { position: absolute; inset: 0; }
+.room { --t: 4px; }
+.room .lyr.wash { filter: blur(22px); opacity: .7; }
+.room .lyr.wash i { --t: 18px; margin: -7px 0 0 -7px; }
+.room i { position: absolute; margin: -2px 0 0 -2px; background: #1b1e25; box-shadow: 0 0 6px 1px currentColor, 0 0 16px 3px color-mix(in srgb, currentColor 45%, transparent); }
+.room .lyr.wash i { box-shadow: none; }
+.mstage .room { --t: 3px; }
+.cd { position: absolute; z-index: 2; left: 50%; top: 36%; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center; pointer-events: none; color: #fff;
+  text-shadow: 0 0 40px rgb(255 79 139 / .8), 0 0 14px rgb(255 79 139 / .6); transition: opacity .2s linear; }
+.cd span { font-size: 13px; font-weight: 600; letter-spacing: -0.01em; color: rgb(255 255 255 / .9); }
+.cd b { font: 600 68px/0.95 var(--mono); letter-spacing: -0.04em; font-variant-numeric: tabular-nums; }
+.cd.now b { font-family: var(--sans); color: #ff4f8b; font-size: 54px; }
+.cd.off { opacity: 0; }
+.npb { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; padding: 40px 18px 14px; display: flex; flex-direction: column; gap: 9px;
+  background: linear-gradient(to bottom, rgb(5 4 4 / 0), rgb(5 4 4 / .74) 46%, rgb(5 4 4 / .92)); }
+.np-row { display: flex; align-items: center; gap: 12px; min-width: 0; }
+.np-song { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.np-song b { font-size: 18px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-song span { font-size: 12px; color: rgb(244 239 232 / .64); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.np-play { flex: none; width: 34px; height: 34px; border-radius: 50%; display: grid; place-items: center; background: #f4efe8; color: #1a0e08; }
+.np-play svg { width: 13px; height: 13px; }
+.sync { display: inline-flex; flex: none; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: var(--r-pill); background: rgb(10 8 7 / .6); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); font-size: 12.5px; font-weight: 500; color: #f4efe8; white-space: nowrap; }
+.sync .ok { color: #3ecf7a; }
+.sync .bpm { color: rgb(244 239 232 / .42); font-size: 11px; } .sync .bpm b { font: 500 12.5px var(--mono); color: #f4efe8; }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px rgb(62 207 122 / .16); flex: none; }
+.beats { display: inline-flex; align-items: center; gap: 4px; margin-left: 2px; }
+.beats i { width: 7px; height: 7px; border-radius: 50%; background: rgb(255 255 255 / .14); }
+.beats i.on { background: #f4efe8; }
+.beats i.on:first-child { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+.np-foot { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; color: rgb(244 239 232 / .5); }
+.np-foot .mono { font-variant-numeric: tabular-nums; }
+.np-foot .soon { color: #ff4f8b; font-weight: 600; }
+
+.lookcard { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 10px 16px; padding: 16px 16px 16px 20px; border-radius: 24px; background: var(--surface); box-shadow: var(--ring); }
+.lookcard .lk-t { display: flex; flex-direction: column; min-width: 0; }
+.lookcard small { font-size: 12px; color: var(--text-3); }
+.lookcard .lk-n { font-size: 19px; font-weight: 600; letter-spacing: -0.03em; line-height: 1.2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lookcard .lk-why { font-size: 12.5px; color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.lookcard .sws { display: flex; gap: 5px; margin-top: 8px; } .lookcard .sws i { width: 18px; height: 18px; border-radius: 6px; }
+.lookcard .lk-a { display: flex; flex-direction: column; gap: 6px; }
+.ghost { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 30px; padding: 0 12px; border: 0; border-radius: 9px; background: var(--surface-2); box-shadow: var(--ring); color: var(--text-2); font: 500 12.5px/1 var(--sans); cursor: pointer; transition: color var(--t-out) var(--ease), transform var(--t-out) var(--ease), box-shadow var(--t-out) var(--ease); }
 .ghost:hover { color: var(--text); transform: translateY(-1px); transition-duration: var(--t-in); }
 .ghost:active { transform: translateY(1px) scale(.985); }
+.ghost[aria-pressed="true"] { color: var(--label); box-shadow: inset 0 0 0 1px var(--label); }
 .ghost svg { width: 12px; height: 12px; }
-.now { margin-top: 16px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
-.now .song { font-size: 17px; font-weight: 500; letter-spacing: -0.02em; color: var(--text); }
-.now .meta { font-size: 12px; color: var(--text-2); margin-top: 2px; }
-.sync { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px 0 9px; border-radius: var(--r-pill); background: var(--sunk); box-shadow: var(--ring); font-size: 12px; font-weight: 500; color: var(--text); }
-.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px rgb(62 207 122 / .16); flex: none; }
-.beats { display: inline-flex; gap: 4px; margin-left: 2px; }
-.beats i { width: 6px; height: 6px; border-radius: 2px; background: rgb(255 255 255 / .14); }
-.beats i.on { background: var(--text); }
-.beats i.on:first-child { background: var(--accent); }
 
-.map { position: relative; margin-top: 14px; height: 76px; border-radius: 12px; background: var(--sunk); box-shadow: var(--ring); overflow: hidden; }
+.map { position: relative; height: 40px; border-radius: 9px; background: rgb(255 255 255 / .05); overflow: hidden; }
 .map .sec { position: absolute; top: 0; bottom: 0; border-right: 1px solid rgb(0 0 0 / .35); }
-.map .sec span { position: absolute; top: 6px; left: 7px; font: 500 10.5px/1 var(--mono); color: var(--text-2); }
-.map .sec.calm { background: color-mix(in srgb, var(--calm) 16%, transparent); }
-.map .sec.build { background: color-mix(in srgb, var(--build) 18%, transparent); }
-.map .sec.drop { background: color-mix(in srgb, var(--drop) 20%, transparent); }
-.map .wave { position: absolute; left: 0; right: 0; bottom: 6px; height: 46px; display: flex; align-items: flex-end; gap: 2px; padding: 0 4px; }
-.map .wave i { flex: 1; border-radius: 1px; background: rgb(244 239 232 / .34); }
-.map .mark { position: absolute; top: 0; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--drop); transform: translateX(-5px); }
-.map .head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); box-shadow: 0 0 10px rgb(255 255 255 / .5); }
+.map .sec span { position: absolute; top: 4px; left: 6px; font: 500 9.5px/1 var(--mono); color: rgb(244 239 232 / .6); }
+.map .sec.calm { background: color-mix(in srgb, var(--calm) 22%, transparent); }
+.map .sec.build { background: color-mix(in srgb, var(--build) 22%, transparent); }
+.map .sec.drop { background: color-mix(in srgb, var(--drop) 26%, transparent); }
+.map .wave { position: absolute; left: 0; right: 0; bottom: 3px; height: 24px; display: flex; align-items: flex-end; gap: 1px; padding: 0 3px; }
+.map .wave i { flex: 1; border-radius: 1px; background: rgb(244 239 232 / .36); }
+.map .mark { position: absolute; top: 0; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; border-top: 5px solid var(--drop); transform: translateX(-4px); }
+.map .head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: #f4efe8; box-shadow: 0 0 10px rgb(255 255 255 / .5); }
 .legend { margin-top: 8px; display: flex; gap: 14px; font-size: 11.5px; color: var(--text-2); }
 .legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: -0.5px; }
-
-.row2 { margin-top: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .tag { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: var(--r-pill); font-size: 11.5px; font-weight: 600; background: var(--sunk); box-shadow: var(--ring); color: var(--text-2); }
-.tag.drop { background: color-mix(in srgb, var(--drop) 22%, var(--surface)); color: #ffd0de; box-shadow: none; font-variant-numeric: tabular-nums; min-width: 82px; justify-content: center; }
 .tag.ok { background: color-mix(in srgb, var(--ok) 16%, var(--surface)); color: #b6f0cc; box-shadow: none; }
-.hint { color: var(--text-2); font-size: 12px; }
-
-.strip { position: relative; margin-top: 14px; padding: 14px 12px; border-radius: 12px; background: #050403; box-shadow: var(--ring); }
-.leds, .leds-glow { display: flex; gap: 3px; }
-.leds i, .leds-glow i { flex: 1; height: 16px; border-radius: 3px; background: #1a120c; }
-.leds-glow { position: absolute; left: 12px; right: 12px; top: 14px; filter: blur(9px); opacity: 1; }
-.leds { position: relative; }
-.look { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--hair); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.look .what { flex: 1; min-width: 200px; color: var(--text-2); font-size: 12.5px; }
-.look .what b { color: var(--text); font-weight: 500; }
 
 /* proof strip */
 .proof { margin-top: 56px; }
@@ -231,6 +251,48 @@ code, pre, .mono { font-family: var(--mono); }
 .more p { margin-top: 8px; color: rgb(26 14 8 / .78); }
 .where { margin-top: 14px; display: inline-flex; font: 500 12.5px/1 var(--mono); color: var(--text-2); background: var(--sunk); padding: 6px 9px; border-radius: 7px; }
 
+/* four screens */
+.screens { margin-top: 48px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.sec-dark .card { background: var(--surface); }
+.screens .art { flex: 1; min-height: 320px; }
+.sec-dark .copy p { color: rgb(244 239 232 / .8); }
+.sec-dark .art { background: #070605; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .04); }
+.route { margin-top: 14px; display: inline-flex; font: 500 12.5px/1 var(--mono); color: var(--text-2); background: var(--sunk); padding: 6px 9px; border-radius: 7px; }
+.frag { width: 100%; max-width: 440px; font-size: 12.5px; color: #f4efe8; }
+.mstage { position: relative; overflow: hidden; aspect-ratio: 16 / 9; border-radius: 16px; background: radial-gradient(ellipse 80% 75% at 50% 40%, #17130e 0%, #0a0807 62%, #050404 100%); box-shadow: 0 0 0 1px rgb(255 255 255 / .06); }
+.mstage .room { top: 8%; height: 58%; left: 10%; right: 10%; }
+.mstage .npb { padding: 26px 12px 10px; gap: 6px; }
+.mstage .np-song b { font-size: 14px; } .mstage .sync { height: 26px; font-size: 11px; padding: 0 9px; gap: 6px; } .mstage .map { height: 22px; }
+.mpads { margin-top: 10px; display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 6px; }
+.mpads span { display: flex; align-items: flex-end; height: 40px; padding: 6px 8px; border-radius: 10px; background: #1e1a14; box-shadow: var(--ring); font-size: 11px; font-weight: 600; }
+.mpads span.hot { background: color-mix(in srgb, #ff4f8b 26%, #1e1a14); box-shadow: inset 0 0 0 1px #ff4f8b; }
+.hchoices { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.hchoices > span { display: flex; flex-direction: column; justify-content: flex-end; gap: 6px; min-height: 62px; padding: 8px 9px; border-radius: 12px; background: #17140f; box-shadow: var(--ring); font-size: 11px; font-weight: 600; line-height: 1.25; color: rgb(244 239 232 / .7); }
+.hchoices > span.on { color: #f4efe8; box-shadow: 0 0 0 1.5px var(--accent), 0 10px 24px -14px var(--accent); }
+.lvl { display: flex; gap: 2px; align-items: flex-end; height: 16px; width: 44px; } .lvl i { flex: 1; border-radius: 1px; background: #3ecf7a; }
+.rows { margin-top: 10px; display: grid; gap: 1px; background: rgb(255 255 255 / .06); border-radius: 12px; overflow: hidden; }
+.rows > div { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: #17140f; }
+.rows .nm { flex: 1; min-width: 0; display: flex; flex-direction: column; } .rows .nm b { font-weight: 500; font-size: 12.5px; } .rows .nm small { font-size: 11px; color: rgb(244 239 232 / .5); }
+.rows .mono { font-size: 11px; color: rgb(244 239 232 / .6); font-variant-numeric: tabular-nums; }
+.rows .act { height: 24px; padding: 0 9px; border-radius: 7px; display: inline-flex; align-items: center; background: #1e1a14; box-shadow: var(--ring); font-size: 11px; font-weight: 500; }
+.rows .act.pri { background: var(--accent); color: #1a0e08; box-shadow: none; }
+.segs { display: flex; gap: 4px; padding: 3px; border-radius: 10px; background: #0b0a08; box-shadow: var(--ring); }
+.segs span { flex: 1; text-align: center; padding: 5px 4px; border-radius: 7px; font-size: 11px; color: rgb(244 239 232 / .55); white-space: nowrap; }
+.segs span.on { background: #1e1a14; color: #f4efe8; box-shadow: var(--ring), 0 1px 2px rgb(0 0 0 / .4); }
+.gal { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.gc { padding: 4px; border-radius: 14px; background: #17140f; box-shadow: var(--ring); }
+.gc.on { box-shadow: 0 0 0 1.5px var(--accent); }
+.gc .th { position: relative; aspect-ratio: 16 / 8; border-radius: 10px; overflow: hidden; background: #070605; }
+.gc .th i { position: absolute; inset: 0; animation: drift 4s linear infinite; background-size: 200% 100%; }
+.gc .th em { position: absolute; top: 6px; left: 6px; font-style: normal; font-size: 9.5px; font-weight: 600; color: #ffb366; background: rgb(10 8 7 / .72); padding: 3px 7px; border-radius: 99px; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12); }
+.gc .gb { display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 7px 6px 4px 7px; font-size: 11.5px; font-weight: 600; }
+.gc .gb svg { width: 13px; height: 13px; fill: none; stroke: rgb(244 239 232 / .5); stroke-width: 2; }
+.gc.liked .gb svg { fill: var(--accent); stroke: var(--accent); }
+.galh { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 8px; font-size: 12px; font-weight: 600; } .galh small { font-weight: 400; color: rgb(244 239 232 / .5); }
+@keyframes drift { to { background-position: -200% 0; } }
+.lrows .lamp { width: 10px; height: 10px; border-radius: 50%; background: #ff8a1f; box-shadow: 0 0 10px #ff8a1f; }
+.lrows .st { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; color: #b6f0cc; } .lrows .st::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: #3ecf7a; }
+
 /* setup */
 .split { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; row-gap: 48px; align-items: start; }
 .split > .txt { grid-column: 1 / span 5; }
@@ -289,7 +351,7 @@ code, pre, .mono { font-family: var(--mono); }
   .hero-copy, .hero-art { grid-column: 1 / -1; }
   .hero-art { max-width: 640px; }
   .hero h1 { font-size: clamp(40px, 7vw, 64px); }
-  .features { grid-template-columns: 1fr; }
+  .features, .screens { grid-template-columns: 1fr; }
   .more { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .split > .txt, .split > .vis { grid-column: 1 / -1; }
   .split > .txt { max-width: 640px; }
@@ -310,7 +372,13 @@ code, pre, .mono { font-family: var(--mono); }
   .more, .faq { grid-template-columns: 1fr; }
   .sec-light, .sec-dark { padding: 96px 0; }
   .head p, .split .lead { font-size: 18px; }
-  .stage { padding: 14px 12px 12px; }
+  .stg { aspect-ratio: auto; display: flex; flex-direction: column; }
+  .stg .room { position: relative; left: auto; right: auto; top: auto; height: auto; aspect-ratio: 16 / 8; margin: 14px 14px 0; }
+  .stg .npb { position: static; padding: 8px 14px 14px; background: none; }
+  .stg .cd { top: 26%; } .cd b { font-size: 52px; }
+  .np-row { flex-wrap: wrap; } .np-song { flex-basis: calc(100% - 46px); } .stg .sync { width: 100%; justify-content: flex-start; }
+  .lookcard { grid-template-columns: minmax(0, 1fr); } .lookcard .lk-a { flex-direction: row; } .lookcard .lk-a .ghost { flex: 1; height: 40px; font-size: 13.5px; }
+  .hchoices { grid-template-columns: repeat(2, minmax(0, 1fr)); } .mpads { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .foot-brand { grid-column: 1 / -1; }
   .foot-col { grid-column: span 6; }
   .close { padding: 96px 0 88px; }
@@ -332,6 +400,7 @@ code, pre, .mono { font-family: var(--mono); }
   </a>
   <nav class="nav-links" aria-label="Sections">
     <a href="#how">How it works</a>
+    <a href="#screens">The app</a>
     <a href="#setup">Set up</a>
     <a href="/docs/">Docs</a>
     <a href="https://github.com/D4RKGEEK/tempolight">GitHub</a>
@@ -342,6 +411,7 @@ code, pre, .mono { font-family: var(--mono); }
 <div class="menu" id="menu" hidden>
   <button class="menu-btn menu-close" type="button" id="menu-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg><span class="sr">Close the menu</span></button>
   <a class="link" href="#how">How it works</a>
+  <a class="link" href="#screens">The app</a>
   <a class="link" href="#setup">Set up</a>
   <a class="link" href="#claude">Set up with Claude</a>
   <a class="link" href="/docs/">Docs</a>
@@ -367,17 +437,25 @@ code, pre, .mono { font-family: var(--mono); }
 
       <div class="hero-art">
         <div class="frame" id="show">
-          <div class="stage" role="img" aria-label="Tempolight's Music page: a song map with calm, build-up and drop sections, a playhead heading into the drop, the sync meter reading Locked at 128 BPM, a drop countdown and an LED strip pulsing on the beat">
-            <div class="bar" aria-hidden="true"><span class="title">Music</span><span>In sync</span><span class="spacer"></span></div>
-            <div class="now" aria-hidden="true">
-              <div><div class="song">Tempolight demo track</div><div class="meta" id="part">Section B · build-up</div></div>
-              <span class="sync"><span class="dot"></span>Locked · 128 BPM<span class="beats" id="beats"><i class="on"></i><i></i><i></i><i></i></span></span>
+          <div class="shot" role="img" aria-label="Tempolight's Stage screen: the room's lights glowing in a dark stage frame, a drop countdown over it, the now-playing bar with the demo track, Locked at 128 BPM and a song map heading into the drop, and the Look card with Kick Shockwave in the Sunset palette">
+            <div class="stg" aria-hidden="true">
+              <div class="room" id="room"></div>
+              <div class="cd" id="cd"><span id="cd-l">Drop in</span><b id="count0">3</b></div>
+              <div class="npb">
+                <div class="np-row">
+                  <div class="np-song"><b>Tempolight demo track</b><span id="part">Played here · 128 BPM · Build-up</span></div>
+                  <span class="np-play"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h3v14H7zM14 5h3v14h-3z"/></svg></span>
+                  <span class="sync"><span class="dot"></span><span class="ok">Locked</span><span class="bpm"><b>128</b> BPM</span><span class="beats" id="beats"><i class="on"></i><i></i><i></i><i></i></span></span>
+                </div>
+                <div class="map" id="map"></div>
+                <div class="np-foot"><span class="mono" id="pos">0:41 / 1:05</span><span id="sec">Part B · build-up</span><span id="drop-chip" class="soon">Next drop in 2 s</span></div>
+              </div>
             </div>
-            <div class="map" id="map" aria-hidden="true"></div>
-            <div class="legend" aria-hidden="true"><span><i style="background:var(--calm)"></i>Calm</span><span><i style="background:var(--build)"></i>Build-up</span><span><i style="background:var(--drop)"></i>Drop</span></div>
-            <div class="row2" aria-hidden="true"><span class="tag drop" id="drop-chip">Drop in 3</span><span class="hint">Following the song's beat map</span></div>
-            <div class="strip" aria-hidden="true"><div class="leds-glow" id="glowleds"></div><div class="leds" id="leds"></div></div>
-            <div class="look" aria-hidden="true"><span class="what">Look: <b>Kick Shockwave · Sunset</b></span><span class="ghost" style="cursor:default">Not this one</span><span class="ghost" style="cursor:default">Keep</span></div>
+            <div class="lookcard" id="lookui">
+              <div class="lk-t"><small>Look</small><span class="lk-n" id="lookname">Kick Shockwave · Sunset</span><span class="lk-why" id="lookwhy">Picked for its fast four-on-the-floor and big drops</span>
+                <span class="sws" id="sws" aria-hidden="true"><i style="background:#ff5e3a"></i><i style="background:#ff8a3a"></i><i style="background:#ffb648"></i></span></div>
+              <div class="lk-a"><button class="ghost" type="button" id="look-next">Try another look</button><button class="ghost" type="button" id="look-keep" aria-pressed="false">Keep this look</button></div>
+            </div>
           </div>
         </div>
         <div style="margin-top:12px;display:flex;justify-content:flex-end"><button class="ghost" type="button" id="pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h3v14H7zM14 5h3v14h-3z"/></svg><span>Pause the preview</span></button></div>
@@ -421,25 +499,25 @@ code, pre, .mono { font-family: var(--mono); }
       </article>
 
       <article class="card">
-        <div class="art" data-theme="dark"><div class="ui" id="lookui">
-          <div class="ui-t"><span>One look per song</span><span class="tag ok kept">Kept</span></div>
+        <div class="art" data-theme="dark"><div class="ui" aria-hidden="true">
+          <div class="ui-t"><span>One look per song</span><span class="tag ok">Kept</span></div>
           <div class="ui-b">
-            <div class="lookname">Look: <span id="lookname">Kick Shockwave · Sunset</span></div>
-            <div class="why">fast four-on-the-floor, high energy</div>
-            <div class="swatch" id="swatch" style="background:linear-gradient(90deg,#ff5e3a,#ffb648)"></div>
-            <div class="btns"><button class="ghost" type="button" id="look-next">Not this one</button><button class="ghost" type="button" id="look-keep" aria-pressed="false">Keep</button></div>
+            <div class="lookname">Ring Spinners · Fire</div>
+            <div class="why">Held through the song, stronger in the build-ups</div>
+            <div class="swatch" style="background:linear-gradient(90deg,#ff3d00,#ffc400)"></div>
+            <div class="btns"><span class="ghost">Try another look</span><span class="ghost" aria-pressed="true">Keep this look</span></div>
           </div>
         </div></div>
         <div class="copy">
           <div class="label">One look per song</div>
           <h3>One look, held for the whole song</h3>
-          <p>When a song is analysed, Tempolight picks one effect and palette that fit it and keeps it on the beat, getting stronger through build-ups. Not this one swaps it; Keep locks it in.</p>
+          <p>When a song is analysed, Tempolight picks one effect and palette that fit it and keeps it on the beat, getting stronger through build-ups. Try another look swaps it; Keep this look locks it in.</p>
         </div>
       </article>
 
       <article class="card">
         <div class="art" data-theme="dark"><div class="ui" aria-hidden="true">
-          <div class="ui-t"><span>Live pads</span><span>Show drop countdown</span></div>
+          <div class="ui-t"><span>Stage</span><span>Drop countdown</span></div>
           <div class="ui-b">
             <div class="count"><span class="big" id="count">3</span><span class="of">Drop in 4 · 3 · 2 · 1</span></div>
             <div class="ramp"><i id="ramp"></i></div>
@@ -465,7 +543,80 @@ code, pre, .mono { font-family: var(--mono); }
         <div class="copy">
           <div class="label">Song map and sync meter</div>
           <h3>See where you are in the song</h3>
-          <p>The Music page draws the playing song: its sections, its drops and a moving playhead. The sync meter says Locked, Finding the beat or Not hearing, with one plain hint when something is off.</p>
+          <p>The Stage draws the playing song: its sections, its drops and a moving playhead. The sync meter says Locked, Finding the beat or Not hearing, with one plain hint when something is off.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="sec-dark" data-theme="dark" id="screens" aria-labelledby="screens-h">
+  <div class="wrap">
+    <div class="head">
+      <h2 id="screens-h">Four screens, one question each</h2>
+      <p>The dashboard asks you one thing at a time. The Stage shows what the lights do right now; Songs, Looks and Lights hold the rest, and everything else waits under More.</p>
+    </div>
+    <div class="screens">
+      <article class="card">
+        <div class="art"><div class="frag" aria-hidden="true">
+          <div class="mstage"><div class="room" id="room2"></div>
+            <div class="npb"><div class="np-row"><div class="np-song"><b>Tempolight demo track</b></div><span class="sync"><span class="dot"></span><span class="ok">Locked</span><span class="beats" id="beats2"><i class="on"></i><i></i><i></i><i></i></span></span></div><div class="map" id="map3"></div></div></div>
+          <div class="mpads"><span>Flash</span><span>Strobe</span><span>Blackout</span><span>Build</span><span class="hot">Drop</span><span>Freeze</span></div>
+        </div></div>
+        <div class="copy">
+          <div class="label">Stage</div>
+          <h3>What the lights are doing right now</h3>
+          <p>Your room, live and big, with the song, the beat and the song map on its bottom edge. Below it: the look, Punch and Drama, and the pads.</p>
+          <span class="route">#/stage</span>
+        </div>
+      </article>
+      <article class="card">
+        <div class="art"><div class="frag" aria-hidden="true">
+          <div class="hchoices"><span class="on"><span class="lvl" id="lvl"><i></i><i></i><i></i><i></i><i></i><i></i></span>This computer's sound</span><span>Microphone</span><span>Spotify</span><span>Play files here</span></div>
+          <div class="rows">
+            <div><div class="segs" style="flex:1"><span class="on">All</span><span>Your folder</span><span>Learned</span><span>Played here</span></div></div>
+            <div><span class="nm"><b>Tempolight demo track</b><small>Played here</small></span><span class="mono">128 BPM · 1:05</span><span class="act pri">Play</span></div>
+            <div><span class="nm"><b>Add a music folder</b><small>Every song in it is analysed ahead</small></span><span class="act">Add songs</span></div>
+          </div>
+        </div></div>
+        <div class="copy">
+          <div class="label">Songs</div>
+          <h3>Which music it knows, and how it hears it</h3>
+          <p>Pick how Tempolight hears your music, then find every song it knows in one list: your folder, songs it learned and songs played here.</p>
+          <span class="route">#/songs</span>
+        </div>
+      </article>
+      <article class="card">
+        <div class="art"><div class="frag" aria-hidden="true">
+          <div class="galh"><span>Best for drops</span><small>Top picks first</small></div>
+          <div class="gal">
+            <div class="gc on liked"><div class="th"><i style="background-image:linear-gradient(90deg,#0a0807,#ff5e3a 30%,#ffb648 45%,#0a0807 60%,#ff5e3a 85%,#0a0807)"></i><em>Top pick</em></div><div class="gb">Kick Shockwave<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></div></div>
+            <div class="gc"><div class="th"><i style="background-image:linear-gradient(90deg,#16e0ff,#0a0807 25%,#ff2bd6 50%,#0a0807 75%,#16e0ff);animation-duration:2.6s"></i><em>Top pick</em></div><div class="gb">Ping-Pong Sweep<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></div></div>
+            <div class="gc"><div class="th"><i style="background-image:linear-gradient(90deg,#0a0807,#ffc400 20%,#0a0807 32%,#0a0807 60%,#ff3d00 72%,#0a0807 84%);animation-duration:3.2s"></i></div><div class="gb">Snare Comets<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></div></div>
+            <div class="gc"><div class="th"><i style="background-image:linear-gradient(90deg,#0a6cff,#00e5d0 35%,#0a3a8f 60%,#00e5d0 80%,#0a6cff);animation-duration:7s"></i></div><div class="gb">Ocean Waves<svg viewBox="0 0 24 24"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg></div></div>
+          </div>
+        </div></div>
+        <div class="copy">
+          <div class="label">Looks</div>
+          <h3>What the lights can look like</h3>
+          <p>Every effect as a small live preview, grouped into drops, build-ups and calm. Tap one to play it, heart the ones you like, hide the ones you don't, and save a look to bring back.</p>
+          <span class="route">#/looks</span>
+        </div>
+      </article>
+      <article class="card">
+        <div class="art"><div class="frag" aria-hidden="true">
+          <div class="rows lrows" style="margin-top:0">
+            <div><span class="lamp" data-lamp></span><span class="nm"><b>Living room</b><small>WLED</small></span><span class="st">On the beat</span></div>
+            <div><span class="lamp" data-lamp></span><span class="nm"><b>Desk lamp</b><small>Hue</small></span><span class="st">On the beat</span></div>
+            <div><span class="lamp" data-lamp></span><span class="nm"><b>Ceiling</b><small>WiZ</small></span><span class="st">On the beat</span></div>
+            <div><span class="nm"><b>Timing</b><small>Each light gets its own delay</small></span><span class="act">Fix the timing</span><span class="act pri">Find lights</span></div>
+          </div>
+        </div></div>
+        <div class="copy">
+          <div class="label">Lights</div>
+          <h3>Which lights you have, and whether they are on time</h3>
+          <p>Your room layout with every light on it, each light's status and delay, Find lights and Add a light, and the one-tap timing fix.</p>
+          <span class="route">#/lights</span>
         </div>
       </article>
     </div>
@@ -479,12 +630,12 @@ code, pre, .mono { font-family: var(--mono); }
       <p>Bring the music you already have, the smart home you already run, and the gear on your desk.</p>
     </div>
     <div class="cells more">
-      <div><h3>Chord colours and stereo</h3><p>Each chord gets its own shade of the palette, stepping on the bar line. With a stereo source, the side of the room a hit came from lights up.</p><span class="where">Settings → Lighting</span></div>
-      <div><h3>Your own music folder</h3><p>Add a folder and every song in it is analysed ahead, so it is followed exactly from its first play in VLC, Music on a Mac and other players.</p><span class="where">Music → Your own music</span></div>
+      <div><h3>Chord colours and stereo</h3><p>Each chord gets its own shade of the palette, stepping on the bar line. With a stereo source, the side of the room a hit came from lights up.</p><span class="where">Stage → Feel</span></div>
+      <div><h3>Your own music folder</h3><p>Add a folder and every song in it is analysed ahead, so it is followed exactly from its first play in VLC, Music on a Mac and other players.</p><span class="where">Songs → Add a music folder</span></div>
       <div><h3>Smart home</h3><p>Home Assistant finds it through MQTT discovery. It is a HomeKit bridge too, so Siri and the Home app work without Homebridge.</p><span class="where">Home Assistant · HomeKit</span></div>
       <div><h3>Creators</h3><p>Map OBS scenes to looks, run scenes and pads from a Stream Deck, and let Twitch chat commands and alerts flash the room.</p><span class="where">OBS · Stream Deck · Twitch</span></div>
       <div><h3>DMX and Art-Net</h3><p>Drive pars, dimmers, strobes and moving heads through an Art-Net or sACN node. Lasers stay off until you turn them on, and fire only in drops.</p><span class="where">Art-Net · sACN</span></div>
-      <div><h3>Phones as lights</h3><p>Guests scan a QR code and their screen joins the show. Each phone shows its own part of the room, so a crowd moves with it.</p><span class="where">Live pads → QR code</span></div>
+      <div><h3>Phones as lights</h3><p>Guests scan a QR code and their screen joins the show, as one more light or as a remote for the pads. Each phone shows its own part of the room, so a crowd moves with it.</p><span class="where">Stage → All pads and MIDI</span></div>
     </div>
   </div>
 </section>
@@ -497,6 +648,7 @@ code, pre, .mono { font-family: var(--mono); }
       <ol class="steps">
         <li>Find your lights on the network</li>
         <li>Pick a room layout</li>
+        <li>Choose how it hears your music</li>
         <li>Fix the timing with one tap</li>
         <li>Play a test song</li>
       </ol>
@@ -560,7 +712,7 @@ code, pre, .mono { font-family: var(--mono); }
     <div class="cells faq">
       <div><h3>Do I need to flash anything to my ESP32?</h3><p>No. Stock WLED works. Tempolight streams with DDP, which WLED supports out of the box.</p></div>
       <div><h3>Can it hear Spotify, YouTube or Apple Music?</h3><p>Yes. Sync with Spotify follows Spotify's exact position. For anything else it listens to this computer's sound or a microphone, and remembers songs it has heard.</p></div>
-      <div><h3>The lights are a little behind the music.</h3><p>Use the one-tap timing fix on the Music page: it plays clicks and listens with the microphone. Bluetooth speakers usually need −150 to −250 ms.</p></div>
+      <div><h3>The lights are a little behind the music.</h3><p>Use the one-tap timing fix on the Lights screen: it plays clicks and listens with the microphone. Bluetooth speakers usually need −150 to −250 ms.</p></div>
       <div><h3>How many LEDs can it drive?</h3><p>Thousands. About 7% of one CPU core drives 700 LEDs at 60 frames a second. Wi-Fi is usually the limit, so big rooms do best on wired controllers.</p></div>
       <div><h3>Is it safe for photosensitive epilepsy?</h3><p>Turn on Photosensitive-safe mode: at most three big flashes a second (WCAG 2.3.1). Night mode turns strobes off.</p></div>
       <div><h3>Does it need the cloud or an account?</h3><p>No. Everything runs on your network. Spotify's Web API, shared beat maps, Twitch and Discord connect only when you turn them on.</p></div>
@@ -621,17 +773,19 @@ code, pre, .mono { font-family: var(--mono); }
   const pick = t => { tabs.forEach(x => { const on = x === t; x.setAttribute("aria-selected", on); x.tabIndex = on ? 0 : -1; $("#" + x.getAttribute("aria-controls")).hidden = !on; }); };
   tabs.forEach((t, i) => { t.onclick = () => pick(t); t.onkeydown = e => { const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0; if (d) { const n = tabs[(i + d + tabs.length) % tabs.length]; pick(n); n.focus(); } }; });
 
-  // ------------------------------------------------ one look per song
-  const LOOKS = [["Kick Shockwave · Sunset", "#ff5e3a", "#ffb648"], ["Snare Comets · Neon", "#ff2bd6", "#16e0ff"], ["Ring Spinners · Fire", "#ff3d00", "#ffc400"], ["Plasma Field · Ocean", "#0a6cff", "#00e5d0"]];
-  let li = 0; const lookui = $("#lookui"), keep = $("#look-keep");
-  $("#look-next").onclick = () => { li = (li + 1) % LOOKS.length; const [n, a, b] = LOOKS[li]; $("#lookname").textContent = n; $("#swatch").style.background = `linear-gradient(90deg,${a},${b})`; lookui.classList.remove("is-kept"); keep.setAttribute("aria-pressed", "false"); keep.textContent = "Keep"; };
-  keep.onclick = () => { const on = !lookui.classList.contains("is-kept"); lookui.classList.toggle("is-kept", on); keep.setAttribute("aria-pressed", on); keep.textContent = on ? "Let it change" : "Keep"; };
+  // ------------------------------------------------ the Look card (Try another look / Keep this look)
+  const LOOKS = [["Kick Shockwave · Sunset", "Picked for its fast four-on-the-floor and big drops", ["#ff5e3a", "#ff8a3a", "#ffb648"]], ["Snare Comets · Neon", "Comets on the snare, brighter into the build-up", ["#ff2bd6", "#8f5bff", "#16e0ff"]],
+    ["Ring Spinners · Fire", "Rings that spin up with the energy", ["#ff3d00", "#ff7a00", "#ffc400"]], ["Plasma Field · Ocean", "A slow field for the calm parts", ["#0a6cff", "#00a7e5", "#00e5d0"]]];
+  let li = 0; const keep = $("#look-keep");
+  $("#look-next").onclick = () => { li = (li + 1) % LOOKS.length; const [n, w, c] = LOOKS[li]; $("#lookname").textContent = n; $("#lookwhy").textContent = w;
+    [...$("#sws").children].forEach((x, i) => x.style.background = c[i]); keep.setAttribute("aria-pressed", "false"); keep.textContent = "Keep this look"; };
+  keep.onclick = () => { const on = keep.getAttribute("aria-pressed") !== "true"; keep.setAttribute("aria-pressed", on); keep.textContent = on ? "Kept for this song" : "Keep this look"; };
 
   // ------------------------------------------------ song maps (sections in % of the song)
   const SECS = [["A", "calm", 0, 16], ["B", "build", 16, 26], ["C", "drop", 26, 42], ["A", "calm", 42, 56], ["B", "build", 56, 68], ["C", "drop", 68, 86], ["D", "calm", 86, 100]];
-  function drawMap(el, bars) {
+  function drawMap(el, bars, labels = true) {
     let h = "";
-    for (const [l, k, a, b] of SECS) h += `<div class="sec ${k}" style="left:${a}%;width:${b - a}%"><span>${l}</span></div>`;
+    for (const [l, k, a, b] of SECS) h += `<div class="sec ${k}" style="left:${a}%;width:${b - a}%">${labels ? `<span>${l}</span>` : ""}</div>`;
     for (const [, k, a] of SECS) if (k === "drop") h += `<div class="mark" style="left:${a}%"></div>`;
     let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
     h += '<div class="wave">';
@@ -640,36 +794,53 @@ code, pre, .mono { font-family: var(--mono); }
     el.innerHTML = h + '</div><div class="head"></div>';
     return el.querySelector(".head");
   }
-  const head1 = drawMap($("#map"), 72), head2 = drawMap($("#map2"), 56);
+  const heads = [drawMap($("#map"), 96), drawMap($("#map2"), 56), drawMap($("#map3"), 64, false)];
 
-  // ------------------------------------------------ the LED strip, on one clock (128 BPM, an 8-beat loop: build-up, dip, drop)
-  const N = innerWidth < 500 ? 28 : 44, leds = $("#leds"), gl = $("#glowleds");
-  leds.innerHTML = gl.innerHTML = "<i></i>".repeat(N);
-  const L = [...leds.children], G = [...gl.children];
-  const A = [255, 94, 58], B = [255, 182, 72];
-  const pal = [...Array(N)].map((_, i) => { const f = Math.abs(i / (N - 1) - .5) * 2; return A.map((c, k) => Math.round(c + (B[k] - c) * f)); });
-  const BEAT = 60 / 128, LOOP = 8 * BEAT, glow = $("#glow"), lamps = $$("[data-lamp]"), beatDots = [...$("#beats").children];
-  const chip = $("#drop-chip"), part = $("#part"), count = $("#count"), ramp = $("#ramp");
+  // ------------------------------------------------ the room: the TV-backlight layout (two side strips and a TV), as LEDs
+  function buildRoom(el, scale = 1) {
+    const pts = [], add = (x, y, w, h) => pts.push([x, y, w, h]); // each LED is a short piece of strip, so the pieces join up
+    const V = Math.round(16 * scale), T = Math.round(12 * scale), S = Math.round(7 * scale), dv = .8 / V, dt = .34 / T, ds = .44 / S;
+    for (let k = 0; k < V; k++) add(.08, .1 + dv * k, 0, dv);
+    for (let k = 0; k < T; k++) add(.33 + dt * k, .22, dt, 0); for (let k = 0; k < S; k++) add(.67, .22 + ds * k, 0, ds);
+    for (let k = 0; k < T; k++) add(.67 - dt * (k + 1), .66, dt, 0); for (let k = 0; k < S; k++) add(.33, .66 - ds * (k + 1), 0, ds);
+    for (let k = 0; k < V; k++) add(.92, .1 + dv * k, 0, dv);
+    const lyr = cls => { const d = document.createElement("div"); d.className = "lyr " + cls;
+      d.innerHTML = pts.map(([x, y, w, h]) => `<i style="left:${x * 100}%;top:${y * 100}%;width:${w ? `calc(${w * 100}% + 1px)` : "var(--t)"};height:${h ? `calc(${h * 100}% + 1px)` : "var(--t)"}"></i>`).join(""); el.append(d); return [...d.children]; };
+    const layers = [lyr("wash"), lyr("")];
+    const A = [255, 94, 58], B = [255, 182, 72];
+    const pal = pts.map(([x]) => { const f = Math.abs(x - .5) * 2; return A.map((c, k) => Math.round(c + (B[k] - c) * f)); });
+    const dist = pts.map(([x, y]) => Math.min(1, Math.hypot(x - .5, (y - .44) * .56) / .5));
+    return { n: pts.length, layers, pal, dist };
+  }
+  const rooms = [buildRoom($("#room")), buildRoom($("#room2"), .7)];
+
+  // ------------------------------------------------ everything on one clock (128 BPM, an 8-beat loop: build-up, dip, drop)
+  const BEAT = 60 / 128, LOOP = 8 * BEAT, SONG = 65, glow = $("#glow"), lamps = $$("[data-lamp]"), beatDots = [...$("#beats").children, ...$("#beats2").children], lvl = [...$("#lvl").children];
+  const chip = $("#drop-chip"), part = $("#part"), sec = $("#sec"), pos = $("#pos"), count = $("#count"), count0 = $("#count0"), cd = $("#cd"), ramp = $("#ramp");
+  const mmss = v => `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, "0")}`;
   function frame(t) {
     const b = t / BEAT, fb = b % 1, inDrop = b >= 4, pulse = Math.exp(-fb * 5);
     let sum = 0;
-    for (let i = 0; i < N; i++) {
+    for (const R of rooms) for (let i = 0; i < R.n; i++) {
       let v;
       if (!inDrop) { const lift = b / 4; v = .14 + .22 * lift + (.25 + .3 * lift) * (b >= 3 ? Math.exp(-(b * 2 % 1) * 5) : pulse); if (b >= 3.5) v *= .4; }
-      else { const d = Math.abs(i - (N - 1) / 2) / (N / 2), r = fb * 1.25; v = .26 + .8 * Math.exp(-(((d - r) / .16) ** 2)) + .45 * pulse; }
+      else { const r = fb * 1.25; v = .26 + .8 * Math.exp(-(((R.dist[i] - r) / .16) ** 2)) + .45 * pulse; }
       v = Math.pow(Math.min(1, v), .6); sum += v;
-      const white = inDrop && b < 4.18 ? .6 : 0, c = pal[i].map(x => Math.round((x + (255 - x) * white) * v)), col = `rgb(${c})`;
-      L[i].style.background = col; G[i].style.background = col;
+      const white = inDrop && b < 4.18 ? .6 : 0, c = R.pal[i].map(x => Math.round((x + (255 - x) * white) * v)), col = `rgb(${c})`;
+      for (const L of R.layers) { L[i].style.background = col; L[i].style.color = col; }
     }
-    glow.style.opacity = (.35 + .65 * sum / N).toFixed(3);
-    const beatInBar = Math.floor(b) % 4; beatDots.forEach((d, i) => d.classList.toggle("on", i <= beatInBar));
-    const left = 4 - Math.floor(b);
-    chip.textContent = inDrop ? "Drop" : `Drop in ${left}`;
-    part.textContent = inDrop ? "Section C · drop" : "Section B · build-up";
+    glow.style.opacity = (.35 + .65 * sum / (rooms[0].n + rooms[1].n)).toFixed(3);
+    const beatInBar = Math.floor(b) % 4; beatDots.forEach((d, i) => d.classList.toggle("on", (i % 4) <= beatInBar));
+    const left = 4 - Math.floor(b), secs = Math.max(1, Math.ceil((4 - b) * BEAT));
+    chip.textContent = inDrop ? "Drop" : `Next drop in ${secs} s`;
+    part.textContent = `Played here · 128 BPM · ${inDrop ? "Drop" : "Build-up"}`; sec.textContent = inDrop ? "Part C · drop" : "Part B · build-up";
     count.textContent = inDrop ? "Drop" : left;
+    count0.textContent = inDrop ? "Drop" : left; cd.classList.toggle("now", inDrop); cd.classList.toggle("off", (inDrop && b > 5.2) || left > 3);
+    $("#cd-l").style.visibility = inDrop ? "hidden" : "";
     ramp.style.width = (inDrop ? 100 : 15 + 85 * b / 4) + "%";
-    const x = 60 + 16 * t / LOOP; head1.style.left = x + "%"; head2.style.left = x + "%";
+    const x = 60 + 16 * t / LOOP; heads.forEach(h => h.style.left = x + "%"); pos.textContent = `${mmss(SONG * x / 100)} / ${mmss(SONG)}`;
     const lv = (.25 + .75 * pulse).toFixed(3); lamps.forEach(l => { l.style.opacity = lv; });
+    lvl.forEach((l, i) => { l.style.height = Math.round(100 * Math.min(1, (inDrop ? .9 : .45 + .3 * b / 4) * (.55 + .45 * pulse) * (.6 + .4 * Math.abs(Math.sin(i * 1.7 + b)))) ) + "%"; });
   }
   const REST = 1.2 * BEAT; // at rest: the build-up, three beats before the drop
   let t0 = performance.now(), paused = false, raf = 0, at = REST;
