@@ -11403,6 +11403,19 @@
           "moodColours": {
             "type": "boolean"
           },
+          "chordColours": {
+            "type": "boolean",
+            "description": "With the automatic palette, colours step with the song's chords on bar lines."
+          },
+          "stereo": {
+            "type": "string",
+            "enum": [
+              "off",
+              "subtle",
+              "strong"
+            ],
+            "description": "With a stereo source, the side of the room a hit came from brightens."
+          },
           "requests": {
             "type": "boolean"
           },
@@ -11755,6 +11768,19 @@
           },
           "moodColours": {
             "type": "boolean"
+          },
+          "chordColours": {
+            "type": "boolean",
+            "description": "With the automatic palette, colours step with the song's chords on bar lines."
+          },
+          "stereo": {
+            "type": "string",
+            "enum": [
+              "off",
+              "subtle",
+              "strong"
+            ],
+            "description": "With a stereo source, the side of the room a hit came from brightens."
           },
           "requests": {
             "type": "boolean"

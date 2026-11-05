@@ -6,6 +6,8 @@ import { buildSignals, kickHit } from "./signals.js";
 import { rangeAt, brightAt, cuesAt, createCueFirer, blockPalette } from "./timeline.js";
 import { moodPalette } from "./tonal.js";
 import { pickLook, characterOf, phraseStep, rating } from "./looks.js";
+import { createChordColours, sectionKey } from "./colour.js";
+import { createSpatial } from "./spatial.js";
 
 const G = (x, w) => Math.exp(-(x / w) * (x / w));
 
@@ -48,6 +50,9 @@ export function createDirector(layout, fx) {
     // effect for calm parts, build-ups and drops. look: the song's look (looks.js pickLook), null = the director
     // picks one itself from what it hears (live listening). nudge: effect id -> -1..1, a soft preference for looks
     variety: "show", look: null, nudge: {}, lookExclude: [],
+    // chordColours: with the automatic palette, colours step with the chords (colour.js); stereo: "off" | "subtle" |
+    // "strong", the side of the room the hit came from brightens on hits (spatial.js; stereo sources only)
+    chordColours: true, stereo: "subtle",
   };
   const cueFirer = createCueFirer();
   const ZBUF = new Float32Array(N * 3);
@@ -110,8 +115,13 @@ export function createDirector(layout, fx) {
   }
 
   const style = V => fx.styles[settings.style !== "auto" ? settings.style : (V && V.style) || "party"] || fx.styles.party;
-  const basePalette = () => settings.palette === "auto" || settings.palette === "mood" ? fx.palettes.auto[st.palIdx % fx.palettes.auto.length] : (fx.palettes[settings.palette] || fx.palettes.neon);
-  const palette = () => st.lookPal || (st.moodPal && (settings.palette === "mood" || (settings.palette === "auto" && settings.moodColours !== false)) ? st.moodPal : basePalette());
+  const basePalette = () => settings.palette === "auto" || settings.palette === "mood" ? fx.palettes.auto[palN() % fx.palettes.auto.length] : (fx.palettes[settings.palette] || fx.palettes.neon);
+  // chord colours: the palette steps with the chords; a song's sections pick the palette's variant (not each effect
+  // change), so a repeated section gets the same colours
+  const chords = createChordColours(), chordsOn = () => settings.chordColours !== false && settings.palette === "auto";
+  const palN = () => chordsOn() && st.secKey != null ? st.secKey : st.palIdx;
+  const palette = () => st.chordPal || rawPalette();
+  const rawPalette = () => st.lookPal || (st.moodPal && (settings.palette === "mood" || (settings.palette === "auto" && settings.moodColours !== false)) ? st.moodPal : basePalette());
   // ---- looks (looks.js): one effect for the song, its palette stepping on phrase lines
   const lookOn = () => settings.mode === "auto" && (settings.variety === "one" || settings.variety === "parts") && !!activeLook();
   const activeLook = () => settings.look || st.liveLook || null;
@@ -171,7 +181,7 @@ export function createDirector(layout, fx) {
     if (V && V.mood) { st.mood = V.mood; st.moodSeen = wall; } else if (st.mood && !(wall - st.moodSeen < 5)) st.mood = null; // gone for 5 s: back to the usual colours
     const m = st.mood || (settings.palette === "mood" ? { valence: 0.5, energy: 0.5 } : null);
     if (!want || !m) { st.moodPal = null; st.moodWall = wall; return; }
-    const target = moodPalette(m.valence, m.energy, st.palIdx), dt = Math.max(0, Math.min(0.5, wall - (st.moodWall ?? wall))); st.moodWall = wall;
+    const target = moodPalette(m.valence, m.energy, palN()), dt = Math.max(0, Math.min(0.5, wall - (st.moodWall ?? wall))); st.moodWall = wall;
     if (!st.moodPal) st.moodPal = basePalette().map(c => c.slice()); // start from what is showing
     const k = 1 - Math.exp(-dt / 2.5); for (let c = 0; c < 2; c++) for (let i = 0; i < 3; i++) st.moodPal[c][i] += (target[c][i] - st.moodPal[c][i]) * k;
   }
@@ -207,6 +217,7 @@ export function createDirector(layout, fx) {
     let s = 0; for (let i = 0; i < N; i++) { const u = x1 > x0 ? (PX[i] - x0) / (x1 - x0) : 0.5, low = 1 - Math.max(0, Math.min(1, PY[i])), cen = 1 - Math.abs(2 * u - 1); w[i] = 0.6 + 0.5 * low + 0.3 * cen; s += w[i]; }
     s /= N; for (let i = 0; i < N; i++) w[i] = Math.max(0.5, Math.min(1.5, w[i] / s)); return w; })();
   const STRIDE = N * 3 > 3000 ? 7 : 1;
+  const spatial = createSpatial(layout);
   /** How bright a frame looks (mean after the LED roll-off), from every LED or a sample of them. */
   function seen(buf) { let m = 0, n = 0; for (let i = 0; i < buf.length; i += STRIDE) { const v = buf[i]; if (v > 0) m += 1 - Math.exp(-1.28 * v); n++; } return n ? m / n : 0; }
   const clamp01 = (v, d) => { const x = typeof v === "number" && Number.isFinite(v) ? v : d; return Math.max(0, Math.min(1, x)); };
@@ -286,7 +297,8 @@ export function createDirector(layout, fx) {
   function frame(V, t, extra = {}, wall = t) {
     COL.fill(0);
     if (st.overlay.freeze) { COL.set(PREV); overlays(wall); return COL; }
-    updateMood(V, wall); liveLook(V, wall); updateLookPal(V, wall); st.lastV = V;
+    st.secKey = sectionKey(V); updateMood(V, wall); liveLook(V, wall); updateLookPal(V, wall); st.lastV = V;
+    st.chordPal = chords.update(V, t, wall, rawPalette(), chordsOn()); st.chords = chords.state;
     if (!V) {
       if (settings.mode !== "auto" && ids.has(settings.effect)) { renderFx(settings.effect, Object.assign(idleSignals(t * settings.speed, palette(), settings.palette !== "auto"), { text: extra.text || "", screen: extra.screen || null }), COL); st.cur = settings.effect; st.showing = st.cur; }
       else { renderAmbient(t, COL); st.showing = settings.ambient; }
@@ -350,6 +362,7 @@ export function createDirector(layout, fx) {
       const mo = ST.moment ?? 1, dIn = V.nextDrop != null ? V.nextDrop - t : 99;
       if (dIn > 0 && dIn <= P && V.state !== "silent") { const k = Math.min(1, (P - dIn) / 0.05) * 0.75 * mo * Math.min(1, clamp01(settings.dynamics, 0.8) * 1.25);
         if (k > 0) for (let i = 0; i < COL.length; i++) COL[i] *= 1 - k; }
+      spatial.apply(COL, V, t, settings.stereo); st.spatial = spatial.state;
       const df = t - V.dropT; if (settings.dropFlash && df >= 0 && df < 0.7) { const f = Math.exp(-df / 0.17) * 2.3 * mo * (settings.safe ? 0.6 : 1); for (let i = 0; i < COL.length; i++) COL[i] += f; }
       st.lastState = V.state; st.showing = st.cur;
       applyLayer(S, t); applyZones(S, t);

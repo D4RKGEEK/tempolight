@@ -7,7 +7,7 @@ WebSocket, or the server's sound card through `capture.js`. It has no I/O; tests
 
 ```js
 const an = new LiveAnalyser(22050); // any rate from 16 to 96 kHz: above 32 kHz it keeps 1 sample in 2, above 64 kHz 1 in 4
-an.push(int16OrFloat32Chunk);       // as often as samples arrive
+an.push(int16OrFloat32Chunk);       // as often as samples arrive (an.push(interleaved, 2) for stereo: V.pan, V.lr)
 const V = an.view(an.sampleT, { predict: true }); // sampleT (= now): the newest sample's time
 an.conf;                            // 0-1: how sure the beat grid is
 const extra = an.extras();          // {bands, wave, bassL} for buildSignals()

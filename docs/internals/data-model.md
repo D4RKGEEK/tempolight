@@ -76,6 +76,8 @@ Changed with `PATCH /api/settings` (admin) unless noted; out-of-range numbers ar
 | `songMemory` | boolean | `true` | remember analysed songs and recognise them live |
 | `nowPlaying` | `{enabled, spotifyClientId}` | `{enabled: true, spotifyClientId: ""}` | changed with `PATCH /api/nowplaying`; the client ID is 32 hex digits |
 | `moodColours` | boolean | `true` | the automatic palette follows the mood |
+| `chordColours` | boolean | `true` | with the automatic palette, colours step with the chords on bar lines (colour.js) |
+| `stereo` | string | `"subtle"` | `off`, `subtle` or `strong`: with a stereo source, the side of the room a hit came from brightens (spatial.js) |
 | `spotify` | object | added by spotify.js: `{sync: true, learn: true, analysis: true, coverColours: false, pauseFade: true, muteDim: true, cloud: {url: "", use: false, share: false}}` | changed with `PATCH /api/spotify`; `analysisBlocked` (a client ID) remembers that Spotify refused its audio analysis |
 
 `GET /api/state` returns `settings` with `mqtt.password` blanked and `mqtt.hasPassword` added.

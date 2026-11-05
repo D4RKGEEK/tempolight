@@ -58,7 +58,7 @@ function connect() {
     else if (m.type === "screen-refused") app.screen?.stop(m.error); // locked, or another browser already shares
   };
 }
-function resendAudio() { const a = app.audio.state; ws.send({ type: "audio-start", rate: 22050, label: a.mode === "song" ? `Song: ${a.label}` : a.label, latencyMs: app.audio.latencyMs?.() }); }
+function resendAudio() { const a = app.audio.state; ws.send({ type: "audio-start", rate: 22050, label: a.mode === "song" ? `Song: ${a.label}` : a.label, latencyMs: app.audio.latencyMs?.(), channels: app.audio.channels?.() || 1 }); }
 function setConn(t, cls) { $("#conn").textContent = t; $("#conn-dot").className = "dot " + cls; }
 
 let refreshTimer = null, refreshWhat = new Set();
@@ -775,6 +775,8 @@ function settingsPage(el) {
       <div class="field"><label for="s-punch">Punch <output id="s-punch-o">${Math.round((s.punch ?? 0.7) * 100)}%</output></label><input type="range" id="s-punch" min="0" max="1" step="0.05" value="${s.punch ?? 0.7}"><span class="help">How hard the whole room pumps on each kick in a drop.</span></div>
       <div class="field"><label for="s-dyn">Drama <output id="s-dyn-o">${Math.round((s.dynamics ?? 0.8) * 100)}%</output></label><input type="range" id="s-dyn" min="0" max="1" step="0.05" value="${s.dynamics ?? 0.8}"><span class="help">How much brighter drops are than calm parts, with a dip just before each drop.</span></div>
       <label class="check"><input type="checkbox" id="s-vary" ${s.variations !== false ? "checked" : ""}> Vary drops every 2 bars (colour flip, mirror)</label>
+      <label class="check" title="With Automatic colours, each chord has its own shade of the palette; the colour steps on the bar line when the chord changes"><input type="checkbox" id="s-chordc" ${s.chordColours !== false ? "checked" : ""}> Chord colours (colours step with the song's chords)</label>
+      <div class="field"><label for="s-stereo">Stereo</label><select id="s-stereo">${opt("off", "Off", s.stereo === "off")}${opt("subtle", "Subtle", (s.stereo || "subtle") === "subtle")}${opt("strong", "Strong", s.stereo === "strong")}</select><span class="help">With a stereo source (this computer's sound, a song played here), the side of the room a hit came from lights up more. Mono sources and rooms with no width are unchanged.</span></div>
     </div>`, "span-12")}
     ${panel("Integrations", "", "", `<div class="pb controls">
       <label class="check"><input type="checkbox" id="s-sync" ${s.audioSync ? "checked" : ""}> Send WLED audio sync (lets WLED's own sound effects react too)</label>
@@ -832,6 +834,7 @@ function settingsPage(el) {
   range("s-idleb", "idleBrightness", v => Math.round(v * 100) + "%"); range("s-idlea", "idleAfterSec", v => v + " s"); range("s-fps", "fps", v => v + " fps");
   $("#s-perf").onchange = e => setS({ performance: e.target.value });
   $("#s-safe").onchange = e => setS({ safe: e.target.checked }); $("#s-dropf").onchange = e => setS({ dropFlash: e.target.checked }); $("#s-vary").onchange = e => setS({ variations: e.target.checked });
+  $("#s-chordc").onchange = e => setS({ chordColours: e.target.checked }); $("#s-stereo").onchange = e => setS({ stereo: e.target.value });
   for (const [id, k] of [["s-punch", "punch"], ["s-dyn", "dynamics"]]) { const r = $(`#${id}`); r.oninput = () => { $(`#${id}-o`).textContent = `${Math.round(r.value * 100)}%`; }; r.onchange = () => setS({ [k]: Number(r.value) }); }
   $("#s-sync").onchange = e => setS({ audioSync: e.target.checked }); $("#s-disc").onchange = e => setS({ autoDiscover: e.target.checked });
   $("#s-dj").onchange = e => setS({ djlink: { enabled: e.target.checked } }); $("#s-link").onchange = e => setS({ link: { enabled: e.target.checked } });

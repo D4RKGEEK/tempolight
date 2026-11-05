@@ -83,23 +83,26 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     const s = data().settings, sh = data().show;
     const night = !!rt.night; // night mode: no strobing, warm colours
     Object.assign(D.settings, { mode: sh.mode, effect: sh.effect, style: sh.style, palette: night && s.night.warm ? "sunset" : sh.palette, everyBeats: sh.everyBeats, speed: sh.speed,
-      ambient: s.ambient, moodColours: s.moodColours !== false, safe: s.safe || night, dropFlash: s.dropFlash && !night, night,
+      ambient: s.ambient, moodColours: s.moodColours !== false, chordColours: s.chordColours !== false, stereo: s.stereo || "subtle", safe: s.safe || night, dropFlash: s.dropFlash && !night, night,
       punch: s.punch ?? 0.7, dynamics: s.dynamics ?? 0.8, variations: s.variations !== false, prefs: s.effectPrefs || {}, params: sh.params || {}, layer: sh.layer || null, zones: data().room.zones || [],
       variety: sh.variety || "one", nudge: s.effectNudge || {} });
   }
   let col8 = new Uint8Array(0);
 
   // ---------------------------------------------------------------- music sources
-  function pushPcm(samples, kind, label, clientId, rate = RATE, inMs = 0) { // inMs: the browser's estimate of its capture delay (latency meter)
+  // channels 2: interleaved left/right (a stereo source), for the stereo accent; the analysis hears them mixed
+  function pushPcm(samples, kind, label, clientId, rate = RATE, inMs = 0, channels = 1) { // inMs: the browser's estimate of its capture delay (latency meter)
     heard(samples, kind, label);
     if (!rt.live || rt.live.kind !== kind || rt.live.clientId !== clientId || rt.live.rate !== rate) {
       if (rt.live && rt.live.kind === "browser" && kind === "capture" && performance.now() - rt.live.lastPush < 1500) return; // a browser that is sending wins
       rt.live = { an: new LiveAnalyser(rate), kind, label, clientId, rate, lastPush: 0, started: performance.now() }; rt.mem.lock = null; rt.mem.cand = null; memT = 0; memJob = null;
       rt.live.an.lite = perf.lite; D.resetLook(); note(`Listening to ${label}`); // (a new source: a new song, a look of its own)
     }
-    const t0 = performance.now(); rt.live.an.push(samples); perf.add("analysis", performance.now() - t0); rt.live.lastPush = performance.now(); rt.live.inMs = inMs; rt.live.chunkMs = samples.length / rate * 1000;
-    if (rt.pcmTap) rt.pcmTap(samples, rate, kind, inMs);
+    const st2 = channels === 2 && (samples.length & 1) === 0 ? 2 : 1; rt.live.an.stereoOn = data().settings.stereo !== "off";
+    const t0 = performance.now(); rt.live.an.push(samples, st2); perf.add("analysis", performance.now() - t0); rt.live.lastPush = performance.now(); rt.live.inMs = inMs; rt.live.chunkMs = samples.length / rate * 1000;
+    if (rt.pcmTap) rt.pcmTap(st2 === 2 ? mono(samples) : samples, rate, kind, inMs);
   }
+  const mono = s => { const n = s.length >> 1, o = new Int16Array(n); for (let i = 0; i < n; i++) o[i] = (s[2 * i] + s[2 * i + 1]) >> 1; return o; };
   // how loud each kind of live source is (BlackHole sends exact zeros when nothing reaches it), for "Tempolight hears it"
   const SOUND_RMS = 0.0015; // about -56 dBFS: a quiet room through a microphone is more, digital silence is 0
   function heard(samples, kind, label) {
@@ -137,18 +140,19 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   function startCaptureSource() {
     stopCaptureSource();
     const c = data().settings.capture; let src;
-    if (c.command) src = { id: "custom", label: "Custom capture command", cmd: splitCommand(c.command) };
+    if (c.command) src = { id: "custom", label: "Custom capture command", cmd: splitCommand(c.command), channels: /(^|\s)(-ac\s+2|--channels[= ]2|-c\s+2)(\s|$)/.test(c.command) ? 2 : 1 }; // (stereo when the command asks for 2 channels)
     else if (/^\w+:/.test(c.source || "")) { // a named input (BlackHole 2ch, Stereo Mix, a sink's monitor): that one or none, never the microphone instead
       src = io.sourceFor?.(c.source) || null; // (capture.js; the demo has none)
       if (!src) { rt.capture = { sourceId: c.source, label: c.source.replace(/^\w+:/, ""), error: `The sound input “${c.source.replace(/^\w+:/, "")}” can't be used here.` }; note(rt.capture.error, "warn"); return rt.capture; } }
     else { const all = listSources(); src = (c.source && c.source !== "auto" && all.find(s => s.id === c.source)) || all[0]; }
     if (!src) { rt.capture = { error: "No audio capture tool found on this computer (install ffmpeg, or use a browser as the audio source)." }; note(rt.capture.error, "warn"); return rt.capture; }
     const cap = { sourceId: src.id, label: src.label, error: null, startedAt: performance.now() };
-    cap.proc = startCapture(src.cmd, a => pushPcm(a, "capture", src.label, "capture"), why => {
+    const chans = src.channels === 2 ? 2 : 1;
+    cap.proc = startCapture(src.cmd, a => pushPcm(a, "capture", src.label, "capture", RATE, 0, chans), why => {
       if (rt.capture !== cap) return;
       cap.error = why === "ended" ? null : why; cap.proc = null; if (why !== "ended") note(`Audio capture: ${why}`, "warn");
       if (data().settings.capture.enabled && why !== "ended") cap.retry = setTimeout(() => { if (rt.capture === cap) startCaptureSource(); }, 5000);
-    });
+    }, chans);
     rt.capture = cap; note(`Audio capture started: ${src.label}`);
     return cap;
   }
@@ -358,16 +362,18 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   // now: the wall clock (ms); lead: how far ahead (ms) this frame is drawn for (light timing, below). Sources on the
   // wall clock (metronome, beat clocks, DJ Link, idle) are drawn for now + lead; sources with a music clock for where
   // the music will be by then, plus the timing trim (syncOffset).
+  // a stereo source heard live (the browser playing the song, the computer's sound): its balance on a song's view too
+  const lr = V => { const sv = liveFresh() && rt.live.an.stereoView ? rt.live.an.stereoView() : null; if (sv) { V.pan = sv.pan; V.lr = sv.lr; } return V; };
   function currentView(now, lead = 0) {
     rt.extBeat = null; // (a beat grid from outside while listening live: djlink, midiclock or link)
     const s = data().settings, off = syncOffset() / 1000, ld = lead / 1000, wt = (now + lead) / 1000;
     if (rt.song && rt.song.playing && now - rt.song.at < 4000) {
       const t = rt.song.pos + ((now - rt.song.at) / 1000 + ld) * rt.song.rate + off;
       rt.source = "song"; rt.sourceLabel = rt.song.name;
-      return { V: songView(rt.song.pre, t), t, extra: liveFresh() ? rt.live.an.extras() : {} };
+      return { V: lr(songView(rt.song.pre, t)), t, extra: liveFresh() ? rt.live.an.extras() : {} };
     }
     const np = rt.nowPlaying && rt.nowPlaying.follow(now); // a music app here plays a remembered song: its beat map, at the app's position
-    if (np) { const t = np.pos + ld + off; rt.source = "nowplaying"; rt.sourceLabel = `${np.app}: ${np.name} (remembered)`; return { V: songView(np.pre, t), t, extra: liveFresh() ? rt.live.an.extras() : {} }; }
+    if (np) { const t = np.pos + ld + off; rt.source = "nowplaying"; rt.sourceLabel = `${np.app}: ${np.name} (remembered)`; return { V: lr(songView(np.pre, t)), t, extra: liveFresh() ? rt.live.an.extras() : {} }; }
     if (rt.spotify && rt.spotify.paused()) { rt.source = "idle"; rt.sourceLabel = "Spotify paused"; return { V: null, t: wt }; } // fade to the ambient look
     if (liveFresh()) {
       // the analyser's clock now: its newest sample when it says (else its last frame's centre), plus the time since
@@ -376,7 +382,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       songMemoryTick();
       if (rt.mem.lock) { const L = rt.mem.lock, pos = lockPos(L, t); // a song we know: use its beat map
         rt.source = rt.live.kind; rt.sourceLabel = `${rt.live.label}: ${L.name} (recognised)`;
-        return { V: { ...songView(L.pre, pos), live: true, vocal: an.vocal, ...(L.pre.mood ? {} : { key: an.keyEst?.key || null, mode: an.keyEst?.mode || null, mood: an.mood }) }, t: pos, extra: an.extras() }; } // (remembered before key and mood were)
+        return { V: { ...lr(songView(L.pre, pos)), live: true, vocal: an.vocal, ...(L.pre.mood ? {} : { key: an.keyEst?.key || null, mode: an.keyEst?.mode || null, mood: an.mood }) }, t: pos, extra: an.extras() }; } // (remembered before key and mood were)
       const V = an.view(t, { predict: s.predict });
       rt.source = rt.live.kind; rt.sourceLabel = rt.live.label;
       const G = djFresh(now) ? { ...djGrid(now, tl), bpm: rt.dj.bpm, label: `DJ Link (${rt.dj.name})` } : beats.grid(now, tl); // DJ Link, else MIDI clock, else Ableton Link (on the analyser's clock now)

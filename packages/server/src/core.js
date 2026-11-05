@@ -8,6 +8,7 @@ import { ROOM_PRESETS, buildPreset, cleanTimeline, SHOW_VERSION, VARIETIES } fro
 import { createPro } from "./pro-api.js";
 import { createLights } from "./lights.js";
 
+const STEREO = ["off", "subtle", "strong"]; // settings.stereo
 const SHAPE_TYPES = new Set(["line", "pole", "free", "circle", "rect", "hex", "tri", "matrix", "points"]);
 export class HttpError extends Error { constructor(code, msg) { super(msg); this.code = code; } }
 
@@ -167,6 +168,8 @@ export function createCore({ store, runtime, env }) {
         maxBrightness: b.night.maxBrightness !== undefined ? num(b.night.maxBrightness, 0.02, 1) : s.night.maxBrightness, warm: b.night.warm ?? s.night.warm }); }
     if (b.songMemory !== undefined) s.songMemory = !!b.songMemory;
     if (b.moodColours !== undefined) s.moodColours = !!b.moodColours;
+    if (b.chordColours !== undefined) s.chordColours = !!b.chordColours;
+    if (b.stereo !== undefined) { if (!STEREO.includes(b.stereo)) throw new HttpError(400, "Stereo is off, subtle or strong"); s.stereo = b.stereo; }
     if (b.requests !== undefined) s.requests = !!b.requests;
     if (b.shows !== undefined) s.shows = !!b.shows;
     if (b.djlink) Object.assign(s.djlink, { enabled: b.djlink.enabled !== undefined ? b.djlink.enabled === true : s.djlink.enabled, port: b.djlink.port !== undefined && Number.isFinite(Number(b.djlink.port)) ? Math.round(num(b.djlink.port, 1024, 65535)) : s.djlink.port });
@@ -450,7 +453,7 @@ export function createCore({ store, runtime, env }) {
     return {
       /** @param {string|Int16Array} msg text, or 16-bit samples */
       message(msg, binary) {
-        if (binary) { if (c.data.audio) runtime.pushPcm(msg, "browser", c.data.audio.label, c.data.id, c.data.audio.rate, c.data.audio.latencyMs); return; }
+        if (binary) { if (c.data.audio) runtime.pushPcm(msg, "browser", c.data.audio.label, c.data.id, c.data.audio.rate, c.data.audio.latencyMs, c.data.audio.channels); return; }
         let m; try { m = JSON.parse(msg); } catch { return; }
         if (m.type === "preview") { if (m.on) runtime.previewClients.add(c); else runtime.previewClients.delete(c); }
         else if (m.type === "screen") { // screen sync: a small picture, or {end: true} when sharing stops
@@ -461,7 +464,8 @@ export function createCore({ store, runtime, env }) {
               if (runtime.setScreen(Number(m.w) | 0, Number(m.h) | 0, px, String(m.label || "").slice(0, 80), c.data.id) === "busy") tell("busy", "Another browser is already sharing its screen. Stop it there first."); } catch {} } } }
         else if (m.type === "map") { if (c.data.auth(null)) runtime.mapLight(m.end ? null : String(m.device), m.led ?? -1, m.level, c.data.id); } // camera mapping (admin)
         else if (m.type === "phone") { if (m.on) { if (!runtime.phones.has(c)) { runtime.phones.add(c); runtime.note(`A phone joined as a light (${runtime.phones.size} now)`); } } else runtime.phones.delete(c); }
-        else if (m.type === "audio-start") { c.data.audio = { rate: Number(m.rate) || 22050, label: String(m.label || "Browser audio").slice(0, 80), latencyMs: Math.max(0, Math.min(2000, Number(m.latencyMs) || 0)) }; }
+        else if (m.type === "audio-start") { c.data.audio = { rate: Number(m.rate) || 22050, label: String(m.label || "Browser audio").slice(0, 80), latencyMs: Math.max(0, Math.min(2000, Number(m.latencyMs) || 0)), channels: m.channels === 2 ? 2 : 1 }; }
+        else if (m.type === "audio-format") { if (c.data.audio) c.data.audio.channels = m.channels === 2 ? 2 : 1; } // the browser's tap went stereo or back to mono (its chunks after this)
         else if (m.type === "audio-stop") { c.data.audio = null; runtime.stopLive(c.data.id); }
         else if (m.type === "clock") runtime.songClock(m, null);
         else if (m.type === "action" && m.action) { if (c.data.auth("pads")) { try { runtime.action(m.action); } catch {} } }
