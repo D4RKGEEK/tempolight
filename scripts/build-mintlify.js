@@ -199,7 +199,7 @@ export function rewriteHref(href, ctx) {
   if (!inDocs) return github();
   const docsRel = posix(path.relative(DOCS, abs));
   if (docsRel === "flash" || docsRel.startsWith("flash/")) return `${PAGES_SITE}flash/`;
-  if (docsRel === "index.html") return `${DEMO}/about/`;
+  if (docsRel === "index.html") return `${DEMO}/`;
   if (/^(public\/)?images\//.test(docsRel)) return "/" + docsRel.replace(/^public\//, "");
   let md = docsRel;
   if (!md.endsWith(".md")) {
@@ -512,13 +512,13 @@ function docsJson(pageSlugs, warnings) {
     styling: { eyebrows: "section", codeblocks: "system", latex: false },
     navbar: {
       links: [{ type: "github", href: REPO }],
-      primary: { type: "button", label: "Try the demo", href: DEMO },
+      primary: { type: "button", label: "Try the demo", href: `${DEMO}/demo/` },
     },
     navigation: {
       global: {
         anchors: [
           { anchor: "GitHub", icon: "github", href: REPO },
-          { anchor: "Online demo", icon: "monitor-play", href: DEMO },
+          { anchor: "Online demo", icon: "monitor-play", href: `${DEMO}/demo/` },
           { anchor: "Releases", icon: "tag", href: `${REPO}/releases` },
         ],
       },

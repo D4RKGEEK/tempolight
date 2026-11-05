@@ -1,0 +1,688 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script>/* old links to the app (/#/music) open the demo, which moved to /demo/ */ if (/^#\/./.test(location.hash)) location.replace("/demo/" + location.hash);</script>
+<title>Tempolight: music-synced lighting for WLED and smart lights</title>
+<meta name="description" content="Tempolight is free, open-source music-reactive lighting for WLED, Hue, Nanoleaf, DMX and more. It finds the beat, the build-up and the drop, and plays one look per song across every light in your room.">
+<meta name="theme-color" content="#0a0807">
+<link rel="icon" href="/demo/icons/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/demo/icons/apple-touch-icon.png">
+<link rel="canonical" href="https://tempolight.pages.dev/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Tempolight: music-synced lighting for WLED and smart lights">
+<meta property="og:description" content="Free and open source. Finds the beat, the build-up and the drop, and plays one look per song across every light in your room.">
+<meta property="og:url" content="https://tempolight.pages.dev/">
+<meta property="og:image" content="https://tempolight.pages.dev/docs/images/home-dark.png">
+<link rel="alternate" type="text/plain" href="/llms.txt" title="Tempolight for AI assistants">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Google+Sans+Flex:wght@400;500;600&family=Google+Sans+Code:wght@400;500&display=swap">
+<style>
+/* Tempolight shared tokens (design/tokens.md) */
+:root, [data-theme="dark"] {
+  --bg: #0f0d0b; --bg-deep: #0a0807; --surface: #17140f; --surface-2: #1e1a14; --sunk: #0b0a08;
+  --text: #f4efe8; --text-2: rgb(244 239 232 / .64); --text-3: rgb(244 239 232 / .42);
+  --hair: rgb(255 255 255 / .07); --ring: 0 0 0 1px rgb(255 255 255 / .06);
+  --accent: #ff8a1f; --accent-ink: #1a0e08; --label: #ffb366; --focus: #ffb366;
+  --ok: #3ecf7a; --warn: #f5b83d; --bad: #ff5c5c; --calm: #5b8cff; --build: #f5b83d; --drop: #ff4f8b;
+  --shadow-card: var(--ring), 0 1px 2px rgb(0 0 0 / .3), 0 18px 40px -28px rgb(0 0 0 / .8);
+  --shadow-lift: 0 0 0 1px rgb(255 255 255 / .1), 0 1px 2px rgb(0 0 0 / .3), 0 24px 44px -26px rgb(0 0 0 / .9);
+}
+[data-theme="light"] {
+  --bg: #f8f4ee; --bg-deep: #140a05; --surface: #ffffff; --surface-2: #fffaf6; --sunk: #f3eee7;
+  --text: #1a0e08; --text-2: rgb(26 14 8 / .62); --text-3: rgb(26 14 8 / .42);
+  --hair: rgb(20 10 5 / .06); --ring: 0 0 0 1px rgb(20 10 5 / .05);
+  --accent: #ff5b14; --accent-ink: #ffffff; --label: #c2410c; --focus: #c2410c;
+  --ok: #1f6b37; --warn: #a15c00; --bad: #c0262d;
+  --shadow-card: var(--ring), 0 1px 2px rgb(20 10 5 / .04), 0 18px 40px -28px rgb(80 30 5 / .25);
+  --shadow-lift: 0 0 0 1px rgb(20 10 5 / .08), 0 1px 2px rgb(20 10 5 / .05), 0 24px 44px -26px rgb(80 30 5 / .34);
+}
+:root {
+  --sans: "Google Sans Flex", -apple-system, "Segoe UI", system-ui, sans-serif;
+  --mono: "Google Sans Code", ui-monospace, Menlo, monospace;
+  --r-btn: 11px; --r-field: 11px; --r-card: 24px; --r-inner: 18px; --r-pill: 999px;
+  --ease: cubic-bezier(.2,.8,.2,1); --ease-out-expo: cubic-bezier(.16,1,.3,1); --t-in: .14s; --t-out: .2s;
+  --gutter: 80px;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; scroll-behavior: smooth; scroll-padding-top: 96px; }
+body { margin: 0; background: #0a0807; color: var(--text); font: 400 16px/1.5 var(--sans); -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+[data-theme] { color: var(--text); }
+a { color: inherit; }
+h1, h2, h3, p { margin: 0; }
+h1, h2 { font-weight: 500; text-wrap: balance; }
+code, pre, .mono { font-family: var(--mono); }
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 3px; border-radius: 6px; }
+.wrap { width: 100%; max-width: 1440px; margin: 0 auto; padding: 0 var(--gutter); }
+.grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* buttons: one primary, one secondary */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; height: 48px; padding: 0 22px; border: 0; border-radius: var(--r-btn);
+  font: 500 15px/1 var(--sans); letter-spacing: -0.01em; text-decoration: none; cursor: pointer; white-space: nowrap;
+  transition: transform var(--t-out) var(--ease), box-shadow var(--t-out) var(--ease), background-color var(--t-out) var(--ease); }
+.btn:hover { transform: translateY(-1px); transition-duration: var(--t-in); }
+.btn:active { transform: translateY(1px) scale(.985); transition-duration: .09s; }
+.btn-primary { background: var(--accent); color: var(--accent-ink); box-shadow: 0 1px 2px rgb(0 0 0 / .2), 0 10px 24px -12px var(--accent); }
+.btn-secondary { background: var(--surface); color: var(--text); box-shadow: var(--shadow-card); }
+.btn-secondary:hover { box-shadow: var(--shadow-lift); }
+.btn svg { width: 16px; height: 16px; flex: none; }
+.btn-sm { height: 36px; padding: 0 14px; font-size: 14px; }
+
+/* install chip: the command is the action */
+.chip-cmd { display: inline-flex; align-items: center; height: 48px; padding: 0 6px 0 16px; gap: 14px; border: 0; border-radius: var(--r-btn); cursor: pointer;
+  background: rgb(255 255 255 / .06); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12); color: var(--text); font: 500 14px/1 var(--mono);
+  transition: transform var(--t-out) var(--ease), background-color var(--t-out) var(--ease); }
+.chip-cmd:hover { transform: translateY(-1px); background: rgb(255 255 255 / .09); transition-duration: var(--t-in); }
+.chip-cmd:active { transform: translateY(1px) scale(.985); transition-duration: .09s; }
+.chip-cmd .dollar { color: var(--text-3); }
+.chip-cmd .sq { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 8px; background: rgb(255 255 255 / .07); }
+.chip-cmd .sq svg { width: 16px; height: 16px; }
+.copied .sq { color: var(--ok); }
+
+/* nav */
+.nav { position: fixed; top: 16px; left: 50%; transform: translateX(-50%); z-index: 50; width: min(760px, calc(100% - 32px)); height: 54px;
+  display: grid; grid-template-columns: auto 1fr auto; align-items: center; gap: 16px; padding: 0 7px 0 16px; border-radius: 16px;
+  background: rgb(14 11 9 / .78); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .08), 0 18px 40px -24px rgb(0 0 0 / .8);
+  backdrop-filter: blur(14px) saturate(1.4); -webkit-backdrop-filter: blur(14px) saturate(1.4); color: #f4efe8; }
+.logo { display: inline-flex; align-items: center; gap: 10px; font-weight: 600; font-size: 16px; letter-spacing: -0.02em; text-decoration: none; }
+.logo svg { width: 26px; height: 26px; }
+.nav-links { display: flex; justify-content: center; gap: 4px; }
+.nav-links a, .menu a.link { position: relative; padding: 8px 12px; border-radius: 9px; font-size: 15px; color: rgb(244 239 232 / .74); text-decoration: none; transition: color var(--t-out) var(--ease), background-color var(--t-out) var(--ease); }
+.nav-links a:hover { color: #f4efe8; background: rgb(255 255 255 / .06); transition-duration: var(--t-in); }
+.nav .btn { height: 40px; padding: 0 16px; }
+.menu-btn { display: none; width: 40px; height: 40px; border: 0; border-radius: 10px; background: rgb(255 255 255 / .07); color: inherit; cursor: pointer; place-items: center; }
+.menu-btn svg { width: 18px; height: 18px; }
+.menu { position: fixed; inset: 0; z-index: 60; background: #0a0807; color: #f4efe8; padding: 88px 16px 24px; display: flex; flex-direction: column; gap: 4px; }
+.menu[hidden] { display: none; }
+.menu a.link { display: flex; align-items: center; height: 52px; font-size: 20px; color: #f4efe8; padding: 0 12px; }
+.menu a.link:hover { background: rgb(255 255 255 / .06); }
+.menu .btn { margin-top: 16px; width: 100%; }
+.menu-close { position: absolute; top: 23px; right: 23px; display: grid; }
+
+/* hero */
+.hero { position: relative; overflow: hidden; background: var(--bg-deep); min-height: 100vh; min-height: 100svh; display: flex; flex-direction: column; padding: 112px 0 40px; isolation: isolate; }
+.hero-glow { position: absolute; z-index: -1; right: -8%; top: 8%; width: 70vw; height: 80%; pointer-events: none;
+  background: radial-gradient(closest-side, rgb(255 94 58 / .5), rgb(255 138 31 / .16) 55%, transparent); filter: blur(30px); opacity: .55; transition: opacity .2s linear; }
+.hero-main { flex: 1; display: flex; align-items: center; }
+.hero-main .grid { align-items: center; row-gap: 48px; width: 100%; }
+.hero-copy { grid-column: 1 / span 6; }
+.hero-art { grid-column: 7 / span 6; }
+.pill { display: inline-flex; align-items: center; gap: 9px; padding: 4px 12px 4px 4px; border-radius: var(--r-pill); font-size: 14px; text-decoration: none;
+  background: rgb(255 255 255 / .06); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .1); color: rgb(244 239 232 / .86); transition: background-color var(--t-out) var(--ease); }
+.pill:hover { background: rgb(255 255 255 / .1); transition-duration: var(--t-in); }
+.pill b { font-weight: 500; padding: 3px 9px; border-radius: var(--r-pill); background: var(--accent); color: var(--accent-ink); font-size: 12.5px; }
+.hero h1 { margin-top: 28px; font-size: clamp(40px, 4.6vw, 70px); line-height: 1.02; letter-spacing: -0.042em; max-width: 12.5em; }
+.lede { margin-top: 24px; font-size: 20px; line-height: 1.55; max-width: 31em; color: rgb(244 239 232 / .9); }
+.actions { margin-top: 36px; display: flex; flex-wrap: wrap; gap: 12px; }
+.fact { margin-top: 28px; font-size: 15px; color: var(--text-2); display: flex; flex-wrap: wrap; gap: 6px 10px; }
+.fact span + span::before { content: "·"; margin-right: 10px; color: var(--text-3); }
+
+/* showcase frame: a live piece of the Music page */
+.frame { border-radius: 26px; padding: 6px; background: rgb(255 255 255 / .05); box-shadow: inset 0 0 0 1px rgb(255 255 255 / .08), 0 40px 90px -40px rgb(0 0 0 / .9); }
+.stage { border-radius: 20px; background: var(--surface); box-shadow: var(--ring); padding: 18px 18px 16px; font-size: 13px; }
+.bar { display: flex; align-items: center; gap: 10px; color: var(--text-2); font-size: 12px; }
+.bar .title { color: var(--text); font-weight: 500; font-size: 13px; }
+.bar .spacer { flex: 1; }
+.ghost { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 0; border-radius: 8px; background: var(--surface-2); box-shadow: var(--ring); color: var(--text-2); font: 500 12px/1 var(--sans); cursor: pointer; transition: color var(--t-out) var(--ease), transform var(--t-out) var(--ease); }
+.ghost:hover { color: var(--text); transform: translateY(-1px); transition-duration: var(--t-in); }
+.ghost:active { transform: translateY(1px) scale(.985); }
+.ghost svg { width: 12px; height: 12px; }
+.now { margin-top: 16px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.now .song { font-size: 17px; font-weight: 500; letter-spacing: -0.02em; color: var(--text); }
+.now .meta { font-size: 12px; color: var(--text-2); margin-top: 2px; }
+.sync { display: inline-flex; align-items: center; gap: 8px; height: 28px; padding: 0 10px 0 9px; border-radius: var(--r-pill); background: var(--sunk); box-shadow: var(--ring); font-size: 12px; font-weight: 500; color: var(--text); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: var(--ok); box-shadow: 0 0 0 3px rgb(62 207 122 / .16); flex: none; }
+.beats { display: inline-flex; gap: 4px; margin-left: 2px; }
+.beats i { width: 6px; height: 6px; border-radius: 2px; background: rgb(255 255 255 / .14); }
+.beats i.on { background: var(--text); }
+.beats i.on:first-child { background: var(--accent); }
+
+.map { position: relative; margin-top: 14px; height: 76px; border-radius: 12px; background: var(--sunk); box-shadow: var(--ring); overflow: hidden; }
+.map .sec { position: absolute; top: 0; bottom: 0; border-right: 1px solid rgb(0 0 0 / .35); }
+.map .sec span { position: absolute; top: 6px; left: 7px; font: 500 10.5px/1 var(--mono); color: var(--text-2); }
+.map .sec.calm { background: color-mix(in srgb, var(--calm) 16%, transparent); }
+.map .sec.build { background: color-mix(in srgb, var(--build) 18%, transparent); }
+.map .sec.drop { background: color-mix(in srgb, var(--drop) 20%, transparent); }
+.map .wave { position: absolute; left: 0; right: 0; bottom: 6px; height: 46px; display: flex; align-items: flex-end; gap: 2px; padding: 0 4px; }
+.map .wave i { flex: 1; border-radius: 1px; background: rgb(244 239 232 / .34); }
+.map .mark { position: absolute; top: 0; width: 0; height: 0; border-left: 5px solid transparent; border-right: 5px solid transparent; border-top: 6px solid var(--drop); transform: translateX(-5px); }
+.map .head { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -1px; background: var(--text); box-shadow: 0 0 10px rgb(255 255 255 / .5); }
+.legend { margin-top: 8px; display: flex; gap: 14px; font-size: 11.5px; color: var(--text-2); }
+.legend i { display: inline-block; width: 8px; height: 8px; border-radius: 2px; margin-right: 6px; vertical-align: -0.5px; }
+
+.row2 { margin-top: 14px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.tag { display: inline-flex; align-items: center; height: 26px; padding: 0 10px; border-radius: var(--r-pill); font-size: 11.5px; font-weight: 600; background: var(--sunk); box-shadow: var(--ring); color: var(--text-2); }
+.tag.drop { background: color-mix(in srgb, var(--drop) 22%, var(--surface)); color: #ffd0de; box-shadow: none; font-variant-numeric: tabular-nums; min-width: 82px; justify-content: center; }
+.tag.ok { background: color-mix(in srgb, var(--ok) 16%, var(--surface)); color: #b6f0cc; box-shadow: none; }
+.hint { color: var(--text-2); font-size: 12px; }
+
+.strip { position: relative; margin-top: 14px; padding: 14px 12px; border-radius: 12px; background: #050403; box-shadow: var(--ring); }
+.leds, .leds-glow { display: flex; gap: 3px; }
+.leds i, .leds-glow i { flex: 1; height: 16px; border-radius: 3px; background: #1a120c; }
+.leds-glow { position: absolute; left: 12px; right: 12px; top: 14px; filter: blur(9px); opacity: 1; }
+.leds { position: relative; }
+.look { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--hair); display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.look .what { flex: 1; min-width: 200px; color: var(--text-2); font-size: 12.5px; }
+.look .what b { color: var(--text); font-weight: 500; }
+
+/* proof strip */
+.proof { margin-top: 56px; }
+.cells { display: grid; gap: 1px; background: var(--hair); border-radius: 20px; overflow: hidden; box-shadow: var(--shadow-card); }
+.cells > * { background: var(--surface); padding: 20px 22px 22px; }
+.proof .cells { grid-template-columns: repeat(4, 1fr); background: rgb(255 255 255 / .07); box-shadow: none; }
+.proof .cells > * { background: rgb(255 255 255 / .025); }
+.proof .n { font-size: 32px; font-weight: 500; letter-spacing: -0.035em; line-height: 1; }
+.proof p { margin-top: 8px; font-size: 14.5px; color: var(--text-2); line-height: 1.45; }
+
+/* light sections */
+.sec-light { background: var(--bg); padding: 128px 0; }
+.sec-dark { background: var(--bg-deep); padding: 128px 0; }
+.sec-dark + .sec-dark { padding-top: 0; }
+.sec-light + .sec-light { padding-top: 0; }
+.head { max-width: 880px; }
+.head h2, .split h2 { font-size: clamp(30px, 3.4vw, 48px); line-height: 1.08; letter-spacing: -0.035em; }
+.head p, .split .lead { margin-top: 20px; font-size: 19px; line-height: 1.55; color: var(--text); max-width: 40em; }
+.sec-light .head p, .sec-light .split .lead { color: rgb(26 14 8 / .78); }
+.sec-dark .head p, .sec-dark .split .lead { color: rgb(244 239 232 / .86); }
+.label { font-size: 14.5px; font-weight: 600; color: var(--label); }
+
+.features { margin-top: 48px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.card { background: var(--surface); border-radius: 28px; padding: 6px; box-shadow: var(--shadow-card); display: flex; flex-direction: column; }
+.art { border-radius: 22px; background: var(--bg-deep); padding: 36px 36px; min-height: 280px; display: flex; align-items: center; justify-content: center; }
+.art > .ui { width: 100%; max-width: 420px; }
+.copy { padding: 22px 22px 26px; }
+.copy h3 { margin-top: 6px; font-size: 20px; font-weight: 600; letter-spacing: -0.025em; line-height: 1.25; }
+.copy p { margin-top: 8px; color: rgb(26 14 8 / .78); max-width: 34em; }
+.ui { border-radius: 16px; background: var(--surface); box-shadow: var(--ring); font-size: 13px; color: var(--text); overflow: hidden; }
+.ui-t { padding: 11px 14px; font-size: 12px; color: var(--text-2); border-bottom: 1px solid var(--hair); display: flex; justify-content: space-between; gap: 8px; }
+.ui-b { padding: 12px 14px; }
+.ui-f { padding: 10px 14px; border-top: 1px solid var(--hair); background: var(--surface-2); font-size: 12px; color: var(--text-2); display: flex; align-items: center; gap: 10px; }
+.lights { display: grid; gap: 8px; }
+.lights div { display: flex; align-items: center; gap: 10px; }
+.lights .nm { flex: 1; } .lights .kd { color: var(--text-2); font-size: 12px; width: 70px; }
+.lamp { width: 14px; height: 14px; border-radius: 50%; background: #ff8a1f; box-shadow: 0 0 12px #ff8a1f; }
+.meter { flex: 1; height: 6px; border-radius: 99px; background: rgb(255 255 255 / .08); overflow: hidden; }
+.meter i { display: block; height: 100%; width: 91%; background: var(--ok); border-radius: inherit; }
+.mono-n { font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--text); }
+.swatch { height: 10px; border-radius: 99px; margin-top: 12px; }
+.lookname { font-size: 15px; font-weight: 500; letter-spacing: -0.015em; }
+.why { color: var(--text-2); font-size: 12px; margin-top: 3px; }
+.ui .btns { display: flex; gap: 8px; margin-top: 14px; }
+.kept { display: none; }
+.is-kept .kept { display: inline-flex; }
+.count { display: flex; align-items: baseline; gap: 12px; }
+.count .big { font-size: 52px; font-weight: 500; letter-spacing: -0.04em; line-height: 1; font-variant-numeric: tabular-nums; min-width: 2.6ch; }
+.count .of { color: var(--text-2); font-size: 13px; }
+.ramp { margin-top: 16px; height: 8px; border-radius: 99px; background: rgb(255 255 255 / .08); overflow: hidden; }
+.ramp i { display: block; height: 100%; width: 40%; background: linear-gradient(90deg, var(--build), var(--drop)); border-radius: inherit; }
+.seg { display: flex; padding: 3px; border-radius: 10px; background: var(--sunk); box-shadow: var(--ring); }
+.seg span { flex: 1; text-align: center; padding: 6px 4px; border-radius: 7px; font-size: 11.5px; color: var(--text-2); white-space: nowrap; }
+.seg span.on { background: var(--surface-2); color: var(--text); box-shadow: var(--ring), 0 1px 2px rgb(0 0 0 / .4); }
+.map.sm { height: 52px; margin-top: 12px; }
+.map.sm .wave { height: 28px; }
+
+.more { margin-top: 48px; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.more > div { padding: 26px 26px 28px; }
+.more h3 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; }
+.more p { margin-top: 8px; color: rgb(26 14 8 / .78); }
+.where { margin-top: 14px; display: inline-flex; font: 500 12.5px/1 var(--mono); color: var(--text-2); background: var(--sunk); padding: 6px 9px; border-radius: 7px; }
+
+/* setup */
+.split { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; row-gap: 48px; align-items: start; }
+.split > .txt { grid-column: 1 / span 5; }
+.split > .vis { grid-column: 7 / span 6; }
+.steps { margin: 32px 0 0; padding: 0; list-style: none; display: grid; gap: 14px; counter-reset: s; }
+.steps li { display: flex; gap: 14px; align-items: baseline; }
+.steps li::before { counter-increment: s; content: counter(s); flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 12.5px; font-weight: 600; background: rgb(255 255 255 / .08); position: relative; top: -1px; }
+.tabs { display: flex; gap: 2px; padding: 4px; border-radius: 13px; background: var(--surface); box-shadow: var(--ring); overflow-x: auto; scrollbar-width: none; }
+.tabs button { flex: 1 0 auto; height: 36px; padding: 0 12px; border: 0; border-radius: 9px; background: transparent; color: var(--text-2); font: 500 13.5px/1 var(--sans); cursor: pointer; transition: color var(--t-out) var(--ease), background-color var(--t-out) var(--ease); }
+.tabs button:hover { color: var(--text); transition-duration: var(--t-in); }
+.tabs button[aria-selected="true"] { background: var(--surface-2); color: var(--text); box-shadow: var(--ring), 0 1px 2px rgb(0 0 0 / .4); }
+.panel { margin-top: 16px; border-radius: var(--r-card); background: var(--surface); box-shadow: var(--shadow-card); padding: 24px; }
+.panel[hidden] { display: none; }
+.panel > p { color: rgb(244 239 232 / .86); }
+.panel > p + .code, .panel > .code + p, .panel > .code + .code { margin-top: 14px; }
+.panel a { text-underline-offset: 3px; text-decoration-color: rgb(244 239 232 / .4); }
+.panel a:hover { text-decoration-color: currentColor; }
+.code { position: relative; border-radius: 12px; background: var(--bg-deep); box-shadow: var(--ring); }
+.code pre { margin: 0; padding: 16px 64px 16px 16px; font-size: 13.5px; line-height: 1.6; color: rgb(244 239 232 / .92); white-space: pre-wrap; word-break: break-all; }
+.code .cp { position: absolute; top: 8px; right: 8px; }
+.code .c { color: var(--text-3); }
+
+/* set up with Claude */
+.prompt { border-radius: 26px; padding: 6px; background: var(--surface); box-shadow: var(--shadow-card); }
+.prompt-in { border-radius: 20px; background: var(--bg-deep); color: rgb(244 239 232 / .92); }
+.prompt-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 12px 12px 18px; border-bottom: 1px solid rgb(255 255 255 / .07); font-size: 12.5px; color: rgb(244 239 232 / .64); }
+.prompt pre { margin: 0; padding: 18px; max-height: 440px; overflow: auto; font: 400 13px/1.6 var(--mono); white-space: pre-wrap; }
+.txt .actions { margin-top: 32px; }
+.txt .link { display: inline-flex; align-items: center; height: 48px; padding: 0 6px; font-size: 15px; font-weight: 500; text-decoration: underline; text-decoration-color: rgb(26 14 8 / .3); text-underline-offset: 4px; transition: text-decoration-color var(--t-out) var(--ease); }
+.txt .link:hover { text-decoration-color: currentColor; }
+.needs { margin-top: 28px; font-size: 15px; color: var(--text-2); }
+
+/* FAQ */
+.faq { margin-top: 48px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.faq > div { padding: 26px 28px 28px; }
+.faq h3 { font-size: 17px; font-weight: 600; letter-spacing: -0.015em; }
+.faq p { margin-top: 8px; color: rgb(26 14 8 / .78); }
+
+/* closing line and footer */
+.close { background: var(--bg-deep); padding: 128px 0 112px; position: relative; overflow: hidden; isolation: isolate; }
+.close::before { content: ""; position: absolute; z-index: -1; left: 50%; bottom: -40%; width: 80vw; height: 90%; transform: translateX(-50%); background: radial-gradient(closest-side, rgb(255 94 58 / .32), rgb(255 138 31 / .1) 60%, transparent); filter: blur(30px); }
+.close h2 { font-size: clamp(38px, 6vw, 84px); line-height: 1.02; letter-spacing: -0.042em; max-width: 11em; }
+.close .actions { margin-top: 40px; }
+.foot { background: var(--bg-deep); padding: 0 0 48px; color: rgb(244 239 232 / .72); font-size: 14.5px; }
+.foot-in { border-top: 1px solid rgb(255 255 255 / .07); padding-top: 40px; display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; row-gap: 32px; }
+.foot-brand { grid-column: 1 / span 6; }
+.foot-brand p { margin-top: 12px; max-width: 26em; }
+.foot-col { grid-column: span 3; display: grid; gap: 10px; align-content: start; }
+.foot-col b { font-weight: 500; color: #f4efe8; margin-bottom: 4px; }
+.foot a { text-decoration: none; background: linear-gradient(currentColor, currentColor) 0 100% / 0 1px no-repeat; transition: background-size var(--t-out) var(--ease), color var(--t-out) var(--ease); justify-self: start; }
+.foot a:hover { color: #f4efe8; background-size: 100% 1px; transition-duration: var(--t-in); }
+.foot-legal { grid-column: 1 / -1; font-size: 13px; color: rgb(244 239 232 / .5); }
+
+@media (max-width: 1100px) {
+  :root { --gutter: 48px; }
+  .hero-copy, .hero-art { grid-column: 1 / -1; }
+  .hero-art { max-width: 640px; }
+  .hero h1 { font-size: clamp(40px, 7vw, 64px); }
+  .features { grid-template-columns: 1fr; }
+  .more { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .split > .txt, .split > .vis { grid-column: 1 / -1; }
+  .split > .txt { max-width: 640px; }
+  .proof .cells { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 760px) {
+  :root { --gutter: 16px; }
+  .nav { grid-template-columns: 1fr auto auto; }
+  .nav-links, .nav .btn { display: none; }
+  .menu-btn { display: grid; }
+  .hero { padding: 104px 0 32px; }
+  .hero h1 { font-size: 38px; margin-top: 22px; }
+  .lede { font-size: 18px; }
+  .actions { flex-direction: column; align-items: stretch; }
+  .actions .btn, .actions .chip-cmd { width: 100%; }
+  .chip-cmd { justify-content: space-between; }
+  .art { padding: 20px 14px; min-height: 0; }
+  .more, .faq { grid-template-columns: 1fr; }
+  .sec-light, .sec-dark { padding: 96px 0; }
+  .head p, .split .lead { font-size: 18px; }
+  .stage { padding: 14px 12px 12px; }
+  .foot-brand { grid-column: 1 / -1; }
+  .foot-col { grid-column: span 6; }
+  .close { padding: 96px 0 88px; }
+  .txt .link { justify-content: center; }
+}
+@media (max-width: 420px) { .proof .cells { grid-template-columns: 1fr 1fr; } .proof .n { font-size: 28px; } .proof .cells > * { padding: 16px 16px 18px; } .proof p { font-size: 13.5px; } }
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after { transition-duration: 0s !important; animation: none !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="nav" aria-label="Main">
+  <a class="logo" href="/" aria-label="Tempolight home">
+    <svg viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="28" fill="#1e1a14"/><g fill="#ff8a1f"><rect x="25" y="56" width="10" height="16" rx="5"/><rect x="41" y="44" width="10" height="40" rx="5"/><rect x="57" y="28" width="14" height="72" rx="7" fill="#ffb366"/><rect x="77" y="44" width="10" height="40" rx="5"/><rect x="93" y="56" width="10" height="16" rx="5"/></g></svg>
+    Tempolight
+  </a>
+  <nav class="nav-links" aria-label="Sections">
+    <a href="#how">How it works</a>
+    <a href="#setup">Set up</a>
+    <a href="/docs/">Docs</a>
+    <a href="https://github.com/D4RKGEEK/tempolight">GitHub</a>
+  </nav>
+  <a class="btn btn-primary" href="/demo/" data-theme="dark">Open the live demo</a>
+  <button class="menu-btn" type="button" aria-expanded="false" aria-controls="menu" id="menu-open"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg><span class="sr">Open the menu</span></button>
+</header>
+<div class="menu" id="menu" hidden>
+  <button class="menu-btn menu-close" type="button" id="menu-close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg><span class="sr">Close the menu</span></button>
+  <a class="link" href="#how">How it works</a>
+  <a class="link" href="#setup">Set up</a>
+  <a class="link" href="#claude">Set up with Claude</a>
+  <a class="link" href="/docs/">Docs</a>
+  <a class="link" href="https://github.com/D4RKGEEK/tempolight">GitHub</a>
+  <a class="btn btn-primary" href="/demo/" data-theme="dark">Open the live demo</a>
+</div>
+
+<main>
+<section class="hero" data-theme="dark" aria-labelledby="h1">
+  <div class="hero-glow" id="glow" aria-hidden="true"></div>
+  <div class="hero-main">
+    <div class="wrap grid">
+      <div class="hero-copy">
+        <a class="pill" href="#sync"><b>New</b>A beat tracker that lands on 91% of beats</a>
+        <h1 id="h1">Music-synced lighting for WLED and smart lights</h1>
+        <p class="lede">Tempolight hears the beat, the build-up and the drop, picks one look for the song, and plays it across every light in your room.</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="/demo/">Open the live demo</a>
+          <button class="chip-cmd" type="button" data-copy="npx tempolight" aria-label="Copy the install command: npx tempolight"><span><span class="dollar">$ </span>npx tempolight</span><span class="sq"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="12" height="12" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/></svg></span></button>
+        </div>
+        <p class="fact"><span>Free and open source</span><span>Runs on a Raspberry Pi</span><span>MIT licence</span></p>
+      </div>
+
+      <div class="hero-art">
+        <div class="frame" id="show">
+          <div class="stage" role="img" aria-label="Tempolight's Music page: a song map with calm, build-up and drop sections, a playhead heading into the drop, the sync meter reading Locked at 128 BPM, a drop countdown and an LED strip pulsing on the beat">
+            <div class="bar" aria-hidden="true"><span class="title">Music</span><span>In sync</span><span class="spacer"></span></div>
+            <div class="now" aria-hidden="true">
+              <div><div class="song">Tempolight demo track</div><div class="meta" id="part">Section B · build-up</div></div>
+              <span class="sync"><span class="dot"></span>Locked · 128 BPM<span class="beats" id="beats"><i class="on"></i><i></i><i></i><i></i></span></span>
+            </div>
+            <div class="map" id="map" aria-hidden="true"></div>
+            <div class="legend" aria-hidden="true"><span><i style="background:var(--calm)"></i>Calm</span><span><i style="background:var(--build)"></i>Build-up</span><span><i style="background:var(--drop)"></i>Drop</span></div>
+            <div class="row2" aria-hidden="true"><span class="tag drop" id="drop-chip">Drop in 3</span><span class="hint">Following the song's beat map</span></div>
+            <div class="strip" aria-hidden="true"><div class="leds-glow" id="glowleds"></div><div class="leds" id="leds"></div></div>
+            <div class="look" aria-hidden="true"><span class="what">Look: <b>Kick Shockwave · Sunset</b></span><span class="ghost" style="cursor:default">Not this one</span><span class="ghost" style="cursor:default">Keep</span></div>
+          </div>
+        </div>
+        <div style="margin-top:12px;display:flex;justify-content:flex-end"><button class="ghost" type="button" id="pause"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5h3v14H7zM14 5h3v14h-3z"/></svg><span>Pause the preview</span></button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="wrap proof">
+    <div class="cells">
+      <div><div class="n">13</div><p>kinds of lights, from WLED strips to Hue, Nanoleaf and DMX</p></div>
+      <div><div class="n">0</div><p>dependencies: Node.js 20 and nothing else</p></div>
+      <div><div class="n">95</div><p>effects that work on every layout</p></div>
+      <div><div class="n">5</div><p>places to run it: Windows, macOS, Linux, Raspberry Pi, Home Assistant</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec-light" data-theme="light" id="how" aria-labelledby="how-h">
+  <div class="wrap">
+    <div class="head">
+      <h2 id="how-h">It follows the song, not just the volume</h2>
+      <p>Most music-reactive lighting reacts to how loud the music is right now. Tempolight knows where the beat is, which part of the song you are in, and what comes next.</p>
+    </div>
+    <div class="features">
+      <article class="card" id="sync">
+        <div class="art" data-theme="dark"><div class="ui" aria-hidden="true">
+          <div class="ui-t"><span>Lights</span><span>Delay set by itself</span></div>
+          <div class="ui-b lights">
+            <div><span class="lamp" data-lamp></span><span class="nm">Living room</span><span class="kd">WLED</span></div>
+            <div><span class="lamp" data-lamp></span><span class="nm">Desk lamp</span><span class="kd">Hue</span></div>
+            <div><span class="lamp" data-lamp></span><span class="nm">Ceiling</span><span class="kd">WiZ</span></div>
+            <div><span class="lamp" data-lamp></span><span class="nm">Panels</span><span class="kd">Nanoleaf</span></div>
+          </div>
+          <div class="ui-f"><span>On the beat</span><span class="meter"><i></i></span><span class="mono-n">91%</span></div>
+        </div></div>
+        <div class="copy">
+          <div class="label">Sync engine</div>
+          <h3>Every light flashes on the same beat</h3>
+          <p>The new beat tracker lands on 91% of beats in the test songs, up from 64%. Each light gets its own delay, so Hue, WiZ and WLED flash within a few milliseconds of each other.</p>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="art" data-theme="dark"><div class="ui" id="lookui">
+          <div class="ui-t"><span>One look per song</span><span class="tag ok kept">Kept</span></div>
+          <div class="ui-b">
+            <div class="lookname">Look: <span id="lookname">Kick Shockwave · Sunset</span></div>
+            <div class="why">fast four-on-the-floor, high energy</div>
+            <div class="swatch" id="swatch" style="background:linear-gradient(90deg,#ff5e3a,#ffb648)"></div>
+            <div class="btns"><button class="ghost" type="button" id="look-next">Not this one</button><button class="ghost" type="button" id="look-keep" aria-pressed="false">Keep</button></div>
+          </div>
+        </div></div>
+        <div class="copy">
+          <div class="label">One look per song</div>
+          <h3>One look, held for the whole song</h3>
+          <p>When a song is analysed, Tempolight picks one effect and palette that fit it and keeps it on the beat, getting stronger through build-ups. Not this one swaps it; Keep locks it in.</p>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="art" data-theme="dark"><div class="ui" aria-hidden="true">
+          <div class="ui-t"><span>Live pads</span><span>Show drop countdown</span></div>
+          <div class="ui-b">
+            <div class="count"><span class="big" id="count">3</span><span class="of">Drop in 4 · 3 · 2 · 1</span></div>
+            <div class="ramp"><i id="ramp"></i></div>
+          </div>
+          <div class="ui-f"><span class="tag" style="height:22px">Riser heard</span><span>Brighter and faster, then the dip</span></div>
+        </div></div>
+        <div class="copy">
+          <div class="label">Drop countdown</div>
+          <h3>The room builds toward the drop</h3>
+          <p>While listening live, Tempolight hears a drop coming 3 to 5 seconds ahead, even in a song it has never heard. The lights get brighter and faster, dip on the last beat, then flash.</p>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="art" data-theme="dark"><div class="ui" aria-hidden="true">
+          <div class="ui-t"><span>In sync</span><span>128 BPM</span></div>
+          <div class="ui-b">
+            <div class="seg"><span class="on">Locked</span><span>Finding the beat</span><span>Not hearing</span></div>
+            <div class="map sm" id="map2"></div>
+          </div>
+          <div class="ui-f"><span class="dot"></span><span>Following the song's beat map</span></div>
+        </div></div>
+        <div class="copy">
+          <div class="label">Song map and sync meter</div>
+          <h3>See where you are in the song</h3>
+          <p>The Music page draws the playing song: its sections, its drops and a moving playhead. The sync meter says Locked, Finding the beat or Not hearing, with one plain hint when something is off.</p>
+        </div>
+      </article>
+    </div>
+  </div>
+</section>
+
+<section class="sec-light" data-theme="light" aria-labelledby="more-h">
+  <div class="wrap">
+    <div class="head">
+      <h2 id="more-h">Fits the rest of your setup</h2>
+      <p>Bring the music you already have, the smart home you already run, and the gear on your desk.</p>
+    </div>
+    <div class="cells more">
+      <div><h3>Chord colours and stereo</h3><p>Each chord gets its own shade of the palette, stepping on the bar line. With a stereo source, the side of the room a hit came from lights up.</p><span class="where">Settings → Lighting</span></div>
+      <div><h3>Your own music folder</h3><p>Add a folder and every song in it is analysed ahead, so it is followed exactly from its first play in VLC, Music on a Mac and other players.</p><span class="where">Music → Your own music</span></div>
+      <div><h3>Smart home</h3><p>Home Assistant finds it through MQTT discovery. It is a HomeKit bridge too, so Siri and the Home app work without Homebridge.</p><span class="where">Home Assistant · HomeKit</span></div>
+      <div><h3>Creators</h3><p>Map OBS scenes to looks, run scenes and pads from a Stream Deck, and let Twitch chat commands and alerts flash the room.</p><span class="where">OBS · Stream Deck · Twitch</span></div>
+      <div><h3>DMX and Art-Net</h3><p>Drive pars, dimmers, strobes and moving heads through an Art-Net or sACN node. Lasers stay off until you turn them on, and fire only in drops.</p><span class="where">Art-Net · sACN</span></div>
+      <div><h3>Phones as lights</h3><p>Guests scan a QR code and their screen joins the show. Each phone shows its own part of the room, so a crowd moves with it.</p><span class="where">Live pads → QR code</span></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec-dark" data-theme="dark" id="setup" aria-labelledby="setup-h">
+  <div class="wrap split">
+    <div class="txt">
+      <h2 id="setup-h">Set up in 2 minutes</h2>
+      <p class="lead">Every way runs the same app and keeps your settings in the same place. Start it and the setup wizard takes you through five steps.</p>
+      <ol class="steps">
+        <li>Find your lights on the network</li>
+        <li>Pick a room layout</li>
+        <li>Fix the timing with one tap</li>
+        <li>Play a test song</li>
+      </ol>
+    </div>
+    <div class="vis">
+      <div class="tabs" role="tablist" aria-label="Ways to install">
+        <button role="tab" aria-selected="true" aria-controls="t-npx" id="b-npx">npx</button>
+        <button role="tab" aria-selected="false" aria-controls="t-app" id="b-app" tabindex="-1">App</button>
+        <button role="tab" aria-selected="false" aria-controls="t-docker" id="b-docker" tabindex="-1">Docker</button>
+        <button role="tab" aria-selected="false" aria-controls="t-pi" id="b-pi" tabindex="-1">Raspberry Pi</button>
+        <button role="tab" aria-selected="false" aria-controls="t-ha" id="b-ha" tabindex="-1">Home Assistant</button>
+      </div>
+      <div class="panel" role="tabpanel" id="t-npx" aria-labelledby="b-npx">
+        <p>With Node.js 20 or newer. No download and nothing else to install.</p>
+        <div class="code"><pre>npx tempolight --open</pre><button class="ghost cp" type="button" data-copy="npx tempolight --open">Copy</button></div>
+      </div>
+      <div class="panel" role="tabpanel" id="t-app" aria-labelledby="b-app" hidden>
+        <p>One file with Node.js inside, for Windows, macOS (a .dmg) and Linux. <a href="https://github.com/D4RKGEEK/tempolight/releases/latest">Download the latest release</a>, or use a package manager:</p>
+        <div class="code"><pre>brew install d4rkgeek/tempolight/tempolight</pre><button class="ghost cp" type="button" data-copy="brew install d4rkgeek/tempolight/tempolight">Copy</button></div>
+        <div class="code"><pre>winget install D4RKGEEK.Tempolight</pre><button class="ghost cp" type="button" data-copy="winget install D4RKGEEK.Tempolight">Copy</button></div>
+      </div>
+      <div class="panel" role="tabpanel" id="t-docker" aria-labelledby="b-docker" hidden>
+        <p>Images for amd64 and arm64. Host networking lets it find your lights and stream to them.</p>
+        <div class="code"><pre>docker run -d --name tempolight --network host -v tempolight:/data --restart unless-stopped ghcr.io/d4rkgeek/tempolight</pre><button class="ghost cp" type="button" data-copy="docker run -d --name tempolight --network host -v tempolight:/data --restart unless-stopped ghcr.io/d4rkgeek/tempolight">Copy</button></div>
+      </div>
+      <div class="panel" role="tabpanel" id="t-pi" aria-labelledby="b-pi" hidden>
+        <p>Flash the image from the <a href="https://github.com/D4RKGEEK/tempolight/releases">releases</a> with Raspberry Pi Imager, join the Tempolight-Setup hotspot from your phone to pick your Wi-Fi, then open tempolight.local. Pi 5, 4, 3, Zero 2 W, 400 and 500. Already on Pi OS:</p>
+        <div class="code"><pre>curl -fsSL https://raw.githubusercontent.com/D4RKGEEK/tempolight/main/install/install.sh | sh -s -- --service</pre><button class="ghost cp" type="button" data-copy="curl -fsSL https://raw.githubusercontent.com/D4RKGEEK/tempolight/main/install/install.sh | sh -s -- --service">Copy</button></div>
+      </div>
+      <div class="panel" role="tabpanel" id="t-ha" aria-labelledby="b-ha" hidden>
+        <p>In Home Assistant: Settings → Add-ons → Add-on store → ⋮ → Repositories. Add this repository, then install Tempolight. With the Mosquitto add-on it shows up by itself.</p>
+        <div class="code"><pre>https://github.com/D4RKGEEK/tempolight</pre><button class="ghost cp" type="button" data-copy="https://github.com/D4RKGEEK/tempolight">Copy</button></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="sec-light" data-theme="light" id="claude" aria-labelledby="claude-h">
+  <div class="wrap split">
+    <div class="txt">
+      <h2 id="claude-h">Set up with Claude</h2>
+      <p class="lead">Paste one prompt into Claude Code, or the Claude desktop app with access to your terminal. Claude installs Tempolight, finds your lights, picks how it hears your music, sets the room and plays a test song.</p>
+      <div class="actions">
+        <button class="btn btn-primary" type="button" id="copy-prompt">Copy the setup prompt</button>
+        <a class="link" href="/setup-with-claude.txt">Open the prompt as text</a>
+      </div>
+      <p class="needs">It asks before it installs anything for the whole computer or changes your sound settings.</p>
+    </div>
+    <div class="vis">
+      <div class="prompt"><div class="prompt-in" data-theme="dark">
+        <div class="prompt-top"><span>Setup prompt for Claude</span><button class="ghost" type="button" data-copy-prompt>Copy</button></div>
+        <pre id="prompt" tabindex="0"><!--SETUP_PROMPT--></pre>
+      </div></div>
+    </div>
+  </div>
+</section>
+
+<section class="sec-light" data-theme="light" aria-labelledby="faq-h">
+  <div class="wrap">
+    <div class="head"><h2 id="faq-h">What people ask first</h2></div>
+    <div class="cells faq">
+      <div><h3>Do I need to flash anything to my ESP32?</h3><p>No. Stock WLED works. Tempolight streams with DDP, which WLED supports out of the box.</p></div>
+      <div><h3>Can it hear Spotify, YouTube or Apple Music?</h3><p>Yes. Sync with Spotify follows Spotify's exact position. For anything else it listens to this computer's sound or a microphone, and remembers songs it has heard.</p></div>
+      <div><h3>The lights are a little behind the music.</h3><p>Use the one-tap timing fix on the Music page: it plays clicks and listens with the microphone. Bluetooth speakers usually need +150 to +250 ms.</p></div>
+      <div><h3>How many LEDs can it drive?</h3><p>Thousands. About 7% of one CPU core drives 700 LEDs at 60 frames a second. Wi-Fi is usually the limit, so big rooms do best on wired controllers.</p></div>
+      <div><h3>Is it safe for photosensitive epilepsy?</h3><p>Turn on Photosensitive-safe mode: at most three big flashes a second (WCAG 2.3.1). Night mode turns strobes off.</p></div>
+      <div><h3>Does it need the cloud or an account?</h3><p>No. Everything runs on your network. Spotify's Web API, shared beat maps, Twitch and Discord connect only when you turn them on.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="close" data-theme="dark" aria-labelledby="close-h">
+  <div class="wrap">
+    <h2 id="close-h">Play a song. The whole room follows it.</h2>
+    <div class="actions"><a class="btn btn-primary" href="/demo/">Open the live demo</a></div>
+  </div>
+</section>
+</main>
+
+<footer class="foot" data-theme="dark">
+  <div class="wrap foot-in">
+    <div class="foot-brand">
+      <a class="logo" href="/" aria-label="Tempolight home"><svg viewBox="0 0 128 128" aria-hidden="true"><rect width="128" height="128" rx="28" fill="#1e1a14"/><g fill="#ff8a1f"><rect x="25" y="56" width="10" height="16" rx="5"/><rect x="41" y="44" width="10" height="40" rx="5"/><rect x="57" y="28" width="14" height="72" rx="7" fill="#ffb366"/><rect x="77" y="44" width="10" height="40" rx="5"/><rect x="93" y="56" width="10" height="16" rx="5"/></g></svg>Tempolight</a>
+      <p>Music-synced lighting for WLED and smart lights. Free and open source.</p>
+    </div>
+    <div class="foot-col"><b>Use it</b><a href="/demo/">Demo</a><a href="/docs/">Docs</a><a href="#claude">Set up with Claude</a><a href="/llms.txt">llms.txt</a></div>
+    <div class="foot-col"><b>Project</b><a href="https://github.com/D4RKGEEK/tempolight">GitHub</a><a href="https://github.com/D4RKGEEK/tempolight/releases">Releases</a><a href="https://github.com/D4RKGEEK/tempolight/blob/main/CHANGELOG.md">Changelog</a><a href="https://github.com/D4RKGEEK/tempolight/blob/main/LICENSE">Licence (MIT)</a></div>
+    <p class="foot-legal">Version __VERSION__ · MIT licence © 2026 D4RKGEEK and Tempolight contributors</p>
+  </div>
+</footer>
+
+<script>
+(() => {
+  const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)");
+
+  // ------------------------------------------------ copy buttons
+  async function copy(text) {
+    try { await navigator.clipboard.writeText(text); return true; } catch {}
+    const ta = Object.assign(document.createElement("textarea"), { value: text }); ta.style.position = "fixed"; ta.style.opacity = "0";
+    document.body.append(ta); ta.select(); let ok = false; try { ok = document.execCommand("copy"); } catch {} ta.remove(); return ok;
+  }
+  function flashCopied(btn, label) {
+    const span = btn.querySelector(".sq") ? null : btn, old = span && span.textContent;
+    btn.classList.add("copied"); if (span) span.textContent = label;
+    setTimeout(() => { btn.classList.remove("copied"); if (span) span.textContent = old; }, 1600);
+  }
+  const live = Object.assign(document.createElement("div"), { className: "sr" }); live.setAttribute("aria-live", "polite"); document.body.append(live);
+  $$("[data-copy]").forEach(b => b.addEventListener("click", async () => { if (await copy(b.dataset.copy)) { flashCopied(b, "Copied"); live.textContent = "Copied " + b.dataset.copy; } }));
+  const promptText = () => $("#prompt").textContent;
+  $$("#copy-prompt, [data-copy-prompt]").forEach(b => b.addEventListener("click", async () => { if (await copy(promptText())) { flashCopied(b, "Copied"); live.textContent = "Copied the setup prompt"; } }));
+
+  // ------------------------------------------------ mobile menu
+  const menu = $("#menu"), open = $("#menu-open");
+  const setMenu = on => { menu.hidden = !on; open.setAttribute("aria-expanded", on); document.body.style.overflow = on ? "hidden" : ""; (on ? $("#menu-close") : open).focus(); };
+  open.onclick = () => setMenu(true); $("#menu-close").onclick = () => setMenu(false);
+  menu.addEventListener("click", e => { if (e.target.closest("a")) setMenu(false); });
+  addEventListener("keydown", e => { if (e.key === "Escape" && !menu.hidden) setMenu(false); });
+
+  // ------------------------------------------------ install tabs
+  const tabs = $$('[role="tab"]');
+  const pick = t => { tabs.forEach(x => { const on = x === t; x.setAttribute("aria-selected", on); x.tabIndex = on ? 0 : -1; $("#" + x.getAttribute("aria-controls")).hidden = !on; }); };
+  tabs.forEach((t, i) => { t.onclick = () => pick(t); t.onkeydown = e => { const d = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0; if (d) { const n = tabs[(i + d + tabs.length) % tabs.length]; pick(n); n.focus(); } }; });
+
+  // ------------------------------------------------ one look per song
+  const LOOKS = [["Kick Shockwave · Sunset", "#ff5e3a", "#ffb648"], ["Snare Comets · Neon", "#ff2bd6", "#16e0ff"], ["Ring Spinners · Fire", "#ff3d00", "#ffc400"], ["Plasma Field · Ocean", "#0a6cff", "#00e5d0"]];
+  let li = 0; const lookui = $("#lookui"), keep = $("#look-keep");
+  $("#look-next").onclick = () => { li = (li + 1) % LOOKS.length; const [n, a, b] = LOOKS[li]; $("#lookname").textContent = n; $("#swatch").style.background = `linear-gradient(90deg,${a},${b})`; lookui.classList.remove("is-kept"); keep.setAttribute("aria-pressed", "false"); keep.textContent = "Keep"; };
+  keep.onclick = () => { const on = !lookui.classList.contains("is-kept"); lookui.classList.toggle("is-kept", on); keep.setAttribute("aria-pressed", on); keep.textContent = on ? "Let it change" : "Keep"; };
+
+  // ------------------------------------------------ song maps (sections in % of the song)
+  const SECS = [["A", "calm", 0, 16], ["B", "build", 16, 26], ["C", "drop", 26, 42], ["A", "calm", 42, 56], ["B", "build", 56, 68], ["C", "drop", 68, 86], ["D", "calm", 86, 100]];
+  function drawMap(el, bars) {
+    let h = "";
+    for (const [l, k, a, b] of SECS) h += `<div class="sec ${k}" style="left:${a}%;width:${b - a}%"><span>${l}</span></div>`;
+    for (const [, k, a] of SECS) if (k === "drop") h += `<div class="mark" style="left:${a}%"></div>`;
+    let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
+    h += '<div class="wave">';
+    for (let i = 0; i < bars; i++) { const x = (i + .5) / bars * 100, s = SECS.find(s => x >= s[2] && x < s[3]);
+      const e = s[1] === "calm" ? .28 : s[1] === "build" ? .35 + .5 * (x - s[2]) / (s[3] - s[2]) : .82; h += `<i style="height:${Math.round(Math.min(1, e * (.75 + rnd() * .4)) * 100)}%"></i>`; }
+    el.innerHTML = h + '</div><div class="head"></div>';
+    return el.querySelector(".head");
+  }
+  const head1 = drawMap($("#map"), 72), head2 = drawMap($("#map2"), 56);
+
+  // ------------------------------------------------ the LED strip, on one clock (128 BPM, an 8-beat loop: build-up, dip, drop)
+  const N = innerWidth < 500 ? 28 : 44, leds = $("#leds"), gl = $("#glowleds");
+  leds.innerHTML = gl.innerHTML = "<i></i>".repeat(N);
+  const L = [...leds.children], G = [...gl.children];
+  const A = [255, 94, 58], B = [255, 182, 72];
+  const pal = [...Array(N)].map((_, i) => { const f = Math.abs(i / (N - 1) - .5) * 2; return A.map((c, k) => Math.round(c + (B[k] - c) * f)); });
+  const BEAT = 60 / 128, LOOP = 8 * BEAT, glow = $("#glow"), lamps = $$("[data-lamp]"), beatDots = [...$("#beats").children];
+  const chip = $("#drop-chip"), part = $("#part"), count = $("#count"), ramp = $("#ramp");
+  function frame(t) {
+    const b = t / BEAT, fb = b % 1, inDrop = b >= 4, pulse = Math.exp(-fb * 5);
+    let sum = 0;
+    for (let i = 0; i < N; i++) {
+      let v;
+      if (!inDrop) { const lift = b / 4; v = .14 + .22 * lift + (.25 + .3 * lift) * (b >= 3 ? Math.exp(-(b * 2 % 1) * 5) : pulse); if (b >= 3.5) v *= .4; }
+      else { const d = Math.abs(i - (N - 1) / 2) / (N / 2), r = fb * 1.25; v = .26 + .8 * Math.exp(-(((d - r) / .16) ** 2)) + .45 * pulse; }
+      v = Math.pow(Math.min(1, v), .6); sum += v;
+      const white = inDrop && b < 4.18 ? .6 : 0, c = pal[i].map(x => Math.round((x + (255 - x) * white) * v)), col = `rgb(${c})`;
+      L[i].style.background = col; G[i].style.background = col;
+    }
+    glow.style.opacity = (.35 + .65 * sum / N).toFixed(3);
+    const beatInBar = Math.floor(b) % 4; beatDots.forEach((d, i) => d.classList.toggle("on", i <= beatInBar));
+    const left = 4 - Math.floor(b);
+    chip.textContent = inDrop ? "Drop" : `Drop in ${left}`;
+    part.textContent = inDrop ? "Section C · drop" : "Section B · build-up";
+    count.textContent = inDrop ? "Drop" : left;
+    ramp.style.width = (inDrop ? 100 : 15 + 85 * b / 4) + "%";
+    const x = 60 + 16 * t / LOOP; head1.style.left = x + "%"; head2.style.left = x + "%";
+    const lv = (.25 + .75 * pulse).toFixed(3); lamps.forEach(l => { l.style.opacity = lv; });
+  }
+  const REST = 1.2 * BEAT; // at rest: the build-up, three beats before the drop
+  let t0 = performance.now(), paused = false, raf = 0, at = REST;
+  const pauseBtn = $("#pause");
+  function loop(now) { at = ((now - t0) / 1000) % LOOP; frame(at); raf = requestAnimationFrame(loop); }
+  function start() { cancelAnimationFrame(raf); if (paused || reduce.matches) { frame(paused ? at : REST); return; } t0 = performance.now() - at * 1000; raf = requestAnimationFrame(loop); }
+  pauseBtn.onclick = () => { paused = !paused; pauseBtn.querySelector("span").textContent = paused ? "Play the preview" : "Pause the preview";
+    pauseBtn.querySelector("svg").innerHTML = paused ? '<path d="M8 5v14l11-7z"/>' : '<path d="M7 5h3v14H7zM14 5h3v14h-3z"/>'; start(); };
+  $("#show").addEventListener("mouseenter", () => { if (!paused && !reduce.matches) { at = 0; start(); } }); // card loops restart on hover
+  reduce.addEventListener?.("change", start);
+  pauseBtn.parentElement.hidden = reduce.matches;
+  start();
+})();
+</script>
+</body>
+</html>
