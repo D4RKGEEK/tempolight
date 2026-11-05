@@ -50,7 +50,8 @@ switch it off in Tempolight's Settings.
 - `audio: true` gives the add-on Home Assistant's audio (PulseAudio). With a USB sound card on the Home Assistant
   machine, pick it as the input in the add-on's **Configuration** tab (*Audio*), then **Music → Listen on the server**
   in Tempolight.
-- `/media` is mounted read-only, for music files.
+- `/media` is mounted read-only, for music files: add it in **Music → Your own music** (type `/media`) and every song
+  in it is analysed ahead.
 
 ## Trying it without Home Assistant
 

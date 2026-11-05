@@ -2,7 +2,7 @@
 
 From nothing to lights moving with music in about ten minutes. You need a computer (Windows, Mac, Linux or a
 Raspberry Pi) on the same Wi-Fi as your lights. No lights yet? You can still try everything with a pretend room on
-screen, or in the [online demo](https://tempolight.pages.dev) without installing anything.
+screen, or in the [online demo](https://tempolight.pages.dev/demo/) without installing anything.
 
 ```mermaid
 flowchart LR
@@ -73,7 +73,7 @@ Each picture is a room layout drawn with your own controllers. Tap the one close
 
 Speakers (Bluetooth ones especially) play the sound a little late, so the lights would flash before you hear the beat.
 Turn the speakers up, tap **Start** and stay quiet for 5 seconds: Tempolight plays a few clicks, listens with the
-microphone and sets the delay. It says, for example, *Done. Speakers: 180 ms. Lights set +160 ms.*
+microphone and sets the delay. It says, for example, *Done. Speakers: 180 ms. Lights set -145 ms.*
 
 - *Nothing heard* or *The clicks were hard to hear*: turn the speakers up, move closer and tap **Again**.
 - *This browser can't use the microphone here*: browsers only allow the microphone on `localhost` or a secure (https)
@@ -173,6 +173,7 @@ doesn't know yet, the map grows as it plays.
 
 ## Where next
 
+- [What you can do](what-you-can-do.md): a tour of every feature, with where to find it
 - [Connect more kinds of lights](connect-lights.md): Hue, Nanoleaf, LIFX, DMX fixtures and more
 - [Draw your real room](room-and-zones.md), so effects move across it the way it really is
 - [Spotify](../spotify.md): the lights follow Spotify with the whole beat map

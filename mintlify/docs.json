@@ -41,7 +41,7 @@
     "primary": {
       "type": "button",
       "label": "Try the demo",
-      "href": "https://tempolight.pages.dev"
+      "href": "https://tempolight.pages.dev/demo/"
     }
   },
   "navigation": {
@@ -55,7 +55,7 @@
         {
           "anchor": "Online demo",
           "icon": "monitor-play",
-          "href": "https://tempolight.pages.dev"
+          "href": "https://tempolight.pages.dev/demo/"
         },
         {
           "anchor": "Releases",
@@ -75,7 +75,9 @@
               "index",
               "overview",
               "install",
+              "setup-with-claude",
               "guides/first-run",
+              "guides/what-you-can-do",
               "getting-started"
             ]
           }

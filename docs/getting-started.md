@@ -1,7 +1,8 @@
 # Getting started
 
 The short version. For every click, with pictures, see [Your first show](guides/first-run.md); all the guides are
-listed in [guides/](guides/README.md).
+listed in [guides/](guides/README.md). Every feature, with where to find it: [What you can do](guides/what-you-can-do.md).
+Rather let Claude do it? [Set up Tempolight with Claude](setup-with-claude.md).
 
 ## What you need
 
@@ -9,7 +10,7 @@ listed in [guides/](guides/README.md).
   [WLED](https://kno.wled.ge) (the web installer takes two minutes; ESP32 is recommended above about 300 LEDs or for
   high frame rates). Tempolight also drives Govee, OpenRGB, Nanoleaf, Philips Hue, LIFX, WiZ, TP-Link Kasa, Yeelight,
   Twinkly, DMX fixtures and phones: [Connect your lights](guides/connect-lights.md). No lights? Try it with a virtual
-  room, or in the [online demo](https://tempolight.pages.dev).
+  room, or in the [online demo](https://tempolight.pages.dev/demo/).
 - **A computer on the same network** to run Tempolight: Windows 10/11, macOS, Linux, or a Raspberry Pi 3, 4 or 5.
   A Pi Zero 2 works for small setups at a lower frame rate.
 - **Nothing else.** The one-file app and the Pi image include everything; [install.md](install.md) lists every way to
@@ -80,7 +81,8 @@ computer that plays the music, or use server capture. Which source to choose:
 | No controllers found | Same network and subnet? Try **Scan network** on Devices, or add by IP. Guest Wi-Fi and Docker without host networking block discovery |
 | Controller shows offline | Check its address in your router; WLED's web page should open at `http://<address>` |
 | Lights flicker or stutter | Weak Wi-Fi. Lower the frame rate in Settings (30–40 fps), move the controller closer to the router, or use an Ethernet ESP32 |
-| Lights are behind the beat | Music → Timing → **Fix the timing automatically**, or move Light timing right. Bluetooth speakers need about +200 ms |
+| Lights are off the beat | Music → Timing → **Fix the timing automatically**. By hand: move Light timing right if the lights are late, left if they are early. Bluetooth speakers often need about -200 ms |
+| Not sure it follows the beat | Music → **In sync** says *Locked*, *Finding the beat* or *Not hearing*, with a hint under it |
 | Only part of a strip lights up | The LED count in Devices or the shape counts in Room are lower than the strip |
 | Colours are wrong (red is green) | Set the colour order (GRB/RGB) in WLED's LED Preferences |
 | Port 8080 is in use | Start with `--port 8081` |

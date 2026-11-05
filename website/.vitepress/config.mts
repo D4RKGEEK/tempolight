@@ -11,7 +11,7 @@ const repoRoot = path.resolve(here, "../..");
 const docsDir = path.join(repoRoot, "docs");
 
 const REPO = "https://github.com/D4RKGEEK/tempolight";
-const DEMO = "https://tempolight.pages.dev";
+const SITE = "https://tempolight.pages.dev", DEMO = `${SITE}/demo/`;
 // GitHub Pages project site by default; the workflow passes the real base path and URL (a custom domain changes both)
 const base = withSlashes(process.env.DOCS_BASE || "/tempolight/");
 const siteUrl = (process.env.DOCS_URL || `https://d4rkgeek.github.io${base}`).replace(/\/?$/, "/");
@@ -84,7 +84,8 @@ function sidebar(): DefaultTheme.SidebarItem[] {
   used.add(path.join(docsDir, "index.md"));
   const start = [
     { text: "Overview", link: "/" },
-    ...page("getting-started"), ...page("install", "Install"), ...page("hearing-music"),
+    ...page("getting-started"), ...page("install", "Install"), ...page("setup-with-claude", "Set up with Claude"),
+    ...page("what-you-can-do", "What you can do"), ...page("hearing-music"),
   ];
   const lights = [...page("protocols", "Lights and protocols"), ...page("raspberry-pi"), ...page("tempolight-lite", "Tempolight Lite (ESP32)")];
   const music = [...page("spotify"), ...page("effects")];
@@ -134,7 +135,7 @@ function rewriteHref(href: string, relativePath: string): string | null {
   if (!inDocs) return github();
   const docsRel = path.relative(docsDir, abs).split(path.sep).join("/");
   if (docsRel === "flash" || docsRel.startsWith("flash/")) return `${siteUrl}flash/`;
-  if (docsRel === "index.html") return `${DEMO}/about/`;
+  if (docsRel === "index.html") return `${SITE}/`;
   if (/\.md$/.test(abs) || existsSync(abs + ".md") || existsSync(path.join(abs, "index.md"))) return null;  // a page
   if (/\.(png|jpe?g|gif|svg|webp|avif)$/i.test(abs)) return null;  // images are bundled by the site
   return github();
