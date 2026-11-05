@@ -5,6 +5,7 @@ import { createRenderer } from "/preview.js";
 import { homeStrip, bindHomeStrip, updateHomeStrip } from "/homestrip.js";
 import { latencyChip, warnIcons, homeBadge, latencyPanel } from "/latency.js";
 import { hearLine, wantsAutoMic } from "/hearline.js";
+import { syncHtml, mountSongMap, syncView } from "/songmap.js";
 // Loaded the first time they are needed, so the first visit downloads only what the Home page uses: the Room, Camera
 // mapping, Show editor and Home & sleep pages, the DMX panels, the MIDI clock and the setup wizard (see lazyPage below;
 // sw.js keeps them all for offline use).
@@ -88,10 +89,10 @@ function autoMic(m) {
   if (A.state.mode !== "mic") mic.auto = false;
 }
 /** The status line ("Hearing Spotify ✓ · song · learning 42%", or "Can't hear anything → Fix") into `el`. */
-export function paintHearLine(el, m) {
-  if (!el) return; const l = hearLine(m);
+export function paintHearLine(el, m, { dot = false } = {}) {
+  if (!el) return; const l = hearLine(m), v = dot ? syncView(m) : null; // dot: the sync meter as a tiny dot (Home)
   el.className = `hearline ${l.ok === true ? "ok" : l.ok === false ? "bad" : ""}`; el.title = l.why || "";
-  el.innerHTML = `<span>${esc(l.text)}</span>${l.fix ? ` <a href="#/music/hear" class="hear-fix">${l.ok === false ? "Fix" : "Set up"} →</a>` : ""}`;
+  el.innerHTML = `${v ? `<a class="syncdot" href="#/music" data-state="${v.state}" title="${esc(v.title)}" aria-label="Sync: ${esc(v.title)}"></a>` : ""}<span>${esc(l.text)}</span>${l.fix ? ` <a href="#/music/hear" class="hear-fix">${l.ok === false ? "Fix" : "Set up"} →</a>` : ""}`;
 }
 function chrome() {
   const st = app.state; $("#ver").textContent = "v" + st.version; $("#c-effects").textContent = st.effects.length;
@@ -211,7 +212,7 @@ function homePage(el) {
       $("#h-song").textContent = m.song ? m.song.name : m.source === "idle" ? "Nothing playing" : m.sourceLabel;
       $("#h-meta").textContent = m.song ? `${Math.round(m.song.bpm)} BPM · ${app.state.styles[m.song.style] || m.song.style}${m.song.drops?.length ? ` · ${m.song.drops.length} drop${m.song.drops.length > 1 ? "s" : ""}` : ""}` : m.source === "idle" ? "Play a song or listen to your computer on the Music page." : "Listening live";
       const np = NP?.homeText(m); if (np) { $("#h-song").textContent = np.song; $("#h-meta").textContent = np.meta; }
-      paintHearLine($("#h-hear"), m);
+      paintHearLine($("#h-hear"), m, { dot: true });
       $("#h-transport").hidden = !(a.mode === "song" && a.song);
       if (a.song) { const d = A.duration, p = A.pos(); $("#h-fill").style.width = (p / d * 100) + "%"; $("#h-pos").textContent = fmtTime(p); $("#h-dur").textContent = fmtTime(d); $("#h-play").textContent = a.song.playing ? "Pause" : "Play"; }
       $("#h-black").setAttribute("aria-pressed", m.overlay.blackout); updateHomeStrip(m);
@@ -234,6 +235,9 @@ const namedInput = id => String(id || "").includes(":") ? opt(id, id.slice(id.in
 function musicPage(el) {
   const st = app.state, A = app.audio, s = st.settings;
   el.innerHTML = `<div id="m-hear"></div>
+    ${panel("In sync", `<span id="sm-name"></span>`, "", `<div class="pb stack sm" id="m-sync">${syncHtml()}
+      <div class="sm-look"><span class="lbl">Look</span><b id="m-look" title="The effect and colours picked for this song, and why">–</b>
+        <div class="row" id="m-lookrow"><button class="btn sm" id="m-looknext" type="button" title="Pick the next best look for this song; this one won't come back for it">Not this one</button><button class="btn sm" id="m-lookkeep" type="button" aria-pressed="false" title="Keep this look for this song">Keep</button><span class="faint" id="m-lookhelp"></span></div></div></div>`, "span-12")}
     ${panel("Play songs", "Best timing: songs are analysed first, so the lights know where the drops are", `<label class="btn primary" for="m-files">Add songs…</label><input type="file" id="m-files" accept="audio/*" multiple hidden><button class="btn" id="m-demo" type="button">Play the demo track</button>`,
       `<div class="pb stack"><div id="m-now"></div><div class="tablewrap"><table><thead><tr><th>#</th><th>Song</th><th class="num">Tempo</th><th>Style</th><th class="num">Drops</th><th></th></tr></thead><tbody id="m-queue"></tbody></table></div></div>`, "span-8")}
     ${panel("Listen live", "For music you play anywhere else: Spotify, YouTube, a DJ app", "", `<div class="pb stack">
@@ -246,9 +250,7 @@ function musicPage(el) {
       <div class="callout err" id="m-err" hidden></div></div>`, "span-4")}
     <div id="m-sp"></div>${DEMO ? "" : '<div id="m-np"></div>'}
     ${panel("What Tempolight hears", `<span id="m-src"></span>`, `<label class="check" title="With Automatic colours, the lights take colours from the music's mood"><input type="checkbox" id="m-moodc" ${s.moodColours !== false ? "checked" : ""}> Mood colours</label>`, `<div class="pb stack"><div class="spectrum" id="m-spec">${"<i></i>".repeat(24)}</div>
-      <div class="kv"><div><span>Tempo</span><b id="m-bpm">–</b></div><div><span>Part</span><b id="m-part">–</b></div><div><span>Style</span><b id="m-style">–</b></div><div><span>Singing</span><b id="m-voc" title="An estimate from the sound: a clear tone whose pitch moves like a voice">–</b></div><div style="grid-column: span 2"><span>Key · mood</span><b id="m-key" title="The key from which notes sound most; the mood from major or minor, brightness, drums and tempo">–</b></div>
-      <div style="grid-column: span 2"><span>Look</span><b id="m-look" title="The effect and colours picked for this song, and why">–</b></div></div>
-      <div class="row" id="m-lookrow" hidden><button class="btn sm" id="m-looknext" type="button" title="Pick the next best look for this song; this one won't come back for it">Not this one</button><button class="btn sm" id="m-lookkeep" type="button" aria-pressed="false" title="Keep this look for this song">Keep</button><span class="faint" id="m-lookhelp" style="font-size:12.5px"></span></div>
+      <div class="kv"><div><span>Tempo</span><b id="m-bpm">–</b></div><div><span>Part</span><b id="m-part">–</b></div><div><span>Style</span><b id="m-style">–</b></div><div><span>Singing</span><b id="m-voc" title="An estimate from the sound: a clear tone whose pitch moves like a voice">–</b></div><div style="grid-column: span 2"><span>Key · mood</span><b id="m-key" title="The key from which notes sound most; the mood from major or minor, brightness, drums and tempo">–</b></div></div>
       <div class="row"><button class="btn" id="m-tap" type="button">Tap the beat</button><span class="faint" style="font-size:12.5px">Tap 4 times on the beat to fix the tempo and line up the beat.</span></div></div>`, "span-6")}
     ${panel("Timing", "", "", `<div class="pb stack">
       <div class="callout warn" id="m-btcal" hidden><b>Bluetooth speakers play late — fix the timing.</b> <span id="m-btname"></span></div>
@@ -329,7 +331,8 @@ function musicPage(el) {
   // the song's look: "Not this one" picks the next best (and remembers), "Keep" keeps it for the song
   $("#m-looknext").onclick = () => act(() => api("POST", "/api/song/look/next", {})).then(r => toast(`Look: ${r.label}`)).catch(() => {});
   $("#m-lookkeep").onclick = () => { const kept = $("#m-lookkeep").getAttribute("aria-pressed") === "true"; act(() => api("POST", "/api/song/look/keep", { keep: !kept }), kept ? "The look can change again" : "Look kept for this song").catch(() => {}); };
-  if (!guestOk("effects")) { $("#m-looknext").disabled = true; $("#m-lookkeep").disabled = true; }
+  const lookOk = guestOk("effects");
+  const SM = mountSongMap($("#m-sync"), { api }); if (app.status) SM.status(app.status);
   const setS = b => act(() => api("PATCH", "/api/settings", b)).then(refreshState).catch(() => {});
   $("#m-off").oninput = e => $("#m-off-o").textContent = e.target.value + " ms"; $("#m-off").onchange = e => setS({ syncOffsetMs: Number(e.target.value) }).then(offRows);
   // the timing each speaker keeps (settings.syncOffsets), with the one playing now marked
@@ -387,14 +390,16 @@ function musicPage(el) {
   const partName = { calm: "Calm", build: "Build-up", drop: "Drop", silent: "Quiet", idle: "–" };
   let offFor;
   return {
-    destroy() { HR?.destroy(); HR = null; },
+    destroy() { HR?.destroy(); HR = null; SM.destroy(); },
     onAudio: renderQueue, onLog(e) { if (/^Remembered|^Song memory|^Spotify: (learned|got)/.test(e.msg)) songs(); }, onChanged(w) { if (w.has("requests")) requests(); if (w.has("songs")) songs(); if (w.has("settings") || w.has("output")) offRows(); },
     onStatus(m) {
       $("#m-src").textContent = m.sourceLabel; $("#m-bpm").textContent = m.bpm ? m.bpm.toFixed(0) : "–"; $("#m-part").textContent = partName[m.part] || m.part; $("#m-style").textContent = m.source === "idle" ? "–" : m.styleName; $("#m-voc").textContent = m.vocal == null ? "–" : m.vocal > 0.35 ? "Yes" : m.vocal > 0.15 ? "A little" : "No";
       $("#m-key").textContent = m.source === "idle" || !m.hears ? "–" : m.hears;
       const lk = m.look; $("#m-look").textContent = lk ? `${lk.label}${lk.provisional ? " · for now" : ""}` : m.source === "idle" ? "–" : app.state.show.variety === "show" ? "Changes with the song (Show)" : "–";
-      $("#m-lookrow").hidden = !lk; if (lk) { const kb = $("#m-lookkeep"); kb.setAttribute("aria-pressed", String(!!lk.locked)); kb.textContent = lk.locked ? "Kept ✓" : "Keep";
-        $("#m-lookhelp").textContent = lk.provisional ? "Picked from what it hears; kept for the song." : lk.rejected?.length ? `${lk.rejected.length} turned down for this song` : ""; }
+      $("#m-looknext").disabled = $("#m-lookkeep").disabled = !lk || !lookOk; // (always there, so the panel doesn't jump)
+      { const kb = $("#m-lookkeep"); kb.setAttribute("aria-pressed", String(!!lk?.locked)); kb.textContent = lk?.locked ? "Kept ✓" : "Keep";
+        $("#m-lookhelp").textContent = !lk ? "" : lk.provisional ? "Picked from what it hears; kept for the song." : lk.rejected?.length ? `${lk.rejected.length} turned down for this song` : ""; }
+      SM.status(m); $("#sm-name").textContent = m.source === "idle" ? "" : m.song?.name || m.recognised?.name || m.sourceLabel;
       const bars = $$("#m-spec i"); bars.forEach((b, i) => b.style.height = (m.bands ? Math.max(2, m.bands[i] * 100) : 2) + "%");
       const lv = A.level(); $("#m-lvl").style.width = Math.round(lv * 100) + "%"; $("#m-lvl-o").textContent = A.state.stream ? (lv < 0.02 ? "very quiet: turn it up or move closer" : Math.round(lv * 100) + "%") : "not listening";
       if (m.song?.memId && m.song.memId !== showFor) showLine();

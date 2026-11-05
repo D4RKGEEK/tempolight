@@ -235,6 +235,8 @@ export function createCore({ store, runtime, env }) {
   // a song's show: effect blocks (`show`, as before) plus the timeline editor's colour blocks, cues and brightness keyframes
   const hex2 = c => "#" + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0")).join("");
   const showOf = e => ({ id: e.id, name: e.name, dur: e.dur, edited: !!e.showEdited, show: e.show || [], colors: e.colors || [], cues: e.cues || [], bright: e.bright || [] });
+  // the song map (the Music page): loudness, sections, drops and bars of a remembered song
+  route("GET", "/api/songs/:id/map", null, (ctx, p) => runtime.songMapNow(songById(p.id).id));
   route("GET", "/api/songs/:id/show", null, (ctx, p) => { const e = runtime.freshShow(songById(p.id));
     // what the editor draws: the beat grid, bars, drops, loudness (10 a second, base64 bytes) and the palettes' colours
     return { ...showOf(e), bpm: e.bpm, P: e.P, off: e.off, barOff: e.barOff, style: e.style, drops: e.drops, bars: e.bars, env: e.env,
@@ -414,6 +416,8 @@ export function createCore({ store, runtime, env }) {
   route("POST", "/api/song", null, async (ctx) => { const b = ctx.body; if (!b.analysis || !(b.analysis.bpm > 0)) throw new HttpError(400, "Send the song's analysis"); runtime.setSong(b, b.clientId || null); return { ok: true }; });
   route("POST", "/api/song/clock", null, async (ctx) => { runtime.songClock(ctx.body); return { ok: true }; });
   route("DELETE", "/api/song", null, () => { runtime.clearSong(); return { ok: true }; });
+  // the map of the song playing now: known ahead (played here, remembered, recognised), or made as it is heard live
+  route("GET", "/api/song/map", null, () => runtime.songMapNow(null));
   // the song's look (one effect for the whole song, looks.js): "Not this one" picks the next best and remembers the one
   // turned down; "Keep" keeps it. For the song playing now, or a remembered song by id.
   const lookId = b => b && b.id != null ? String(b.id) : null;

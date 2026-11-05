@@ -5,6 +5,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Sync score and song map
+- Music page → **In sync**: a live meter (Locked / Finding the beat / Not hearing) with the tempo, a beat-1 light and one plain hint ("Too quiet — turn it up or move the mic closer", "No drums — following the melody", "Following the song's beat map", "Beat from DJ Link"…), and the playing song's map: its loudness, sections (repeats share a letter) coloured calm / build-up / drop, the drops, a moving playhead and the next drop; for a song heard live that isn't known, the map grows as it plays. The look and **Not this one** / **Keep** sit under it. Home's status line has a small sync dot. API: `sync` in `/api/status`, `GET /api/song/map`, `GET /api/songs/:id/map`.
+
 ### One look per song
 - Automatic mode now picks one well-chosen effect and palette for each song when it is analysed, and keeps it for the whole song, on the beat (like picking one LedFx effect). It fits the song: a fast four-on-the-floor track gets a kick-driven effect, a ballad a calm one that doesn't need a beat; the colours come from the mood. The same song always gets the same look; different songs get different ones.
 - The look stays lively from inside: speed follows the tempo, it gets stronger through build-ups, the colour steps at new sections (a chorus that comes back gets the same colour), drops vary every 2 bars, and the pump, the dip before the drop and the drop flash stay.

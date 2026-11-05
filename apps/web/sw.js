@@ -3,7 +3,7 @@
 // API calls and live connections are never cached.
 const CACHE = "tempolight-__BUILD__";
 const SHELL = ["/", "/index.html", "/style.css", "/app.js", "/audio.js", "/preview.js", "/pcm-worklet.js", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/apple-touch-icon.png",
-  "/homestrip.js", "/latency.js", "/setup.css", "/hearline.js"];
+  "/homestrip.js", "/latency.js", "/setup.css", "/hearline.js", "/songmap.js"];
 // the pages and parts app.js loads only when they are first shown: kept too, so every page opens offline, not just the
 // ones visited before going offline (fetched after the first visit has loaded, in the background)
 const LATER = ["/room.js", "/mapper.js", "/mapping.js", "/timeline.js", "/timeline.css", "/homesleep.js", "/dmx.js", "/midiclock.js", "/wizard.js", "/nowplaying.js", "/homekit.js", "/spotify.js", "/hearing.js",

@@ -94,6 +94,34 @@ await step("music: play a song, it is analysed and drives the lights", async () 
   const hears = await until(() => page.textContent("#m-key").then(t => / (major|minor) · /.test(t) && t), 4000, "no key and mood on the Music page");
   ok(hears === status().hears, `the page shows "${hears}", the status says "${status().hears}"`);
 });
+await step("music: the sync meter says Locked; the song map draws its sections, drops and playhead; Home has the sync dot", async () => {
+  await go("music"); await until(() => page.textContent("#sm-label").then(t => t === "Locked"), 6000, "the meter isn't Locked for a song played here");
+  ok(/Following the song's beat map/.test(await page.textContent("#sm-hint")), "no hint"); ok(/^\d+$/.test(await page.textContent("#sm-bpm")), "no tempo on the meter");
+  const sync = status().sync; ok(sync.state === "locked" && sync.score === 100 && sync.source === "song", JSON.stringify(sync));
+  await until(() => page.isHidden("#sm-empty"), 6000, "the song map is empty");
+  const map = await (await fetch(`${base}/api/song/map`)).json(); ok(map.source === "song" && map.sections.length >= 2 && map.drops.length >= 1, `map ${map.sections.length} sections`);
+  await until(() => page.textContent("#sm-part").then(t => /^Part [A-Z]/.test(t)), 4000, "the part playing isn't named");
+  ok(/\d:\d\d \/ \d:\d\d/.test(await page.textContent("#sm-pos")), "no position");
+  const colours = await page.evaluate(() => { const c = document.querySelector("#sm-cv"), d = c.getContext("2d").getImageData(0, 0, c.width, c.height).data, set = new Set();
+    for (let i = 0; i < d.length; i += 4 * 7) if (d[i + 3] > 200) set.add(`${d[i] >> 4},${d[i + 1] >> 4},${d[i + 2] >> 4}`); return set.size; });
+  ok(colours >= 4, `the map canvas is nearly blank (${colours} colours)`);
+  const x0 = await page.evaluate(() => document.querySelector("#sm-pos").textContent); await sleep(1300); ok(x0 !== await page.textContent("#sm-pos"), "the playhead doesn't move");
+  ok(await page.isVisible("#m-look") && await page.isVisible("#m-looknext"), "the look isn't next to the map");
+  await page.locator("#m-sync").scrollIntoViewIfNeeded(); await shot("04-sync-map");
+  if (process.env.MAP_SHOTS) await page.locator("#m-sync").screenshot({ path: path.join(process.env.MAP_SHOTS, "music-sync-desktop.png") });
+  const ph = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2 }), pp = await ph.newPage();
+  try { await pp.goto(`${base}/#/music`); await pp.waitForSelector("#sm-cv"); await until(() => pp.isHidden("#sm-empty"), 6000, "phone: map empty");
+    ok(await pp.evaluate(() => document.documentElement.scrollWidth) <= 392, "the Music page scrolls sideways on a phone");
+    const h0 = await pp.evaluate(() => document.querySelector("#m-sync").getBoundingClientRect().height); await sleep(1200);
+    ok(Math.abs(h0 - await pp.evaluate(() => document.querySelector("#m-sync").getBoundingClientRect().height)) < 1, "the panel changes height while playing");
+    if (process.env.MAP_SHOTS) { await pp.evaluate(() => document.querySelector("#m-sync").scrollIntoView()); await pp.screenshot({ path: path.join(process.env.MAP_SHOTS, "music-sync-phone.png") }); }
+    await pp.emulateMedia({ colorScheme: "dark" }); await sleep(1200);
+    if (process.env.MAP_SHOTS) await pp.screenshot({ path: path.join(process.env.MAP_SHOTS, "music-sync-phone-dark.png") });
+  } finally { await ph.close(); }
+  await go("home"); await until(() => page.getAttribute("#h-hear .syncdot", "data-state").then(s => s === "locked"), 4000, "no sync dot on Home's status line");
+  if (process.env.MAP_SHOTS) await page.locator("#h-hear").locator("..").locator("..").screenshot({ path: path.join(process.env.MAP_SHOTS, "home-syncdot.png") });
+  await go("music");
+});
 await step("music: the song is remembered in song memory", async () => {
   await until(() => page.textContent("#m-songs").then(t => /BPM/.test(t)), 6000, "song not in the memory list");
   ok(app.store.data.songs.length === 1, "not stored");

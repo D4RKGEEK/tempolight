@@ -47,6 +47,14 @@ await step("play the demo song: analysed, tempo found, lights follow it", async 
   await until(async () => (await text("#sb-source")).includes("demo"), 30000, "song never started");
   await until(async () => /\d/.test(await text("#m-bpm")), 5000, "no tempo"); ok(Math.abs(Number(await text("#m-bpm")) - 128) <= 2, "tempo " + await text("#m-bpm"));
 });
+await step("the demo song: the sync meter says Locked and the song map shows its sections", async () => {
+  await until(async () => (await text("#sm-label")) === "Locked", 6000, "the meter isn't Locked: " + await text("#sm-label"));
+  await until(() => page.isHidden("#sm-empty"), 6000, "the song map is empty");
+  const map = await page.evaluate(async () => (await import("/app.js")).api("GET", "/api/song/map"));
+  ok(map.source === "song" && map.sections.length >= 2 && map.env.length > 50, `map: ${map.source}, ${map.sections?.length} sections`);
+  await until(async () => /^Part [A-Z]/.test(await text("#sm-part")), 4000, "the part playing isn't named");
+  await go("home"); await until(async () => (await page.getAttribute("#h-hear .syncdot", "data-state")) === "locked", 4000, "no sync dot on Home"); await go("music");
+});
 await step("Sync with Spotify explains that it needs Tempolight installed", async () => {
   await go("music"); await page.waitForSelector("#sp-demo"); ok(/install Tempolight/.test(await text("#sp-demo")), "no explanation in the demo"); ok(!(await page.$("#sp-on")), "a Spotify switch in the demo");
 });

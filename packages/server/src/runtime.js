@@ -6,6 +6,7 @@ import { createFixtures } from "./fixtures.js";
 import { createBeatSources } from "./beatsources.js";
 import { noteRtt, audioDelay, deviceLatency, lightLatency, timingPlan, newestSampleClock, level, LOOKAHEAD_CAP_MS } from "./latency.js";
 import { createPerf, LITE } from "./perf.js";
+import { syncScore, songMap, createLiveMap } from "./songmap.js";
 import { buildLayout, createEffects, createDirector, segmentRanges, songView, metronomeView, gridAt, toRGB8, LiveAnalyser, memoryEntry, memoryAnalysis, recognise, matchAt, refineByKicks, planShow, SHOW_VERSION, drumlessEntry, hearsLabel, moodName, pickLook, lookLabel, LOOK_VERSION } from "../../engine/src/index.js";
 // Everything that touches the network or the sound card comes in through `io` (see node-io.js), so the same runtime
 // runs on a PC or Pi and, with pretend devices, inside the browser for the online demo.
@@ -358,6 +359,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   // wall clock (metronome, beat clocks, DJ Link, idle) are drawn for now + lead; sources with a music clock for where
   // the music will be by then, plus the timing trim (syncOffset).
   function currentView(now, lead = 0) {
+    rt.extBeat = null; // (a beat grid from outside while listening live: djlink, midiclock or link)
     const s = data().settings, off = syncOffset() / 1000, ld = lead / 1000, wt = (now + lead) / 1000;
     if (rt.song && rt.song.playing && now - rt.song.at < 4000) {
       const t = rt.song.pos + ((now - rt.song.at) / 1000 + ld) * rt.song.rate + off;
@@ -378,7 +380,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       const V = an.view(t, { predict: s.predict });
       rt.source = rt.live.kind; rt.sourceLabel = rt.live.label;
       const G = djFresh(now) ? { ...djGrid(now, tl), bpm: rt.dj.bpm, label: `DJ Link (${rt.dj.name})` } : beats.grid(now, tl); // DJ Link, else MIDI clock, else Ableton Link (on the analyser's clock now)
-      if (G) { V.g = gridAt(G, t); V.bpm = G.bpm; if (V.g.has && t - V.kick > 0.6) { V.kick = V.g.beatT; V.pulses = [V.g.beatT]; V.pulseN = V.g.idx; } rt.sourceLabel += ` + ${G.label}`; }
+      if (G) { rt.extBeat = G.kind || "djlink"; V.g = gridAt(G, t); V.bpm = G.bpm; if (V.g.has && t - V.kick > 0.6) { V.kick = V.g.beatT; V.pulses = [V.g.beatT]; V.pulseN = V.g.idx; } rt.sourceLabel += ` + ${G.label}`; }
       if (V.state === "silent" && V.quietFor > (s.idleAfterSec ?? 8)) { rt.source = "idle"; rt.sourceLabel = `${rt.live.label} (quiet)`; return { V: null, t: wt }; }
       return { V, t, extra: an.extras() };
     }
@@ -459,6 +461,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     const wall = now / 1000, sh = data().show, s = data().settings;
     updateTiming(now); const lead = leadMs();
     let { V, t, extra } = currentView(now, lead);
+    if (liveFresh()) liveMap.tick(rt.live.an, rt.live.an.t, rt.live.an.eFast, V ? V.state : "silent"); // the live song map, as it is heard
     D.settings.look = V ? currentLook() : null; // (null while listening live to a song it doesn't know: the director picks one)
     const pe = V ? currentPlan() : null; D.settings.plan = pe ? pe.show : null;
     D.settings.timeline = pe && (pe.colors?.length || pe.cues?.length || pe.bright?.length) ? { colors: pe.colors || [], cues: pe.cues || [], bright: pe.bright || [] } : null;
@@ -661,8 +664,35 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     if (liveFresh()) { const an = rt.live.an; an.bpm = bpm; an.phase = (an.t - (now - rt.taps.at(-1)) / 1000) % (60 / bpm); an.phaseSet = true; note(`Beat synced by tapping: ${Math.round(bpm)} BPM`); }
   }
 
+  // ---------------------------------------------------------------- the sync meter and the song map (songmap.js)
+  const syncMem = {}, liveMap = createLiveMap(), mapCache = new WeakMap(), r3 = v => Math.round(v * 1000) / 1000;
+  /** How locked on the beat it is: {score 0-100, state locked|finding|none, hint, source}. */
+  function syncInfo(h) {
+    const an = liveFresh() ? rt.live.an : null;
+    return syncScore({ source: rt.source, ext: an ? rt.extBeat || null : null, live: an ? { conf: an.conf, drumless: an.drumless(), misses: rt.mem.lock?.miss || 0 } : null,
+      lock: !!(an && rt.mem.lock), level: h.level, sound: h.sound, listening: !!h.via }, syncMem, performance.now());
+  }
+  const songPos = () => rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0);
+  const mapOf = (key, pre) => { const v = `${key.at}:${key.dur}:${key.env?.length}`; let c = mapCache.get(key); // (made again if a remembered song was learned further)
+    if (!c || c.v !== v) mapCache.set(key, c = { v, m: songMap(pre()) }); return c.m; };
+  const NO_MAP = { source: null, id: null, name: null, playing: false, growing: false, pos: null, dur: 0, env: [], envStep: 0.02, sections: [], drops: [], bars: [], phrase: null };
+  /**
+   * The song map: of a remembered song (id), else of what plays now: a song played here, one a music app plays or song
+   * memory follows (all known ahead), or a song heard live that isn't known (made as it is heard: growing). undefined:
+   * no such song.
+   */
+  function songMapNow(id) {
+    if (id != null) { const e = data().songs.find(x => x.id === id); if (!e) return undefined; return { ...NO_MAP, source: "memory", id: e.id, name: e.name, ...mapOf(e, () => memoryAnalysis(e)) }; }
+    if (rt.source === "song" && rt.song) return { ...NO_MAP, source: "song", id: rt.song.memId || null, name: rt.song.name, playing: !!rt.song.playing, ...mapOf(rt.song.pre, () => rt.song.pre), pos: r3(songPos()) };
+    const e = playingEntry();
+    if (rt.source === "nowplaying" && e) return { ...NO_MAP, source: "memory", id: e.id, name: e.name, playing: true, ...mapOf(e, () => memoryAnalysis(e)), pos: r3(rt.t || 0) };
+    if (rt.mem.lock && liveFresh()) { const L = rt.mem.lock; return { ...NO_MAP, source: "memory", id: L.id, name: L.name, playing: true, ...mapOf(L.pre, () => L.pre), pos: r3(lockPos(L, rt.live.an.t)) }; }
+    if (liveFresh() && liveMap.length) return { ...NO_MAP, source: "live", name: rt.live.label, playing: true, growing: true, ...liveMap.map(rt.live.an.t) };
+    return { ...NO_MAP };
+  }
+
   function status() {
-    const V = rt.view, an = liveFresh() ? rt.live.an : null;
+    const V = rt.view, an = liveFresh() ? rt.live.an : null, hear = hearingInfo();
     return {
       type: "status", source: rt.source, sourceLabel: rt.sourceLabel, fps: Math.round(rt.fps), leds: L.N, effect: D.showing, effectName: fx.list.find(e => e.id === D.showing)?.name || D.showing, style: D.style,
       styleName: fx.styles[D.style]?.name || D.style, bpm: V && V.bpm ? Math.round(V.bpm * 10) / 10 : null, part: V ? V.state : "idle",
@@ -671,7 +701,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       look: lookInfo(D.look, { song: playingEntry()?.id || null }),
       song: rt.song ? { memId: rt.song.memId || null, name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
       nowPlaying: rt.nowPlaying ? rt.nowPlaying.info() : null, spotify: rt.spotify ? rt.spotify.info() : null,
-      capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null, hearing: hearingInfo(), offsetMs: syncOffset(), timing: timingInfo(),
+      capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null, hearing: hear, offsetMs: syncOffset(), timing: timingInfo(), sync: syncInfo(hear),
       overlay: overlayState(), devices: data().devices.map(d => { const o = outs.get(d.id), { rtts, ...h } = health.get(d.id) || {}; void rtts;
         return { id: d.id, ...h, sent: o?.sender.sent || 0, used: o?.used || 0, amps: Math.round((o?.amps || 0) * 100) / 100, limited: !!o?.limited, ...latencyOf(d, h, o) }; }),
       uptime: Math.round((Date.now() - rt.startedAt) / 1000), perf: { ...perf.status(), fps: perf.fps || Math.round(rt.fps) },
@@ -706,7 +736,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   return {
     get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, perf, rt, log, listeners, previewClients, phones, health,
     rebuild, rebuildEffects, syncDirector, startLoop, syncOffset, setOutput, hearingInfo, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
-    fixtures, beats, identify, syncSegments, setPower, action, status, setScreen, clearScreen, remember, forget, djBeat, djOnAir, planFor, freshShow, lookNext, lookKeep, lookOf, setDraft, mapLight, endMap, layoutInfo, checkDevice, note,
+    fixtures, beats, identify, syncSegments, setPower, action, status, songMapNow, setScreen, clearScreen, remember, forget, djBeat, djOnAir, planFor, freshShow, lookNext, lookKeep, lookOf, setDraft, mapLight, endMap, layoutInfo, checkDevice, note,
     close() { for (const [id, o] of outs) if (data().devices.find(d => d.id === id)?.kind === "dmx") try { o.sender.send(new Uint8Array(512)); } catch {} // DMX: leave everything at zero
       loopGen++; clearTimeout(timer); clearTimeout(flushTimer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
   };
