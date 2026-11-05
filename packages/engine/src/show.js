@@ -6,11 +6,14 @@
 // exactly what the live director would have played.
 
 import { songView } from "./signals.js";
-
-function hashStr(s) { let h = 2166136261; for (const c of String(s)) { h ^= c.charCodeAt(0); h = Math.imul(h, 16777619) >>> 0; } return h; }
+import { autoPool, lookEffect, hashStr } from "./looks.js";
 
 /** Bump when the planner changes how it chooses, so stored shows that weren't edited by hand are made again. */
-export const SHOW_VERSION = 3;
+export const SHOW_VERSION = 4;
+
+// per effects object: every effect id, and the ones show mode keeps besides the rated ones (your own effects)
+const IDS = new WeakMap();
+function idsOf(fx) { let v = IDS.get(fx); if (!v) { v = { all: new Set(fx.list.map(e => e.id)), custom: new Set(fx.list.filter(e => e.custom).map(e => e.id)) }; IDS.set(fx, v); } return v; }
 
 /** Liked effects come round twice as often, banned ones never; if everything is banned, the list as it is. */
 export function withPrefs(list, prefs = {}) {
@@ -38,10 +41,12 @@ export function varyBars(sb, hot) { return hot ? (sb >= 4 ? 2 : Math.max(1, sb /
  * - A drop switches at once, to a high-impact effect, as a hard cut.
  * - Everything else waits for the next downbeat, and an effect always lasts at least a bar.
  * - Effects change on phrase lines (every swapBars() bars, counted from where the song part started).
+ * - Variety "show" (the default) picks only from the effects automatic mode is meant to use (looks.js autoPool());
+ *   "one" and "parts" play a look (o.look, looks.js) instead: see lookStep().
  * @param {object} s state: {cur, poolIdx, lastSwitchBeat, ...}; other fields are added as needed
- * @param {{impact?:string[]}} fx from createEffects()
+ * @param {{impact?:string[], list:{id:string}[]}} fx from createEffects()
  * @param {object} ST the style (fx.styles[...])
- * @param {{prefs?:object, everyBeats?:number, seed?:number}} o
+ * @param {{prefs?:object, everyBeats?:number, seed?:number, variety?:"one"|"parts"|"show", look?:object|null}} o
  * @param {number} t
  * @param {object} V songView / LiveAnalyser.view
  */
@@ -71,8 +76,13 @@ export function chooseStep(s, fx, ST, o, t, V) {
     sec = s.lvl;
   }
   const hot = sec === "drop" || sec === "peak";
-  const pool = withPrefs(ST.pools[sec] || ST.pools.calm || ST.pools.low, o.prefs);
   s.hot = hot;
+  if (o.look && (o.variety === "one" || o.variety === "parts")) {
+    const r = lookStep(s, fx, o, t, V, { beat, bar, newBar, justDropped });
+    if (r !== undefined) return r; // (undefined: the look can't play, everything in it banned: choose as a show does)
+  }
+  const keep = new Set(idsOf(fx).custom); for (const id in o.prefs || {}) if (o.prefs[id] === 1) keep.add(id);
+  const pool = withPrefs(autoPool(ST.pools[sec] || ST.pools.calm || ST.pools.low, keep), o.prefs);
   if (!pool.length) return null;
   if (sec !== s.sec) { s.sec = sec; s.secBar = bar; }
   const wrongPool = !s.chose || !pool.includes(s.cur), seed = o.seed || 0;
@@ -104,17 +114,39 @@ export function chooseStep(s, fx, ST, o, t, V) {
 }
 
 /**
+ * One step of playing a look: the effect for the song part (lookEffect()), changed at once at a drop (a hard cut) and
+ * otherwise on the next downbeat, at least a bar after the last change. A new drop also restarts the drop's 2-bar
+ * variations (s.switchBar). Returns {effect, hard}, null (no change) or undefined (no effect of the look can play).
+ */
+export function lookStep(s, fx, o, t, V, { beat, bar, newBar, justDropped }) {
+  const ids = idsOf(fx).all, ok = id => !!id && ids.has(id) && !(o.prefs && o.prefs[id] === -1);
+  const part = V.state === "silent" ? (s.lookPart || "calm") : V.state; s.lookPart = part;
+  let want = lookEffect(o.look, o.variety, part); if (!ok(want)) want = ok(o.look.main) ? o.look.main : ok(o.look.calm) ? o.look.calm : null;
+  if (!want) return undefined;
+  const newDrop = V.state === "drop" && justDropped && V.dropT !== s.dropT; if (newDrop) { s.dropT = V.dropT; s.switchBar = bar; }
+  if (s.chose && want === s.cur) return null;
+  let hard = false;
+  if (s.chose && s.cur != null) {
+    if (newDrop) hard = true;
+    else if (ok(s.cur) && (!newBar || beat - s.lastSwitchBeat < 4)) return null; // (an effect banned just now goes at once)
+  }
+  s.lastSwitchBeat = beat; s.chose = true; s.cur = want; s.switchBar = bar; s.recent = [want, ...(s.recent || [])].slice(0, 6);
+  return { effect: want, hard };
+}
+
+/**
  * The show is what the automatic director would play for this song, written down (chooseStep() with the same
  * pools, preferences and "change every N beats"). So a song with a show looks exactly as lively as one without,
  * and each block can then be changed by hand.
  * @param {{bpm:number, P:number, off:number, barOff:number, bars:{t0:number,t1:number,state:string,level:number}[], env:ArrayLike<number>, style:string, dur:number, kicks:number[], snares:number[], hats:number[], drops:number[]}} pre a song analysis
  * @param {{pools:object, styles:object, impact?:string[]}} fx from createEffects()
- * @param {{seed?:string, prefs?:Record<string,number>, everyBeats?:number}} [o] seed "": the director's own order; another seed starts the pools elsewhere (a new show)
+ * @param {{seed?:string, prefs?:Record<string,number>, everyBeats?:number, variety?:"one"|"parts"|"show", look?:object|null}} [o] seed "": the director's own order; another seed starts the pools elsewhere (a new show);
+ *   variety and look: as the director's settings (a look's show is a block or a few)
  * @returns {{t0:number, t1:number, part:string, effect:string}[]}
  */
 export function planShow(pre, fx, o = {}) {
   if (!pre || !pre.dur || !(pre.bars && pre.bars.length)) return [];
-  const ST = fx.styles[pre.style] || fx.styles.party, cfg = { prefs: o.prefs || {}, everyBeats: o.everyBeats || 8, seed: o.seed ? hashStr(o.seed) : 0 };
+  const ST = fx.styles[pre.style] || fx.styles.party, cfg = { prefs: o.prefs || {}, everyBeats: o.everyBeats || 8, seed: o.seed ? hashStr(o.seed) : 0, variety: o.variety || "show", look: o.look || null };
   pre = { kicks: [], snares: [], hats: [], drops: [], env: new Float32Array(0), off: 0, barOff: 0, ...pre }; // tolerate partial analyses
   if (!(pre.P > 0)) pre.P = pre.bpm > 0 ? 60 / pre.bpm : 0.5; // no beat grid: count at 120 BPM
   const out = [], s = { cur: null, poolIdx: {} }; let cur = null, curPart = "calm", t0 = 0;
@@ -126,8 +158,8 @@ export function planShow(pre, fx, o = {}) {
     push(t, curPart); cur = d.effect; t0 = out.length === 0 && t < step ? 0 : t;
     curPart = V.state === "silent" ? "calm" : V.state;
   }
-  if (!cur) { // everything banned or no pool: the first effect of the calm pool
-    const pool = withPrefs(ST.pools.calm || ST.pools.low, cfg.prefs); cur = pool[0] || fx.pools.calm[0]; t0 = 0;
+  if (!cur) { // everything banned or no pool: the look's effect, or the first effect of the calm pool
+    const pool = withPrefs(ST.pools.calm || ST.pools.low, cfg.prefs); cur = (cfg.look && cfg.variety !== "show" && cfg.look.main) || pool[0] || fx.pools.calm[0]; t0 = 0;
   }
   push(pre.dur, curPart);
   // a block shorter than a bar is a flicker, not a look: give its time to the block before (or after) it

@@ -246,7 +246,9 @@ function musicPage(el) {
       <div class="callout err" id="m-err" hidden></div></div>`, "span-4")}
     <div id="m-sp"></div>${DEMO ? "" : '<div id="m-np"></div>'}
     ${panel("What Tempolight hears", `<span id="m-src"></span>`, `<label class="check" title="With Automatic colours, the lights take colours from the music's mood"><input type="checkbox" id="m-moodc" ${s.moodColours !== false ? "checked" : ""}> Mood colours</label>`, `<div class="pb stack"><div class="spectrum" id="m-spec">${"<i></i>".repeat(24)}</div>
-      <div class="kv"><div><span>Tempo</span><b id="m-bpm">–</b></div><div><span>Part</span><b id="m-part">–</b></div><div><span>Style</span><b id="m-style">–</b></div><div><span>Singing</span><b id="m-voc" title="An estimate from the sound: a clear tone whose pitch moves like a voice">–</b></div><div style="grid-column: span 2"><span>Key · mood</span><b id="m-key" title="The key from which notes sound most; the mood from major or minor, brightness, drums and tempo">–</b></div></div>
+      <div class="kv"><div><span>Tempo</span><b id="m-bpm">–</b></div><div><span>Part</span><b id="m-part">–</b></div><div><span>Style</span><b id="m-style">–</b></div><div><span>Singing</span><b id="m-voc" title="An estimate from the sound: a clear tone whose pitch moves like a voice">–</b></div><div style="grid-column: span 2"><span>Key · mood</span><b id="m-key" title="The key from which notes sound most; the mood from major or minor, brightness, drums and tempo">–</b></div>
+      <div style="grid-column: span 2"><span>Look</span><b id="m-look" title="The effect and colours picked for this song, and why">–</b></div></div>
+      <div class="row" id="m-lookrow" hidden><button class="btn sm" id="m-looknext" type="button" title="Pick the next best look for this song; this one won't come back for it">Not this one</button><button class="btn sm" id="m-lookkeep" type="button" aria-pressed="false" title="Keep this look for this song">Keep</button><span class="faint" id="m-lookhelp" style="font-size:12.5px"></span></div>
       <div class="row"><button class="btn" id="m-tap" type="button">Tap the beat</button><span class="faint" style="font-size:12.5px">Tap 4 times on the beat to fix the tempo and line up the beat.</span></div></div>`, "span-6")}
     ${panel("Timing", "", "", `<div class="pb stack">
       <div class="callout warn" id="m-btcal" hidden><b>Bluetooth speakers play late — fix the timing.</b> <span id="m-btname"></span></div>
@@ -324,6 +326,10 @@ function musicPage(el) {
     finally { b.disabled = !unlocked(); }
   };
   $("#m-tap").onclick = () => api("POST", "/api/action", { type: "tap" }).catch(e => toast(e.message, true));
+  // the song's look: "Not this one" picks the next best (and remembers), "Keep" keeps it for the song
+  $("#m-looknext").onclick = () => act(() => api("POST", "/api/song/look/next", {})).then(r => toast(`Look: ${r.label}`)).catch(() => {});
+  $("#m-lookkeep").onclick = () => { const kept = $("#m-lookkeep").getAttribute("aria-pressed") === "true"; act(() => api("POST", "/api/song/look/keep", { keep: !kept }), kept ? "The look can change again" : "Look kept for this song").catch(() => {}); };
+  if (!guestOk("effects")) { $("#m-looknext").disabled = true; $("#m-lookkeep").disabled = true; }
   const setS = b => act(() => api("PATCH", "/api/settings", b)).then(refreshState).catch(() => {});
   $("#m-off").oninput = e => $("#m-off-o").textContent = e.target.value + " ms"; $("#m-off").onchange = e => setS({ syncOffsetMs: Number(e.target.value) }).then(offRows);
   // the timing each speaker keeps (settings.syncOffsets), with the one playing now marked
@@ -386,6 +392,9 @@ function musicPage(el) {
     onStatus(m) {
       $("#m-src").textContent = m.sourceLabel; $("#m-bpm").textContent = m.bpm ? m.bpm.toFixed(0) : "–"; $("#m-part").textContent = partName[m.part] || m.part; $("#m-style").textContent = m.source === "idle" ? "–" : m.styleName; $("#m-voc").textContent = m.vocal == null ? "–" : m.vocal > 0.35 ? "Yes" : m.vocal > 0.15 ? "A little" : "No";
       $("#m-key").textContent = m.source === "idle" || !m.hears ? "–" : m.hears;
+      const lk = m.look; $("#m-look").textContent = lk ? `${lk.label}${lk.provisional ? " · for now" : ""}` : m.source === "idle" ? "–" : app.state.show.variety === "show" ? "Changes with the song (Show)" : "–";
+      $("#m-lookrow").hidden = !lk; if (lk) { const kb = $("#m-lookkeep"); kb.setAttribute("aria-pressed", String(!!lk.locked)); kb.textContent = lk.locked ? "Kept ✓" : "Keep";
+        $("#m-lookhelp").textContent = lk.provisional ? "Picked from what it hears; kept for the song." : lk.rejected?.length ? `${lk.rejected.length} turned down for this song` : ""; }
       const bars = $$("#m-spec i"); bars.forEach((b, i) => b.style.height = (m.bands ? Math.max(2, m.bands[i] * 100) : 2) + "%");
       const lv = A.level(); $("#m-lvl").style.width = Math.round(lv * 100) + "%"; $("#m-lvl-o").textContent = A.state.stream ? (lv < 0.02 ? "very quiet: turn it up or move closer" : Math.round(lv * 100) + "%") : "not listening";
       if (m.song?.memId && m.song.memId !== showFor) showLine();
@@ -422,7 +431,8 @@ function effectsPage(el) {
     ${panel("How effects are chosen", "", "", `<div class="pb controls">
       <div class="field"><label for="e-style">Music style</label><select id="e-style">${Object.entries(STYLE_NAMES()).map(([k, v]) => opt(k, v, k === st.show.style)).join("")}</select><span class="help">Each style has its own effect lists for calm parts, build-ups and drops.</span></div>
       <div class="field"><label for="e-pal">Colours</label><select id="e-pal">${st.palettes.map(p => opt(p, p === "auto" ? "Automatic" : p[0].toUpperCase() + p.slice(1), p === st.show.palette)).join("")}</select></div>
-      <div class="field"><label for="e-every">Change effect every <output id="e-every-o">${st.show.everyBeats} beats</output></label><input type="range" id="e-every" min="4" max="64" step="4" value="${st.show.everyBeats}"><span class="help">In automatic mode. Song changes (build-up, drop) always switch straight away.</span></div>
+      <div class="field"><label for="e-var">Variety</label><select id="e-var">${opt("one", "One look per song", (st.show.variety || "one") === "one")}${opt("parts", "Song parts", st.show.variety === "parts")}${opt("show", "Show (changes often)", st.show.variety === "show")}</select><span class="help">One look: one effect for the whole song, picked to fit it. Song parts: one each for calm parts, build-ups and drops. Show: effects change with the song.</span></div>
+      <div class="field"><label for="e-every">Change effect every <output id="e-every-o">${st.show.everyBeats} beats</output></label><input type="range" id="e-every" min="4" max="64" step="4" value="${st.show.everyBeats}"><span class="help">In automatic mode with the Show variety. Song changes (build-up, drop) always switch straight away.</span></div>
       <div class="field"><label for="e-speed">Ambient speed <output id="e-speed-o">${st.show.speed}×</output></label><input type="range" id="e-speed" min="0.25" max="3" step="0.25" value="${st.show.speed}"></div>
       <div class="field"><label for="e-layer">Accent layer</label><select id="e-layer">${opt("", "None", !st.show.layer)}${st.effects.map(e => opt(e.id, e.name, st.show.layer?.effect === e.id)).join("")}</select><span class="help">An extra effect added on top, for example Hi-hat Starfield over a calm background.</span></div>
       <div class="field"><label for="e-lamt">Accent amount <output id="e-lamt-o">${Math.round((st.show.layer?.amount ?? 0.6) * 100)}%</output></label><input type="range" id="e-lamt" min="0.1" max="1.5" step="0.05" value="${st.show.layer?.amount ?? 0.6}"></div>
@@ -475,12 +485,12 @@ function effectsPage(el) {
   $$("#e-tags [data-tag]").forEach(b => b.onclick = () => { tag = b.dataset.tag; $$("#e-tags .chip").forEach(c => c.setAttribute("aria-pressed", c === b)); grid(); });
   const show = b => act(() => api("PATCH", "/api/show", b)).catch(() => {});
   $("#e-auto").onclick = () => show({ mode: "auto" });
-  $("#e-style").onchange = e => show({ style: e.target.value }); $("#e-pal").onchange = e => show({ palette: e.target.value });
+  $("#e-style").onchange = e => show({ style: e.target.value }); $("#e-pal").onchange = e => show({ palette: e.target.value }); $("#e-var").onchange = e => show({ variety: e.target.value });
   $("#e-every").oninput = e => $("#e-every-o").textContent = e.target.value + " beats"; $("#e-every").onchange = e => show({ everyBeats: Number(e.target.value) });
   $("#e-speed").oninput = e => $("#e-speed-o").textContent = e.target.value + "×"; $("#e-speed").onchange = e => show({ speed: Number(e.target.value) });
   const layer = () => show({ layer: $("#e-layer").value ? { effect: $("#e-layer").value, amount: Number($("#e-lamt").value) } : null });
   $("#e-layer").onchange = layer; $("#e-lamt").oninput = e => $("#e-lamt-o").textContent = Math.round(e.target.value * 100) + "%"; $("#e-lamt").onchange = layer;
-  if (!can) $$("#e-style, #e-pal, #e-every, #e-speed, #e-auto, #e-layer, #e-lamt").forEach(x => x.disabled = true);
+  if (!can) $$("#e-style, #e-pal, #e-var, #e-every, #e-speed, #e-auto, #e-layer, #e-lamt").forEach(x => x.disabled = true);
   // make your own: a form over the parts of a custom effect; editing a custom effect fills it in
   let editing = null; const U = id => $("#u-" + id);
   const outFmt = { speed: v => v + "×", width: v => Math.round(v * 100) + "%", cyc: v => String(v), bg: v => Math.round(v * 100) + "%" };
@@ -641,7 +651,7 @@ function scenesPage(el) {
   $("#sc-save").onclick = async () => { const name = prompt("Name for this scene:", "My scene"); if (name) { await act(() => api("POST", "/api/scenes", { name }), "Scene saved").catch(() => {}); re(); } };
   $$("[data-apply]").forEach(b => b.onclick = () => act(() => api("POST", `/api/scenes/${b.dataset.apply}/apply`), "Scene applied").catch(() => {}));
   $$("[data-ren]").forEach(b => b.onclick = async () => { const sc = st.scenes.find(s => s.id === b.dataset.ren); const name = prompt("New name:", sc.name); if (name) { await act(() => api("PUT", `/api/scenes/${sc.id}`, { name })).catch(() => {}); re(); } });
-  $$("[data-upd]").forEach(b => b.onclick = async () => { const sh = app.state.show; await act(() => api("PUT", `/api/scenes/${b.dataset.upd}`, { show: { mode: sh.mode, effect: sh.effect, style: sh.style, palette: sh.palette, everyBeats: sh.everyBeats, speed: sh.speed }, brightness: app.state.settings.brightness }), "Scene updated").catch(() => {}); re(); });
+  $$("[data-upd]").forEach(b => b.onclick = async () => { const sh = app.state.show; await act(() => api("PUT", `/api/scenes/${b.dataset.upd}`, { show: { mode: sh.mode, effect: sh.effect, style: sh.style, palette: sh.palette, everyBeats: sh.everyBeats, variety: sh.variety, speed: sh.speed }, brightness: app.state.settings.brightness }), "Scene updated").catch(() => {}); re(); });
   $$("[data-del]").forEach(b => b.onclick = async () => { if (confirm("Delete this scene?")) { await act(() => api("DELETE", `/api/scenes/${b.dataset.del}`)).catch(() => {}); re(); } });
   $$("[data-en]").forEach(b => b.onchange = async () => { await act(() => api("PUT", `/api/schedules/${b.dataset.en}`, { enabled: b.checked })).catch(() => {}); re(); });
   $$("[data-run]").forEach(b => b.onclick = () => act(() => api("POST", `/api/schedules/${b.dataset.run}/run`), "Done").catch(() => {}));

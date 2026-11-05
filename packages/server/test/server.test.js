@@ -407,6 +407,7 @@ test("auto-generated shows: a remembered song gets a timeline the director follo
   const s = await setup();
   try {
     await s.call("POST", "/api/devices", { virtual: true });
+    assert.equal((await s.call("PATCH", "/api/show", { variety: "show" })).body.variety, "show"); // effects change with the song
     const song = edm(22050), pre = await preAnalyseCore(song.x, song.sr);
     await s.call("POST", "/api/song", { name: "Showtime", analysis: { ...pre, env: Array.from(pre.env) } });
     const id = s.app.runtime.status().song.memId; assert.ok(id, "the song is remembered");
@@ -422,6 +423,38 @@ test("auto-generated shows: a remembered song gets a timeline the director follo
     await s.call("PATCH", "/api/settings", { shows: false }); await sleep(150); assert.equal(s.app.runtime.director.settings.plan, null, "shows can be turned off");
     await s.call("PATCH", "/api/settings", { shows: true });
     const fresh = (await s.call("DELETE", `/api/songs/${id}/show`)).body; assert.ok(fresh.show.length >= 3); assert.equal((await s.call("GET", `/api/songs/${id}/show`)).body.edited, false);
+  } finally { await s.done(); }
+});
+
+test("song looks: one effect for the song, shown in the status; Not this one picks the next best and remembers; Keep keeps it", async () => {
+  const s = await setup();
+  try {
+    await s.call("POST", "/api/devices", { virtual: true });
+    assert.equal((await s.call("GET", "/api/state")).body.show.variety, "one", "one look per song by default");
+    assert.equal((await s.call("PATCH", "/api/show", { variety: "lots" })).status, 400);
+    const song = edm(22050), pre = await preAnalyseCore(song.x, song.sr);
+    await s.call("POST", "/api/song", { name: "Look song", analysis: { ...pre, env: Array.from(pre.env) } });
+    await s.call("POST", "/api/song/clock", { pos: 5, playing: true }); await sleep(150);
+    const st = s.app.runtime.status(), id = st.song.memId, L = st.look;
+    assert.ok(L && L.main && L.song === id && !L.provisional, JSON.stringify(L));
+    assert.match(L.label, /^.+ · [A-Z]\w+ \(.+\)$/); assert.equal(st.effect, L.main, "the look plays");
+    const show = (await s.call("GET", `/api/songs/${id}/show`)).body.show; assert.ok(show.length <= 3 && show.every(b => [L.main, L.drop, L.build, L.calm].includes(b.effect)), JSON.stringify(show));
+    assert.equal((await s.call("GET", "/api/songs")).body[0].look.main, L.main);
+    const n = await s.call("POST", "/api/song/look/next", {}); assert.equal(n.status, 200);
+    assert.notEqual(n.body.main, L.main); assert.ok(n.body.rejected.includes(L.main)); assert.ok(s.app.store.data.settings.effectNudge[L.main] < 0, "a little less liked");
+    await sleep(150); assert.equal(s.app.runtime.status().look.main, n.body.main);
+    assert.ok((await s.call("GET", `/api/songs/${id}/show`)).body.show.some(b => b.effect === n.body.main), "the show follows the new look");
+    const k = await s.call("POST", "/api/song/look/keep", { id }); assert.equal(k.body.locked, true); assert.ok(s.app.store.data.settings.effectNudge[n.body.main] > 0);
+    await s.call("POST", "/api/song", { name: "Look song", analysis: { ...pre, env: Array.from(pre.env) } }); // played again: remembered again
+    assert.equal(s.app.store.data.songs.find(e => e.id === id).look.main, n.body.main, "a kept look stays");
+    assert.equal((await s.call("POST", "/api/song/look/keep", { id, keep: false })).body.locked, false);
+    assert.equal((await s.call("POST", "/api/song/look/next", { id: "nope" })).status, 404);
+    assert.equal((await s.call("PATCH", "/api/show", { variety: "parts" })).body.variety, "parts");
+    await s.call("POST", "/api/song/clock", { pos: 5, playing: true }); await sleep(150); assert.equal(s.app.runtime.status().look.variety, "parts");
+    await s.call("PATCH", "/api/show", { variety: "show" }); await s.call("POST", "/api/song/clock", { pos: 5, playing: true }); await sleep(150);
+    assert.equal(s.app.runtime.status().look, null, "variety show: no look");
+    await s.call("DELETE", "/api/song"); await sleep(100);
+    assert.equal((await s.call("POST", "/api/song/look/next", {})).status, 404, "nothing playing");
   } finally { await s.done(); }
 });
 

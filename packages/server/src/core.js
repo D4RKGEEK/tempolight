@@ -4,7 +4,7 @@ import { startScheduler, nextRun } from "./scheduler.js";
 import { resolveTime } from "./sun.js";
 import { DEFAULTS, merge } from "./defaults.js";
 import { createHome, homeRoutes } from "./home.js";
-import { ROOM_PRESETS, buildPreset, cleanTimeline, SHOW_VERSION } from "../../engine/src/index.js";
+import { ROOM_PRESETS, buildPreset, cleanTimeline, SHOW_VERSION, VARIETIES } from "../../engine/src/index.js";
 import { createPro } from "./pro-api.js";
 import { createLights } from "./lights.js";
 
@@ -190,6 +190,7 @@ export function createCore({ store, runtime, env }) {
     if (b.style !== undefined) { if (b.style !== "auto" && !runtime.effects.styles[b.style]) throw new HttpError(400, `Unknown style "${b.style}"`); sh.style = b.style; }
     if (b.palette !== undefined) { if (!runtime.effects.palettes[b.palette]) throw new HttpError(400, `Unknown palette "${b.palette}"`); sh.palette = b.palette; }
     if (b.everyBeats !== undefined) sh.everyBeats = Math.max(1, Math.min(64, Math.round(Number(b.everyBeats))));
+    if (b.variety !== undefined) { if (!VARIETIES.includes(b.variety)) throw new HttpError(400, "variety is one (one look per song), parts (one per song part) or show (effects change with the song)"); sh.variety = b.variety; }
     if (b.speed !== undefined) sh.speed = Math.max(0.1, Math.min(4, Number(b.speed)));
     if (b.layer !== undefined) { if (b.layer && !effectIds().has(b.layer.effect)) throw new HttpError(400, `Unknown effect "${b.layer.effect}"`);
       sh.layer = b.layer ? { effect: b.layer.effect, amount: Math.max(0, Math.min(1.5, Number(b.layer.amount ?? 0.6))) } : null; }
@@ -229,12 +230,12 @@ export function createCore({ store, runtime, env }) {
   route("GET", "/api/wifi", null, async () => env.wifi ? env.wifi.status() : { available: false });
   route("POST", "/api/wifi/setup", "admin", async () => { if (!env.wifi) throw new HttpError(400, "Wi-Fi setup is only on the Tempolight Raspberry Pi image"); try { return await env.wifi.setup(); } catch (e) { throw new HttpError(e.code === 400 ? 400 : 502, e.message); } });
   route("GET", "/api/songs", null, () => data().songs.map(e => ({ id: e.id, name: e.name, bpm: e.bpm, dur: e.dur, style: e.style, drops: e.drops.length, at: e.at,
-    ...(e.spotifyId ? { spotifyId: e.spotifyId } : {}), ...(e.src ? { src: e.src } : {}), ...(e.cov ? { cover: Math.round(Math.min(1, e.cov.reduce((n, c) => n + c[1] - c[0], 0) / e.dur) * 100) } : {}) }))); // src: "learned" | "shared" | "spotify-analysis" (from spotify.js); cover: percent of a partly learned song
+    ...(e.spotifyId ? { spotifyId: e.spotifyId } : {}), ...(e.src ? { src: e.src } : {}), ...(e.cov ? { cover: Math.round(Math.min(1, e.cov.reduce((n, c) => n + c[1] - c[0], 0) / e.dur) * 100) } : {}), ...(e.look ? { look: { main: e.look.main, palette: e.look.palette || null, locked: !!e.look.locked } } : {}) }))); // src: "learned" | "shared" | "spotify-analysis" (from spotify.js); cover: percent of a partly learned song
   const songById = id => { const e = data().songs.find(x => x.id === id); if (!e) throw new HttpError(404, "That song isn't remembered"); return e; };
   // a song's show: effect blocks (`show`, as before) plus the timeline editor's colour blocks, cues and brightness keyframes
   const hex2 = c => "#" + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0")).join("");
   const showOf = e => ({ id: e.id, name: e.name, dur: e.dur, edited: !!e.showEdited, show: e.show || [], colors: e.colors || [], cues: e.cues || [], bright: e.bright || [] });
-  route("GET", "/api/songs/:id/show", null, (ctx, p) => { const e = songById(p.id); if (!e.show || (!e.showEdited && e.showV !== SHOW_VERSION)) { e.show = runtime.planFor(e, ""); e.showV = SHOW_VERSION; store.save(); }
+  route("GET", "/api/songs/:id/show", null, (ctx, p) => { const e = runtime.freshShow(songById(p.id));
     // what the editor draws: the beat grid, bars, drops, loudness (10 a second, base64 bytes) and the palettes' colours
     return { ...showOf(e), bpm: e.bpm, P: e.P, off: e.off, barOff: e.barOff, style: e.style, drops: e.drops, bars: e.bars, env: e.env,
       palettes: Object.fromEntries(Object.entries(runtime.effects.palettes).filter(([k]) => k !== "auto").map(([k, v]) => [k, v.map(hex2)])) }; });
@@ -384,7 +385,7 @@ export function createCore({ store, runtime, env }) {
   route("GET", "/api/scenes", null, () => data().scenes);
   route("POST", "/api/scenes", "scenes", async (ctx) => {
     const b = ctx.body, sh = data().show;
-    const sc = { id: env.newId("s"), name: String(b.name || "New scene").slice(0, 60), show: b.show || { mode: sh.mode, effect: sh.effect, style: sh.style, palette: sh.palette, everyBeats: sh.everyBeats, speed: sh.speed, params: JSON.parse(JSON.stringify(sh.params || {})), layer: sh.layer || null }, brightness: b.brightness ?? data().settings.brightness };
+    const sc = { id: env.newId("s"), name: String(b.name || "New scene").slice(0, 60), show: b.show || { mode: sh.mode, effect: sh.effect, style: sh.style, palette: sh.palette, everyBeats: sh.everyBeats, variety: sh.variety, speed: sh.speed, params: JSON.parse(JSON.stringify(sh.params || {})), layer: sh.layer || null }, brightness: b.brightness ?? data().settings.brightness };
     data().scenes.push(sc); changed("scenes"); return sc;
   });
   route("PUT", "/api/scenes/:id", "scenes", async (ctx, p) => { const sc = data().scenes.find(s => s.id === p.id); if (!sc) throw new HttpError(404, "No such scene"); const b = ctx.body;
@@ -413,6 +414,11 @@ export function createCore({ store, runtime, env }) {
   route("POST", "/api/song", null, async (ctx) => { const b = ctx.body; if (!b.analysis || !(b.analysis.bpm > 0)) throw new HttpError(400, "Send the song's analysis"); runtime.setSong(b, b.clientId || null); return { ok: true }; });
   route("POST", "/api/song/clock", null, async (ctx) => { runtime.songClock(ctx.body); return { ok: true }; });
   route("DELETE", "/api/song", null, () => { runtime.clearSong(); return { ok: true }; });
+  // the song's look (one effect for the whole song, looks.js): "Not this one" picks the next best and remembers the one
+  // turned down; "Keep" keeps it. For the song playing now, or a remembered song by id.
+  const lookId = b => b && b.id != null ? String(b.id) : null;
+  route("POST", "/api/song/look/next", "effects", (ctx) => { const r = runtime.lookNext(lookId(ctx.body)); if (!r) throw new HttpError(404, ctx.body?.id ? "That song isn't remembered" : "Nothing is playing with a look (automatic mode, variety one look or song parts)"); changed("songs"); return r; });
+  route("POST", "/api/song/look/keep", "effects", (ctx) => { const r = runtime.lookKeep(lookId(ctx.body), ctx.body?.keep !== false); if (!r) throw new HttpError(404, ctx.body?.id ? "That song isn't remembered" : "Nothing is playing with a look (automatic mode, variety one look or song parts)"); changed("songs"); return r; });
   route("GET", "/api/audio/sources", null, () => env.listSources().map(({ id, label }) => ({ id, label })));
 
   // lock

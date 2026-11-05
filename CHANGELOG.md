@@ -5,6 +5,12 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### One look per song
+- Automatic mode now picks one well-chosen effect and palette for each song when it is analysed, and keeps it for the whole song, on the beat (like picking one LedFx effect). It fits the song: a fast four-on-the-floor track gets a kick-driven effect, a ballad a calm one that doesn't need a beat; the colours come from the mood. The same song always gets the same look; different songs get different ones.
+- The look stays lively from inside: speed follows the tempo, it gets stronger through build-ups, the colour steps at new sections (a chorus that comes back gets the same colour), drops vary every 2 bars, and the pump, the dip before the drop and the drop flash stay.
+- Music page: "Look: Kick Shockwave · Sunset (fast four-on-the-floor, high energy)", with **Not this one** (the next best look; that one won't come back for the song) and **Keep**. Live listening picks a look after a few seconds and keeps it for the song.
+- Effects page → **Variety**: One look per song (the default), Song parts (one effect each for calm parts, build-ups and drops), or Show (effects change with the song, as before, now only from the rated effects). API: `show.variety`, `POST /api/song/look/next`, `POST /api/song/look/keep`, `look` in the status.
+
 ### A new sync engine
 - New live beat tracker: lights land on 91% of beats (was 64%) across house, hip-hop, dubstep, broken beats, swing, breaks and tempo changes; it holds the beat through breaks and finds it again in under a second; kicks are heard under sidechained bass; beat 1 of the bar is found live. It also says how sure it is, and reacts to hits instead of guessing when it isn't.
 - Every light shows the beat at the same moment: each frame is drawn a little ahead and faster lights wait for the slowest (Hue, WiZ and WLED now flash together, within a few ms). Each light's delay is set by itself; the timing slider is a fine trim on top. A steadier frame loop.

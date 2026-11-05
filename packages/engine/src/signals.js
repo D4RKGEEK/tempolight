@@ -44,7 +44,9 @@ export function songView(pre, t) {
   let la = 0, ln = 0; for (let k = -15; k <= 0; k++) { const j = Math.round(t / 0.02) + k; if (j >= 0 && j < pre.env.length) { la += pre.env[j]; ln++; } }
   const loud = Math.min(1, ln ? la / ln : 0), lvl = (bar ? bar.level : loud) * 0.7 + loud * 0.3;
   const di = lastLE(pre.drops, t + 1e-3);
-  return { g, bpm: pre.bpm, style: pre.style, loud, level: lvl < 0.35 ? "low" : lvl < 0.72 ? "mid" : "peak",
+  // the section (repeat label) this bar belongs to, when the analysis has sections: looks step their colour on these
+  let section = null; const secs = pre.sections; if (secs && bi >= 0) for (let k = secs.length - 1; k >= 0; k--) if (secs[k].bar0 <= bi) { if (bi < secs[k].bar1) section = secs[k]; break; }
+  return { section, barI: bi, g, bpm: pre.bpm, style: pre.style, loud, level: lvl < 0.35 ? "low" : lvl < 0.72 ? "mid" : "peak",
     state: quietFor(pre.env, t) ? "silent" : state, buildP,
     dropT: di >= 0 ? pre.drops[di] : -9, nextDrop: di + 1 < pre.drops.length ? pre.drops[di + 1] : null,
     kick, snare: si >= 0 ? pre.snares[si] : -9, hat: hi >= 0 ? pre.hats[hi] : -9, pulses, snares, pulseN: ki, kickS: kickStrength(pre, ki),
