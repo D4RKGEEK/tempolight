@@ -48,6 +48,7 @@ const META = {
   "guides/connect-lights": { icon: "lightbulb" },
   "guides/room-and-zones": { icon: "layout-grid" },
   "guides/music-sources": { icon: "music", sidebarTitle: "Music sources" },
+  "guides/your-music": { icon: "list-music", sidebarTitle: "Your own music" },
   "hearing-music": { icon: "ear", sidebarTitle: "Hearing the music" },
   spotify: { icon: "disc-3", sidebarTitle: "Spotify" },
   effects: { icon: "wand-sparkles" },
@@ -91,7 +92,7 @@ const NAV = [
   ] },
   { tab: "Guides", icon: "book-open", groups: [
     { group: "Guides", pages: ["guides/overview"] },
-    { group: "Lights and music", pages: ["guides/connect-lights", "guides/room-and-zones", "guides/music-sources", "hearing-music", "spotify", "effects"] },
+    { group: "Lights and music", pages: ["guides/connect-lights", "guides/room-and-zones", "guides/music-sources", "guides/your-music", "hearing-music", "spotify", "effects"] },
     { group: "Run it anywhere", pages: ["guides/docker", "raspberry-pi", "tempolight-lite", "deploy-cloudflare"] },
     { group: "Smart home", pages: ["guides/smart-home", "voice", "wake-up"] },
     { group: "Parties and streams", pages: ["guides/party-and-dj", "guides/creators", "streamdeck", "integrations"] },

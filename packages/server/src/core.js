@@ -34,8 +34,8 @@ export function createCore({ store, runtime, env }) {
   const need = (ctx, area) => { if (!authorised(ctx, area)) throw new HttpError(403, "Settings are locked. Unlock with the PIN in Settings."); };
   const effectIds = () => new Set(runtime.effects.list.map(e => e.id));
   const pub = () => {
-    const d = data();
-    return { version: env.version, canQuit: !!env.quit, settings: { ...d.settings, mqtt: { ...d.settings.mqtt, password: "", hasPassword: !!d.settings.mqtt?.password } }, show: d.show, devices: d.devices.map(x => safeDev(x)), room: d.room, scenes: d.scenes,
+    const d = data(); // (settings.library is left out: the music folders are for an admin only, through GET /api/library)
+    return { version: env.version, canQuit: !!env.quit, settings: { ...d.settings, mqtt: { ...d.settings.mqtt, password: "", hasPassword: !!d.settings.mqtt?.password }, library: undefined }, show: d.show, devices: d.devices.map(x => safeDev(x)), room: d.room, scenes: d.scenes,
       schedules: d.schedules.map(s => ({ ...s, next: nextRun(s, new Date(), d.settings.location)?.toISOString() || null })), locked: locked(),
       effects: runtime.effects.list, styles: Object.fromEntries(Object.entries(runtime.effects.styles).map(([k, v]) => [k, v.name])),
       palettes: Object.keys(runtime.effects.palettes), presets: Object.values(ROOM_PRESETS), captureSources: env.listSources().map(({ id, label }) => ({ id, label })), firstRun: store.firstRun && !d.devices.length };
@@ -234,7 +234,7 @@ export function createCore({ store, runtime, env }) {
   route("POST", "/api/wifi/setup", "admin", async () => { if (!env.wifi) throw new HttpError(400, "Wi-Fi setup is only on the Tempolight Raspberry Pi image"); try { return await env.wifi.setup(); } catch (e) { throw new HttpError(e.code === 400 ? 400 : 502, e.message); } });
   route("GET", "/api/songs", null, () => data().songs.map(e => ({ id: e.id, name: e.name, bpm: e.bpm, dur: e.dur, style: e.style, drops: e.drops.length, at: e.at,
     ...(e.spotifyId ? { spotifyId: e.spotifyId } : {}), ...(e.src ? { src: e.src } : {}), ...(e.cov ? { cover: Math.round(Math.min(1, e.cov.reduce((n, c) => n + c[1] - c[0], 0) / e.dur) * 100) } : {}), ...(e.look ? { look: { main: e.look.main, palette: e.look.palette || null, locked: !!e.look.locked } } : {}) }))); // src: "learned" | "shared" | "spotify-analysis" (from spotify.js); cover: percent of a partly learned song
-  const songById = id => { const e = data().songs.find(x => x.id === id); if (!e) throw new HttpError(404, "That song isn't remembered"); return e; };
+  const songById = id => { const e = runtime.songById ? runtime.songById(id) : data().songs.find(x => x.id === id); if (!e) throw new HttpError(404, "That song isn't remembered"); return e; }; // (a library song too)
   // a song's show: effect blocks (`show`, as before) plus the timeline editor's colour blocks, cues and brightness keyframes
   const hex2 = c => "#" + c.map(v => Math.round(Math.max(0, Math.min(1, v)) * 255).toString(16).padStart(2, "0")).join("");
   const showOf = e => ({ id: e.id, name: e.name, dur: e.dur, edited: !!e.showEdited, show: e.show || [], colors: e.colors || [], cues: e.cues || [], bright: e.bright || [] });
@@ -247,8 +247,8 @@ export function createCore({ store, runtime, env }) {
   const cleanShow = (e, b) => { try { return cleanTimeline(b || {}, { dur: e.dur, effects: effectIds(), palettes: runtime.effects.palettes }); } catch (err) { if (err.code === 400) throw new HttpError(400, err.message); throw err; } };
   route("PUT", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id), c = cleanShow(e, ctx.body);
     if (!c.show) throw new HttpError(400, "show is a list of {t0, t1, effect}");
-    Object.assign(e, c); e.showEdited = true; runtime.setDraft(null); changed("songs"); return { ok: true, ...showOf(e) }; });
-  route("DELETE", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id); e.show = runtime.planFor(e); e.showV = SHOW_VERSION; e.showEdited = false; delete e.colors; delete e.cues; delete e.bright; runtime.setDraft(null); changed("songs"); return { ok: true, ...showOf(e) }; });
+    Object.assign(e, c); e.showEdited = true; runtime.setDraft(null); runtime.saveSong?.(e); changed("songs"); return { ok: true, ...showOf(e) }; });
+  route("DELETE", "/api/songs/:id/show", "effects", (ctx, p) => { const e = songById(p.id); e.show = runtime.planFor(e); e.showV = SHOW_VERSION; e.showEdited = false; delete e.colors; delete e.cues; delete e.bright; runtime.setDraft(null); runtime.saveSong?.(e); changed("songs"); return { ok: true, ...showOf(e) }; });
   // the editor's unsaved version plays on the lights for two minutes (it sends it again while it's open), without being saved
   route("PUT", "/api/songs/:id/show/draft", "effects", (ctx, p) => { const e = songById(p.id), c = cleanShow(e, ctx.body);
     runtime.setDraft({ id: e.id, show: c.show || e.show || [], colors: c.colors ?? e.colors ?? [], cues: c.cues ?? e.cues ?? [], bright: c.bright ?? e.bright ?? [] }); return { ok: true }; });

@@ -25,6 +25,7 @@ export const tags = [
   ["Music", "Songs played in a browser, their clock, song memory and each song's editable show."],
   ["Hearing", "How Tempolight hears the music: the guided panel on the Music page."],
   ["Now playing", "The track music apps on this computer play, and the Spotify sign-in."],
+  ["Music library", "Your own music folders, analysed ahead so every song is followed from its first play. Node server only, admin only."],
   ["Spotify", "Lights that follow the Spotify track with its beat map."],
   ["Requests", "Guest song requests from `/request`. Open to everyone, even when locked."],
   ["Settings", "Every setting, in one call."],
@@ -187,6 +188,19 @@ export const operations = {
   "POST /api/hearing/check": { tag: "Hearing", summary: "Check again", res: "Hearing", description: "The same, detecting everything again now." },
   "POST /api/hearing/use": { tag: "Hearing", summary: "Choose how to hear music", body: obj({ choice: en(["computer", "mic", "pi", ""]) }, { required: ["choice"] }), bodyExample: { choice: "computer" }, res: "Hearing",
     errors: { 400: "Choose computer, mic or pi" }, description: "Turns that way on: this computer's sound, a browser's microphone, or a sound input on a Pi (and server capture on or off)." },
+
+  // ============================================================ Music library
+  "GET /api/library": { tag: "Music library", summary: "Get the music library", res: "Library", query: [{ name: "songs", description: "`0` leaves the song list out (for the progress)." }],
+    description: "The folders, what was found and analysed, the progress (`Analysing 34 of 210 · 1.2 s each`), whether ffmpeg is installed, and the songs with their tempo, key and look." },
+  "PATCH /api/library": { tag: "Music library", summary: "Change the folders", body: obj({ folders: arr(str("A full path on the computer Tempolight runs on (`~/Music` works).")), watch: bool() }), bodyExample: { folders: ["/music"], watch: true }, res: "Library",
+    errors: { 400: "There is no folder /musik on the computer Tempolight runs on" },
+    description: "Sets the music folders (the whole list) and whether new songs are noticed by themselves, then looks through them. Each folder must be a full path to an existing folder, not a whole disk; files are never read outside these folders (links that lead out are not followed). Taking a folder out takes its songs out of the library." },
+  "POST /api/library/scan": { tag: "Music library", summary: "Look for new songs", res: "Library", errors: { 400: "Add a music folder first" },
+    description: "Looks through the folders now. New and changed files are analysed; files already analysed (same path, size and time) are skipped, and copies are kept once." },
+  "POST /api/library/pause": { tag: "Music library", summary: "Pause analysing", res: "Library", description: "Stops the analysis at once (the songs being analysed start again on resume). Stays paused after a restart." },
+  "POST /api/library/resume": { tag: "Music library", summary: "Resume analysing", res: "Library", description: "Goes on analysing." },
+  "DELETE /api/library/songs/{id}": { tag: "Music library", summary: "Remove a song", params: { id: "The song's id (`l…`)." }, res: R(OK), errors: { 404: "That song isn't in the library" },
+    description: "Takes the song out of the library. The file stays; it isn't added again unless it changes." },
 
   // ============================================================ Now playing
   "GET /api/nowplaying": { tag: "Now playing", summary: "Get now playing", res: "NowPlaying",

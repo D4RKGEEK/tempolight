@@ -26,6 +26,7 @@ let demo = null;
 let NP = null; // "now playing" from music apps on the server's computer (nowplaying.js; not in the demo)
 let SP = null; // the "Sync with Spotify" panel (spotify.js; in the demo it only explains)
 let HR = null; // the "How should Tempolight hear your music?" panel on the Music page (hearing.js)
+let LB = null; // the "Your own music" panel on the Music page (library.js; in the demo it only explains)
 
 // ---------------------------------------------------------------- server access
 export async function api(method, path, body) {
@@ -248,7 +249,7 @@ function musicPage(el) {
       <button class="btn danger" id="m-stop" type="button" hidden>Stop listening</button>
       <p class="faint" style="font-size:12.5px">Your browser will ask what to share. For computer sound in Chrome or Edge, choose the screen or tab and turn on “Share audio”. Audio stays on your network.</p>
       <div class="callout err" id="m-err" hidden></div></div>`, "span-4")}
-    <div id="m-sp"></div>${DEMO ? "" : '<div id="m-np"></div>'}
+    <div id="m-sp"></div>${DEMO ? "" : '<div id="m-np"></div>'}<div id="m-lib"></div>
     ${panel("What Tempolight hears", `<span id="m-src"></span>`, `<label class="check" title="With Automatic colours, the lights take colours from the music's mood"><input type="checkbox" id="m-moodc" ${s.moodColours !== false ? "checked" : ""}> Mood colours</label>`, `<div class="pb stack"><div class="spectrum" id="m-spec">${"<i></i>".repeat(24)}</div>
       <div class="kv"><div><span>Tempo</span><b id="m-bpm">–</b></div><div><span>Part</span><b id="m-part">–</b></div><div><span>Style</span><b id="m-style">–</b></div><div><span>Singing</span><b id="m-voc" title="An estimate from the sound: a clear tone whose pitch moves like a voice">–</b></div><div style="grid-column: span 2"><span>Key · mood</span><b id="m-key" title="The key from which notes sound most; the mood from major or minor, brightness, drums and tempo">–</b></div></div>
       <div class="row"><button class="btn" id="m-tap" type="button">Tap the beat</button><span class="faint" style="font-size:12.5px">Tap 4 times on the beat to fix the tempo and line up the beat.</span></div></div>`, "span-6")}
@@ -280,6 +281,7 @@ function musicPage(el) {
     if (/^#\/music\/hear/.test(location.hash)) { const h = $("#hear"); h?.scrollIntoView({ block: "start" }); h?.classList.add("flash"); } }).catch(() => {});
   if (!DEMO) import("/nowplaying.js").then(mod => { NP = mod; mod.mount($("#m-np")); if (app.status) mod.status(app.status); }).catch(() => {});
   import("/spotify.js").then(mod => { SP = mod; mod.mount($("#m-sp"), { demo: DEMO }); if (app.status) mod.status(app.status); }).catch(() => {});
+  import("/library.js").then(mod => { LB = mod; mod.mount($("#m-lib"), { demo: DEMO }); }).catch(() => {});
   const fmtT = v => `${Math.floor(v / 60)}:${String(Math.floor(v % 60)).padStart(2, "0")}`;
   async function songs() { const list = await api("GET", "/api/songs").catch(() => []), tb = $("#m-songs"); if (!tb) return;
     $("#m-memn").textContent = list.length ? `${list.length} song${list.length > 1 ? "s" : ""} remembered` : "";
@@ -391,7 +393,7 @@ function musicPage(el) {
   let offFor;
   return {
     destroy() { HR?.destroy(); HR = null; SM.destroy(); },
-    onAudio: renderQueue, onLog(e) { if (/^Remembered|^Song memory|^Spotify: (learned|got)/.test(e.msg)) songs(); }, onChanged(w) { if (w.has("requests")) requests(); if (w.has("songs")) songs(); if (w.has("settings") || w.has("output")) offRows(); },
+    onAudio: renderQueue, onLog(e) { if (/^Remembered|^Song memory|^Spotify: (learned|got)/.test(e.msg)) songs(); }, onChanged(w) { if (w.has("requests")) requests(); if (w.has("songs")) songs(); if (w.has("library") || w.has("lock")) LB?.changed(); if (w.has("settings") || w.has("output")) offRows(); },
     onStatus(m) {
       $("#m-src").textContent = m.sourceLabel; $("#m-bpm").textContent = m.bpm ? m.bpm.toFixed(0) : "–"; $("#m-part").textContent = partName[m.part] || m.part; $("#m-style").textContent = m.source === "idle" ? "–" : m.styleName; $("#m-voc").textContent = m.vocal == null ? "–" : m.vocal > 0.35 ? "Yes" : m.vocal > 0.15 ? "A little" : "No";
       $("#m-key").textContent = m.source === "idle" || !m.hears ? "–" : m.hears;

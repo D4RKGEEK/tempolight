@@ -74,6 +74,10 @@
       "description": "The track music apps on this computer play, and the Spotify sign-in."
     },
     {
+      "name": "Music library",
+      "description": "Your own music folders, analysed ahead so every song is followed from its first play. Node server only, admin only."
+    },
+    {
       "name": "Spotify",
       "description": "Lights that follow the Spotify track with its beat map."
     },
@@ -3653,6 +3657,675 @@
         "security": [],
         "x-tempolight-area": "open",
         "x-tempolight-source": "packages/server/src/core.js"
+      }
+    },
+    "/api/library": {
+      "get": {
+        "tags": [
+          "Music library"
+        ],
+        "summary": "Get the music library",
+        "description": "The folders, what was found and analysed, the progress (`Analysing 34 of 210 · 1.2 s each`), whether ffmpeg is installed, and the songs with their tempo, key and look.\n\n**Access:** admin. Needs an unlock token (`x-tempolight-token`) while a PIN lock is set; without a lock, anyone can call it.",
+        "operationId": "getLibrary",
+        "parameters": [
+          {
+            "name": "songs",
+            "in": "query",
+            "required": false,
+            "description": "`0` leaves the song list out (for the progress).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Library"
+                },
+                "example": {
+                  "available": true,
+                  "folders": [
+                    {
+                      "path": "/music",
+                      "exists": true,
+                      "songs": 210
+                    }
+                  ],
+                  "watch": true,
+                  "paused": false,
+                  "ffmpeg": true,
+                  "ffprobe": true,
+                  "message": null,
+                  "counts": {
+                    "files": 214,
+                    "analysed": 210,
+                    "queued": 0,
+                    "errors": 1,
+                    "needsFfmpeg": 0,
+                    "skipped": 2,
+                    "duplicates": 1,
+                    "removed": 0
+                  },
+                  "cap": {
+                    "songs": 210,
+                    "maxSongs": 5000,
+                    "bytes": 5400000,
+                    "maxBytes": 209715200,
+                    "full": false
+                  },
+                  "progress": {
+                    "state": "idle",
+                    "waiting": null,
+                    "done": 0,
+                    "total": 0,
+                    "perSongMs": 0,
+                    "avgDecodeMs": 0,
+                    "avgAnalyseMs": 0,
+                    "workers": 0,
+                    "maxWorkers": 3,
+                    "inline": false,
+                    "current": [],
+                    "lastScan": {
+                      "at": 1762300000000,
+                      "files": 214
+                    }
+                  },
+                  "errors": [],
+                  "songs": [
+                    {
+                      "id": "l3f9a0c21d7",
+                      "name": "Daft Punk - One More Time",
+                      "bpm": 122.7,
+                      "dur": 320.4,
+                      "key": "D major",
+                      "look": {
+                        "main": "shock",
+                        "name": "Shockwave",
+                        "palette": "neon",
+                        "locked": false
+                      },
+                      "file": "Daft Punk/Discovery/01 One More Time.mp3"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Locked, or not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Settings are locked. Unlock with the PIN in Settings."
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ],
+        "x-tempolight-area": "admin",
+        "x-tempolight-source": "packages/server/src/library.js"
+      },
+      "patch": {
+        "tags": [
+          "Music library"
+        ],
+        "summary": "Change the folders",
+        "description": "Sets the music folders (the whole list) and whether new songs are noticed by themselves, then looks through them. Each folder must be a full path to an existing folder, not a whole disk; files are never read outside these folders (links that lead out are not followed). Taking a folder out takes its songs out of the library.\n\n**Access:** admin. Needs an unlock token (`x-tempolight-token`) while a PIN lock is set; without a lock, anyone can call it.",
+        "operationId": "patchLibrary",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "folders": {
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "description": "A full path on the computer Tempolight runs on (`~/Music` works)."
+                    }
+                  },
+                  "watch": {
+                    "type": "boolean"
+                  }
+                }
+              },
+              "example": {
+                "folders": [
+                  "/music"
+                ],
+                "watch": true
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Library"
+                },
+                "example": {
+                  "available": true,
+                  "folders": [
+                    {
+                      "path": "/music",
+                      "exists": true,
+                      "songs": 210
+                    }
+                  ],
+                  "watch": true,
+                  "paused": false,
+                  "ffmpeg": true,
+                  "ffprobe": true,
+                  "message": null,
+                  "counts": {
+                    "files": 214,
+                    "analysed": 210,
+                    "queued": 0,
+                    "errors": 1,
+                    "needsFfmpeg": 0,
+                    "skipped": 2,
+                    "duplicates": 1,
+                    "removed": 0
+                  },
+                  "cap": {
+                    "songs": 210,
+                    "maxSongs": 5000,
+                    "bytes": 5400000,
+                    "maxBytes": 209715200,
+                    "full": false
+                  },
+                  "progress": {
+                    "state": "idle",
+                    "waiting": null,
+                    "done": 0,
+                    "total": 0,
+                    "perSongMs": 0,
+                    "avgDecodeMs": 0,
+                    "avgAnalyseMs": 0,
+                    "workers": 0,
+                    "maxWorkers": 3,
+                    "inline": false,
+                    "current": [],
+                    "lastScan": {
+                      "at": 1762300000000,
+                      "files": 214
+                    }
+                  },
+                  "errors": [],
+                  "songs": [
+                    {
+                      "id": "l3f9a0c21d7",
+                      "name": "Daft Punk - One More Time",
+                      "bpm": 122.7,
+                      "dur": 320.4,
+                      "key": "D major",
+                      "look": {
+                        "main": "shock",
+                        "name": "Shockwave",
+                        "palette": "neon",
+                        "locked": false
+                      },
+                      "file": "Daft Punk/Discovery/01 One More Time.mp3"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body isn't valid JSON, or a value is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "There is no folder /musik on the computer Tempolight runs on"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Locked, or not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Settings are locked. Unlock with the PIN in Settings."
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ],
+        "x-tempolight-area": "admin",
+        "x-tempolight-source": "packages/server/src/library.js"
+      }
+    },
+    "/api/library/pause": {
+      "post": {
+        "tags": [
+          "Music library"
+        ],
+        "summary": "Pause analysing",
+        "description": "Stops the analysis at once (the songs being analysed start again on resume). Stays paused after a restart.\n\n**Access:** admin. Needs an unlock token (`x-tempolight-token`) while a PIN lock is set; without a lock, anyone can call it.",
+        "operationId": "postLibraryPause",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Library"
+                },
+                "example": {
+                  "available": true,
+                  "folders": [
+                    {
+                      "path": "/music",
+                      "exists": true,
+                      "songs": 210
+                    }
+                  ],
+                  "watch": true,
+                  "paused": false,
+                  "ffmpeg": true,
+                  "ffprobe": true,
+                  "message": null,
+                  "counts": {
+                    "files": 214,
+                    "analysed": 210,
+                    "queued": 0,
+                    "errors": 1,
+                    "needsFfmpeg": 0,
+                    "skipped": 2,
+                    "duplicates": 1,
+                    "removed": 0
+                  },
+                  "cap": {
+                    "songs": 210,
+                    "maxSongs": 5000,
+                    "bytes": 5400000,
+                    "maxBytes": 209715200,
+                    "full": false
+                  },
+                  "progress": {
+                    "state": "idle",
+                    "waiting": null,
+                    "done": 0,
+                    "total": 0,
+                    "perSongMs": 0,
+                    "avgDecodeMs": 0,
+                    "avgAnalyseMs": 0,
+                    "workers": 0,
+                    "maxWorkers": 3,
+                    "inline": false,
+                    "current": [],
+                    "lastScan": {
+                      "at": 1762300000000,
+                      "files": 214
+                    }
+                  },
+                  "errors": [],
+                  "songs": [
+                    {
+                      "id": "l3f9a0c21d7",
+                      "name": "Daft Punk - One More Time",
+                      "bpm": 122.7,
+                      "dur": 320.4,
+                      "key": "D major",
+                      "look": {
+                        "main": "shock",
+                        "name": "Shockwave",
+                        "palette": "neon",
+                        "locked": false
+                      },
+                      "file": "Daft Punk/Discovery/01 One More Time.mp3"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Locked, or not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Settings are locked. Unlock with the PIN in Settings."
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ],
+        "x-tempolight-area": "admin",
+        "x-tempolight-source": "packages/server/src/library.js"
+      }
+    },
+    "/api/library/resume": {
+      "post": {
+        "tags": [
+          "Music library"
+        ],
+        "summary": "Resume analysing",
+        "description": "Goes on analysing.\n\n**Access:** admin. Needs an unlock token (`x-tempolight-token`) while a PIN lock is set; without a lock, anyone can call it.",
+        "operationId": "postLibraryResume",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Library"
+                },
+                "example": {
+                  "available": true,
+                  "folders": [
+                    {
+                      "path": "/music",
+                      "exists": true,
+                      "songs": 210
+                    }
+                  ],
+                  "watch": true,
+                  "paused": false,
+                  "ffmpeg": true,
+                  "ffprobe": true,
+                  "message": null,
+                  "counts": {
+                    "files": 214,
+                    "analysed": 210,
+                    "queued": 0,
+                    "errors": 1,
+                    "needsFfmpeg": 0,
+                    "skipped": 2,
+                    "duplicates": 1,
+                    "removed": 0
+                  },
+                  "cap": {
+                    "songs": 210,
+                    "maxSongs": 5000,
+                    "bytes": 5400000,
+                    "maxBytes": 209715200,
+                    "full": false
+                  },
+                  "progress": {
+                    "state": "idle",
+                    "waiting": null,
+                    "done": 0,
+                    "total": 0,
+                    "perSongMs": 0,
+                    "avgDecodeMs": 0,
+                    "avgAnalyseMs": 0,
+                    "workers": 0,
+                    "maxWorkers": 3,
+                    "inline": false,
+                    "current": [],
+                    "lastScan": {
+                      "at": 1762300000000,
+                      "files": 214
+                    }
+                  },
+                  "errors": [],
+                  "songs": [
+                    {
+                      "id": "l3f9a0c21d7",
+                      "name": "Daft Punk - One More Time",
+                      "bpm": 122.7,
+                      "dur": 320.4,
+                      "key": "D major",
+                      "look": {
+                        "main": "shock",
+                        "name": "Shockwave",
+                        "palette": "neon",
+                        "locked": false
+                      },
+                      "file": "Daft Punk/Discovery/01 One More Time.mp3"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Locked, or not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Settings are locked. Unlock with the PIN in Settings."
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ],
+        "x-tempolight-area": "admin",
+        "x-tempolight-source": "packages/server/src/library.js"
+      }
+    },
+    "/api/library/scan": {
+      "post": {
+        "tags": [
+          "Music library"
+        ],
+        "summary": "Look for new songs",
+        "description": "Looks through the folders now. New and changed files are analysed; files already analysed (same path, size and time) are skipped, and copies are kept once.\n\n**Access:** admin. Needs an unlock token (`x-tempolight-token`) while a PIN lock is set; without a lock, anyone can call it.",
+        "operationId": "postLibraryScan",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Library"
+                },
+                "example": {
+                  "available": true,
+                  "folders": [
+                    {
+                      "path": "/music",
+                      "exists": true,
+                      "songs": 210
+                    }
+                  ],
+                  "watch": true,
+                  "paused": false,
+                  "ffmpeg": true,
+                  "ffprobe": true,
+                  "message": null,
+                  "counts": {
+                    "files": 214,
+                    "analysed": 210,
+                    "queued": 0,
+                    "errors": 1,
+                    "needsFfmpeg": 0,
+                    "skipped": 2,
+                    "duplicates": 1,
+                    "removed": 0
+                  },
+                  "cap": {
+                    "songs": 210,
+                    "maxSongs": 5000,
+                    "bytes": 5400000,
+                    "maxBytes": 209715200,
+                    "full": false
+                  },
+                  "progress": {
+                    "state": "idle",
+                    "waiting": null,
+                    "done": 0,
+                    "total": 0,
+                    "perSongMs": 0,
+                    "avgDecodeMs": 0,
+                    "avgAnalyseMs": 0,
+                    "workers": 0,
+                    "maxWorkers": 3,
+                    "inline": false,
+                    "current": [],
+                    "lastScan": {
+                      "at": 1762300000000,
+                      "files": 214
+                    }
+                  },
+                  "errors": [],
+                  "songs": [
+                    {
+                      "id": "l3f9a0c21d7",
+                      "name": "Daft Punk - One More Time",
+                      "bpm": 122.7,
+                      "dur": 320.4,
+                      "key": "D major",
+                      "look": {
+                        "main": "shock",
+                        "name": "Shockwave",
+                        "palette": "neon",
+                        "locked": false
+                      },
+                      "file": "Daft Punk/Discovery/01 One More Time.mp3"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "The body isn't valid JSON, or a value is wrong.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Add a music folder first"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Locked, or not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Settings are locked. Unlock with the PIN in Settings."
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ],
+        "x-tempolight-area": "admin",
+        "x-tempolight-source": "packages/server/src/library.js"
+      }
+    },
+    "/api/library/songs/{id}": {
+      "delete": {
+        "tags": [
+          "Music library"
+        ],
+        "summary": "Remove a song",
+        "description": "Takes the song out of the library. The file stays; it isn't added again unless it changes.\n\n**Access:** admin. Needs an unlock token (`x-tempolight-token`) while a PIN lock is set; without a lock, anyone can call it.",
+        "operationId": "deleteLibrarySongsById",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "description": "The song's id (`l…`).",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Locked, or not allowed.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Settings are locked. Unlock with the PIN in Settings."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such id.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "That song isn't in the library"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "token": []
+          }
+        ],
+        "x-tempolight-area": "admin",
+        "x-tempolight-source": "packages/server/src/library.js"
       }
     },
     "/api/lock": {
@@ -12858,6 +13531,289 @@
           }
         }
       },
+      "Library": {
+        "type": "object",
+        "properties": {
+          "available": {
+            "type": "boolean"
+          },
+          "folders": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "exists": {
+                  "type": "boolean"
+                },
+                "songs": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "watch": {
+            "type": "boolean",
+            "description": "New songs in the folders are noticed by themselves."
+          },
+          "paused": {
+            "type": "boolean"
+          },
+          "ffmpeg": {
+            "type": "boolean",
+            "description": "ffmpeg is installed: every format can be read (else WAV only)."
+          },
+          "ffprobe": {
+            "type": "boolean"
+          },
+          "message": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "“Install ffmpeg to analyse MP3/AAC/FLAC; WAV works now.” when it isn't."
+          },
+          "counts": {
+            "type": "object",
+            "properties": {
+              "files": {
+                "type": "integer"
+              },
+              "analysed": {
+                "type": "integer"
+              },
+              "queued": {
+                "type": "integer"
+              },
+              "errors": {
+                "type": "integer"
+              },
+              "needsFfmpeg": {
+                "type": "integer"
+              },
+              "skipped": {
+                "type": "integer"
+              },
+              "duplicates": {
+                "type": "integer"
+              },
+              "removed": {
+                "type": "integer"
+              }
+            }
+          },
+          "cap": {
+            "type": "object",
+            "properties": {
+              "songs": {
+                "type": "integer"
+              },
+              "maxSongs": {
+                "type": "integer"
+              },
+              "bytes": {
+                "type": "integer"
+              },
+              "maxBytes": {
+                "type": "integer"
+              },
+              "full": {
+                "type": "boolean"
+              }
+            }
+          },
+          "progress": {
+            "type": "object",
+            "properties": {
+              "state": {
+                "type": "string",
+                "enum": [
+                  "idle",
+                  "scanning",
+                  "analysing",
+                  "waiting",
+                  "paused"
+                ]
+              },
+              "waiting": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "done": {
+                "type": "integer"
+              },
+              "total": {
+                "type": "integer"
+              },
+              "perSongMs": {
+                "type": "integer",
+                "description": "Wall time per song in this batch."
+              },
+              "avgDecodeMs": {
+                "type": "integer"
+              },
+              "avgAnalyseMs": {
+                "type": "integer"
+              },
+              "workers": {
+                "type": "integer"
+              },
+              "maxWorkers": {
+                "type": "integer"
+              },
+              "inline": {
+                "type": "boolean"
+              },
+              "current": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "lastScan": {
+                "type": [
+                  "object",
+                  "null"
+                ],
+                "additionalProperties": true,
+                "description": "`{at, files}`."
+              }
+            }
+          },
+          "errors": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "file": {
+                  "type": "string",
+                  "description": "Relative to its folder."
+                },
+                "state": {
+                  "type": "string",
+                  "enum": [
+                    "error",
+                    "needs",
+                    "skipped"
+                  ]
+                },
+                "error": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "songs": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "type": "string"
+                },
+                "name": {
+                  "type": "string"
+                },
+                "bpm": {
+                  "type": "number"
+                },
+                "dur": {
+                  "type": "number"
+                },
+                "key": {
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "look": {
+                  "type": [
+                    "object",
+                    "null"
+                  ],
+                  "additionalProperties": true,
+                  "description": "`{main, name, palette, locked}`."
+                },
+                "file": {
+                  "type": "string",
+                  "description": "Relative to its folder."
+                }
+              }
+            },
+            "description": "Left out with `?songs=0`."
+          }
+        },
+        "example": {
+          "available": true,
+          "folders": [
+            {
+              "path": "/music",
+              "exists": true,
+              "songs": 210
+            }
+          ],
+          "watch": true,
+          "paused": false,
+          "ffmpeg": true,
+          "ffprobe": true,
+          "message": null,
+          "counts": {
+            "files": 214,
+            "analysed": 210,
+            "queued": 0,
+            "errors": 1,
+            "needsFfmpeg": 0,
+            "skipped": 2,
+            "duplicates": 1,
+            "removed": 0
+          },
+          "cap": {
+            "songs": 210,
+            "maxSongs": 5000,
+            "bytes": 5400000,
+            "maxBytes": 209715200,
+            "full": false
+          },
+          "progress": {
+            "state": "idle",
+            "waiting": null,
+            "done": 0,
+            "total": 0,
+            "perSongMs": 0,
+            "avgDecodeMs": 0,
+            "avgAnalyseMs": 0,
+            "workers": 0,
+            "maxWorkers": 3,
+            "inline": false,
+            "current": [],
+            "lastScan": {
+              "at": 1762300000000,
+              "files": 214
+            }
+          },
+          "errors": [],
+          "songs": [
+            {
+              "id": "l3f9a0c21d7",
+              "name": "Daft Punk - One More Time",
+              "bpm": 122.7,
+              "dur": 320.4,
+              "key": "D major",
+              "look": {
+                "main": "shock",
+                "name": "Shockwave",
+                "palette": "neon",
+                "locked": false
+              },
+              "file": "Daft Punk/Discovery/01 One More Time.mp3"
+            }
+          ]
+        }
+      },
       "NowPlaying": {
         "type": "object",
         "properties": {
@@ -12905,7 +13861,7 @@
               "null"
             ],
             "additionalProperties": true,
-            "description": "`{source, app, device, title, artist, album, dur, pos, playing, posKnown, remembered, following}`."
+            "description": "`{source, app, device, title, artist, album, dur, pos, playing, posKnown, file, remembered, following}` (file: the local file the player says it plays, when it says)."
           },
           "spotify": {
             "type": "object",

@@ -31,6 +31,7 @@ flowchart TD
 | Now playing on this computer | Music → Now playing on this computer | which song an app plays and where it is in it | songs it has heard before: exact without listening |
 | Sync with Spotify | Music → Sync with Spotify | the Spotify track, its position, and its learned beat map | Spotify on this computer, your phone or a speaker |
 | Song memory | Music → Song memory | recognises a remembered song in about 15 s while listening live | the same songs again, from any source |
+| Your own music | Music → Your own music | every song in your music folders, analysed ahead | a music collection on the Tempolight computer: [Your own music](your-music.md) |
 | Pro DJ Link | Settings → Integrations | tempo and bar position from the decks | Pioneer CDJ / XDJ setups |
 | Ableton Link (beta) | Settings → Integrations | tempo and beat of a Link session | Live, Traktor, Bitwig, Link apps |
 | MIDI clock | Live pads → MIDI controller | the beat (24 clocks a beat), bar from Start | DJ software, drum machines |

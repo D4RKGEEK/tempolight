@@ -58,6 +58,9 @@ await step("the demo song: the sync meter says Locked and the song map shows its
 await step("Sync with Spotify explains that it needs Tempolight installed", async () => {
   await go("music"); await page.waitForSelector("#sp-demo"); ok(/install Tempolight/.test(await text("#sp-demo")), "no explanation in the demo"); ok(!(await page.$("#sp-on")), "a Spotify switch in the demo");
 });
+await step("Your own music explains that the demo can't read folders", async () => {
+  await go("music"); await page.waitForSelector("#lib-demo"); ok(/can't read folders/.test(await text("#lib-demo")), "no explanation in the demo"); ok(!(await page.$("#lib-path")), "a folder field in the demo");
+});
 await step("live pads: blackout and back", async () => {
   await go("live"); await page.click('[data-pad="blackout"]'); await until(async () => (await page.getAttribute('[data-pad="blackout"]', "aria-pressed")) === "true", 3000, "blackout not on");
   await page.click('[data-pad="blackout"]'); await until(async () => (await page.getAttribute('[data-pad="blackout"]', "aria-pressed")) === "false", 3000, "blackout not off");

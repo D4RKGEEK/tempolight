@@ -46,6 +46,16 @@ const clean = s => String(s ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
 /** A Spotify track ID (22 base-62 characters) from "spotify:track:ID", "/com/spotify/track/ID" or an open.spotify.com link; null otherwise. */
 export function spotifyIdOf(s) { const m = /(?:spotify[:/]track[:/]|open\.spotify\.com\/track\/)([0-9A-Za-z]{22})\b/.exec(String(s ?? "")); return m ? m[1] : null; }
 const withId = (t, raw) => { const id = spotifyIdOf(raw); return id ? { ...t, spotifyId: id } : t; };
+/**
+ * The local file a player says it plays, from a file:// address (MPRIS xesam:url: VLC, Rhythmbox, mpv, Strawberry,
+ * Elisa...) or a plain path (Music on a Mac: the track's location); null for anything else (streams, Spotify).
+ */
+export function filePathOf(u) {
+  const s = String(u ?? "").trim(); if (!s) return null;
+  if (/^file:\/\//i.test(s)) { try { const url = new URL(s); if (url.host && url.host !== "localhost") return null; let p = decodeURIComponent(url.pathname); if (/^\/[A-Za-z]:\//.test(p)) p = p.slice(1).replace(/\//g, "\\"); return p.includes("\0") ? null : p; } catch { return null; } }
+  return /^(\/|[A-Za-z]:\\)/.test(s) && !s.includes("\0") ? s : null;
+}
+const withFile = (t, raw) => { const f = filePathOf(raw); return f ? { ...t, file: f } : t; };
 
 // ---------------------------------------------------------------- macOS: Spotify and Music
 // JavaScript for Automation rather than AppleScript: it prints JSON (no locale decimal commas), and an app that
@@ -58,7 +68,8 @@ const out = [];
 for (const [name, id] of [["Spotify", "com.spotify.client"], ["Music", "com.apple.Music"]]) {
   if (!running.has(id)) continue;
   try { const a = Application(id), st = a.playerState(); if (st === "stopped") continue; const t = a.currentTrack();
-    out.push({ app: name, state: st, title: t.name(), artist: t.artist(), album: t.album(), duration: t.duration(), position: a.playerPosition(), id: name === "Spotify" ? String(t.id() || "") : "" }); }
+    let file = ""; if (name === "Music") { try { const l = t.location(); if (l) file = l.toString(); } catch (e) {} } // a song file in the library (not one streamed)
+    out.push({ app: name, state: st, title: t.name(), artist: t.artist(), album: t.album(), duration: t.duration(), position: a.playerPosition(), id: name === "Spotify" ? String(t.id() || "") : "", file }); }
   catch (e) { out.push({ app: name, error: String(e.message || e) }); }
 }
 JSON.stringify(out);`;
@@ -70,14 +81,14 @@ export function parseMac(stdout) {
   const errors = list.filter(x => x && x.error).map(x => `${x.app}: ${x.error}`), tracks = [];
   for (const x of list) { if (!x || x.error || !x.title) continue;
     let dur = num(x.duration); if (x.app === "Spotify" || dur > 36000) dur /= 1000; // Spotify gives milliseconds, Music seconds
-    tracks.push(withId({ app: x.app, title: clean(x.title), artist: clean(x.artist), album: clean(x.album), dur, pos: num(x.position), playing: x.state === "playing", posOk: true }, x.id)); }
+    tracks.push(withFile(withId({ app: x.app, title: clean(x.title), artist: clean(x.artist), album: clean(x.album), dur, pos: num(x.position), playing: x.state === "playing", posOk: true }, x.id), x.file)); }
   return { tracks, error: errors.length && !tracks.length ? errors.join("; ") : null };
 }
 const macHint = e => /-1743|not authori[sz]ed|not allowed/i.test(e) ? "macOS hasn't allowed Tempolight to ask Spotify / Music what's playing. Allow it in System Settings → Privacy & Security → Automation (for Terminal or node), then restart Tempolight." : e;
 
 // ---------------------------------------------------------------- Linux: MPRIS
 const SEP = "\u001f";
-export const PLAYERCTL_FORMAT = ["{{playerName}}", "{{status}}", "{{xesam:title}}", "{{xesam:artist}}", "{{xesam:album}}", "{{mpris:length}}", "{{position}}", "{{mpris:trackid}}"].join(SEP);
+export const PLAYERCTL_FORMAT = ["{{playerName}}", "{{status}}", "{{xesam:title}}", "{{xesam:artist}}", "{{xesam:album}}", "{{mpris:length}}", "{{position}}", "{{mpris:trackid}}", "{{xesam:url}}"].join(SEP);
 const PLAYER_NAMES = { spotify: "Spotify", vlc: "VLC", rhythmbox: "Rhythmbox", firefox: "Firefox", chromium: "Chromium", chrome: "Chrome", brave: "Brave", mpv: "mpv", strawberry: "Strawberry", elisa: "Elisa", audacious: "Audacious", clementine: "Clementine", lollypop: "Lollypop", cmus: "cmus", kdeconnect: "KDE Connect", plasma: "Plasma browser", tauon: "Tauon", amarok: "Amarok", deadbeef: "DeaDBeeF", quodlibet: "Quod Libet", cider: "Cider", youtube: "YouTube Music" };
 const playerName = n => { const k = String(n).replace(/^org\.mpris\.MediaPlayer2\./, "").split(".")[0].toLowerCase(); return PLAYER_NAMES[k] || (k ? k[0].toUpperCase() + k.slice(1) : "A music player"); };
 
@@ -85,7 +96,7 @@ const playerName = n => { const k = String(n).replace(/^org\.mpris\.MediaPlayer2
 export function parsePlayerctl(stdout) {
   const tracks = [];
   for (const line of String(stdout).split("\n")) { const f = line.split(SEP); if (f.length < 7 || !f[2].trim()) continue;
-    tracks.push(withId({ app: playerName(f[0]), title: clean(f[2]), artist: clean(f[3]), album: clean(f[4]), dur: num(f[5]) / 1e6, pos: num(f[6]) / 1e6, playing: f[1].trim() === "Playing", posOk: true }, f[7])); }
+    tracks.push(withFile(withId({ app: playerName(f[0]), title: clean(f[2]), artist: clean(f[3]), album: clean(f[4]), dur: num(f[5]) / 1e6, pos: num(f[6]) / 1e6, playing: f[1].trim() === "Playing", posOk: true }, f[7]), f[8])); }
   return tracks;
 }
 
@@ -116,7 +127,7 @@ export function parseDbusReply(text) {
 export function mprisTrack(name, props) {
   const md = props && props.Metadata; if (!md || !md["xesam:title"]) return null;
   const artist = Array.isArray(md["xesam:artist"]) ? md["xesam:artist"].join(", ") : md["xesam:artist"];
-  return withId({ app: playerName(name), title: clean(md["xesam:title"]), artist: clean(artist), album: clean(md["xesam:album"]), dur: num(md["mpris:length"]) / 1e6, pos: num(props.Position) / 1e6, playing: props.PlaybackStatus === "Playing", posOk: true }, /spotify/i.test(name) ? md["mpris:trackid"] || md["xesam:url"] : md["xesam:url"]);
+  return withFile(withId({ app: playerName(name), title: clean(md["xesam:title"]), artist: clean(artist), album: clean(md["xesam:album"]), dur: num(md["mpris:length"]) / 1e6, pos: num(props.Position) / 1e6, playing: props.PlaybackStatus === "Playing", posOk: true }, /spotify/i.test(name) ? md["mpris:trackid"] || md["xesam:url"] : md["xesam:url"]), md["xesam:url"]);
 }
 
 // ---------------------------------------------------------------- Windows: media sessions (Windows 10 1809 and later)
@@ -287,6 +298,7 @@ const VIA = { macos: "Spotify or Music on this Mac", mpris: "a music player on t
 export function createNowPlaying(o = {}) {
   const platform = o.platform || process.platform, runner = o.runner || nodeRunner, now = o.now || (() => performance.now()), wallNow = o.wallNow || Date.now;
   const enabled = o.enabled || (() => true), songs = o.songs || (() => []), note = o.note || (() => {});
+  const byFile = o.byFile || (() => null), whole = o.whole || (e => e); // byFile: the library song kept for a file path; whole: a light entry's whole entry
   const spotify = createSpotify({ dataDir: o.dataDir, fetch: o.fetch || globalThis.fetch, clientId: o.clientId || (() => ""), note, wallNow });
   const st = { state: "starting", message: "", method: null }; // state: ok | unavailable | error | off
   let cur = null, webTracks = [], webAt = -1e9, webBusy = false, linuxMode = null, win = null, winLatest = null, nextProbe = 0, busy = false, matchKey = "", matched = null, pre = null;
@@ -345,10 +357,11 @@ export function createNowPlaying(o = {}) {
   function take(r) {
     if (!r) { cur = null; return; }
     const key = `${r.source}|${r.app}|${r.title}|${r.artist}`, t = r.t;
+    if (cur && cur.key === key && cur.file !== (r.file || null)) cur = null; // (the same title, another file)
     if (cur && cur.key === key) { const pred = cur.pos + (cur.playing ? (t - cur.at) / 1000 : 0), d = r.pos - pred;
       cur.pos = r.playing && cur.playing && Math.abs(d) < 0.75 ? pred + d * 0.3 : r.pos; // small differences are timing noise between readings; a big one is a seek
       cur.zero = r.playing && r.pos === 0 && cur.playing ? cur.zero + 1 : 0; Object.assign(cur, { playing: r.playing, dur: r.dur || cur.dur, at: t, seen: t, posOk: r.posOk && cur.zero < 2, album: r.album, device: r.device, spotifyId: r.spotifyId || null }); }
-    else cur = { key, source: r.source, app: r.app, title: r.title, artist: r.artist, album: r.album, device: r.device, dur: r.dur, pos: r.pos, playing: r.playing, at: t, seen: t, zero: 0, posOk: r.posOk, spotifyId: r.spotifyId || null };
+    else cur = { key, source: r.source, app: r.app, title: r.title, artist: r.artist, album: r.album, device: r.device, dur: r.dur, pos: r.pos, playing: r.playing, at: t, seen: t, zero: 0, posOk: r.posOk, spotifyId: r.spotifyId || null, file: r.file || null };
   }
 
   /** Ask the players once (about once a second from start()). */
@@ -376,13 +389,16 @@ export function createNowPlaying(o = {}) {
   function track(at = now()) {
     if (!cur || at - cur.seen > 6000) return null;
     let pos = cur.pos + (cur.playing ? (at - cur.at) / 1000 : 0); if (cur.dur > 0) pos = Math.min(pos, cur.dur); pos = Math.max(0, pos);
-    return { source: cur.source, via: VIA[cur.source], app: cur.app, device: cur.device || null, title: cur.title, artist: cur.artist, album: cur.album, dur: cur.dur, pos, playing: cur.playing, posKnown: cur.posOk, ...(cur.spotifyId ? { spotifyId: cur.spotifyId } : {}) };
+    return { source: cur.source, via: VIA[cur.source], app: cur.app, device: cur.device || null, title: cur.title, artist: cur.artist, album: cur.album, dur: cur.dur, pos, playing: cur.playing, posKnown: cur.posOk, ...(cur.spotifyId ? { spotifyId: cur.spotifyId } : {}), ...(cur.file ? { file: cur.file } : {}) };
   }
-  /** The remembered song this track is (cached until the track or the song list changes). */
+  /**
+   * The remembered song this track is (cached until the track or the song list changes): the library song kept for
+   * the file the player reports, else the song whose name and length fit.
+   */
   function match() {
-    if (!cur) return null; const list = songs(), k = `${cur.key}|${cur.dur.toFixed(0)}|${list.length}|${list[list.length - 1]?.id}`;
-    if (k !== matchKey) { matchKey = k; const e = matchSong(cur, list); if (e !== matched) { matched = e; pre = null;
-      if (e) note(`Now playing: “${cur.title}”${cur.artist ? ` by ${cur.artist}` : ""} in ${cur.app} is the remembered song “${e.name}”: following its beat map`); } }
+    if (!cur) return null; const list = songs(), k = `${cur.key}|${cur.file || ""}|${cur.dur.toFixed(0)}|${list.length}|${list[list.length - 1]?.id}`;
+    if (k !== matchKey) { matchKey = k; const byF = cur.file ? byFile(cur.file) : null, e = byF || matchSong(cur, list); if (e !== matched) { matched = e; pre = null;
+      if (e) note(`Now playing: “${cur.title}”${cur.artist ? ` by ${cur.artist}` : ""} in ${cur.app} is the ${byF ? "library song" : "remembered song"} “${e.name}”${byF ? " (the same file)" : ""}: following its beat map`); } }
     if (matched && !list.includes(matched)) { matched = null; pre = null; } return matched;
   }
   return {
@@ -391,7 +407,7 @@ export function createNowPlaying(o = {}) {
     /** For the runtime: the remembered song's analysis and the position to show, while it plays and its position is known. */
     follow(at = now()) {
       const tr = track(at); if (!tr || !tr.playing || !tr.posKnown) return null;
-      const e = match(); if (!e) return null; if (!pre) pre = memoryAnalysis(e);
+      const e = match(); if (!e) return null; if (!pre) { const w = whole(e); if (!w) return null; pre = memoryAnalysis(w); }
       return { id: e.id, name: e.name, app: tr.app, pre, pos: tr.pos };
     },
     status() { return { state: enabled() ? st.state : "off", message: st.message, method: st.method }; },
@@ -407,7 +423,8 @@ export function createNowPlaying(o = {}) {
  */
 export function startNowPlaying({ core, store, runtime, dataDir = null, port = () => 8080, interval = 1000, ...inject }) {
   const data = () => store.data, set = () => data().settings.nowPlaying || (data().settings.nowPlaying = { enabled: true, spotifyClientId: "" });
-  const np = createNowPlaying({ ...inject, dataDir, enabled: () => set().enabled !== false, clientId: () => set().spotifyClientId || "", songs: () => data().songs || [], note: (m, l) => runtime.note(m, l) });
+  const np = createNowPlaying({ ...inject, dataDir, enabled: () => set().enabled !== false, clientId: () => set().spotifyClientId || "", songs: () => runtime.songs ? runtime.songs() : data().songs || [], note: (m, l) => runtime.note(m, l),
+    byFile: f => runtime.rt.library?.byPath(f) || null, whole: e => runtime.songById ? runtime.songById(e.id) : e });
   const rt = runtime.rt;
   let following = null;
   rt.nowPlaying = {

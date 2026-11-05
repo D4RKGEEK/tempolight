@@ -330,6 +330,16 @@ await step("power off sends black, power on resumes", async () => {
   await page.click("#power"); await until(() => !app.store.data.show.power, 3000, "power not off"); await sleep(300); ok(lum(A) === 0, "LEDs not off");
   await page.click("#power"); await until(() => app.store.data.show.power, 3000, "power not on"); await sleep(600); ok(lum(A) > 0, "LEDs not back on");
 });
+await step("music: your own music: add a folder, its songs are analysed and listed with tempo, key and look", async () => {
+  const { encodeWav } = await import("../packages/server/src/audiofile.js"), { edm } = await import("../packages/engine/test/synth.js"), fs = await import("node:fs");
+  const music = mkdtempSync(path.join(os.tmpdir(), "tempolight-e2e-music-")); fs.writeFileSync(path.join(music, "E2E Crew - Folder Anthem.wav"), encodeWav(edm(22050).x, 22050));
+  await go("music"); await page.waitForSelector("#lib-path");
+  await page.fill("#lib-path", music); await page.click("#lib-add");
+  await until(async () => /Folder Anthem/.test(await page.textContent("#lib-songs")), 60000, "the song never showed up");
+  const row = await page.textContent("#lib-songs"); ok(/128/.test(row), `no tempo in “${row}”`);
+  ok(/song ready/.test(await page.textContent("#lib-sub")), "no count"); ok((await page.textContent("#lib-folders")).includes(music.split(path.sep).pop()), "folder not listed");
+  await shot("08b-library"); rmSync(music, { recursive: true, force: true }); // (a refused path is tested in library.test.js: here it would be a console error)
+});
 await step("phone-sized screen has no sideways scrolling", async () => {
   await page.setViewportSize({ width: 390, height: 844 });
   for (const h of ["home", "music", "live", "room", "devices", `timeline/${app.store.data.songs[0]?.id}`]) { await go(h); const w = await page.evaluate(() => document.documentElement.scrollWidth); ok(w <= 392, `${h} is ${w}px wide`); }
