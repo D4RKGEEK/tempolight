@@ -942,8 +942,12 @@ const PAGES = { stage: ["Stage", lazyPage(() => import("/v2/stage.js"), "render"
 PAGES.integrations = ["Integrations", lazyPage(() => import("/integrations.js"), "integrationsPage")]; // Stream Deck, OBS, games, Twitch, Discord
 PAGES.sleep2 = ["Home and sleep", lazyPage(() => import("/v2/sleep.js"), "render")]; // Home & sleep, v2
 PAGES.integrations2 = ["Integrations", lazyPage(() => import("/v2/integrations.js"), "render")]; // Integrations, v2
+// the v1 pages live on as "classic" pages at <name>1 (More → The classic pages); their old names open the v2 screens
+const CLASSIC = ["home", "music", "effects", "live", "scenes", "sleep", "devices", "settings", "integrations"];
+for (const k of CLASSIC) PAGES[k + "1"] = PAGES[k];
+const ALIAS = { home: "stage", music: "songs", effects: "looks", live: "stage", scenes: "schedules", sleep: "sleep2", devices: "lights", settings: "settings2", integrations: "integrations2" };
 export function route() {
-  const name0 = (location.hash.match(/^#\/(\w+)/) || [])[1] || "stage", name = PAGES[name0] ? name0 : "stage", [title, fn] = PAGES[name];
+  const raw = (location.hash.match(/^#\/(\w+)/) || [])[1] || "stage", name0 = ALIAS[raw] && PAGES[ALIAS[raw]] ? ALIAS[raw] : raw, name = PAGES[name0] ? name0 : "stage", [title, fn] = PAGES[name];
   if (app.page?.canLeave && app.page.hash !== location.hash && !app.page.canLeave()) { history.replaceState(null, "", app.page.hash); return; } // unsaved changes: stay
   if (app.page?.destroy) app.page.destroy();
   if (app.page?.preview) ws.send({ type: "preview", on: false });
@@ -956,6 +960,7 @@ export function route() {
 // deep links from Home's "What's new" card: #/settings/punch scrolls to that setting and makes it glow once
 const ANCHORS = { music: { sync: "#m-sync", library: "#lib, #lib-demo" }, effects: { variety: "#e-var" },
   settings: { lighting: "#s-punch", punch: "#s-punch", drama: "#s-dyn", chords: "#s-chordc", stereo: "#s-stereo", countdown: "#s-dropcd", about: "#s-upd" } };
+for (const k of Object.keys(ANCHORS)) ANCHORS[k + "1"] = ANCHORS[k]; // (the classic pages keep their deep links)
 function spotlight(sel, tries = 30) {
   const el = $(sel); if (!el) { if (tries > 0) setTimeout(() => spotlight(sel, tries - 1), 100); return; }
   const box = el.closest(".setrow, .field, .panel") || el;

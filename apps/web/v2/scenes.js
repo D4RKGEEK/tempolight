@@ -135,7 +135,7 @@ export function render(el) {
     box.innerHTML = `<div class="ui-list">${L.map(sc => { const [c1, c2] = colsOf(sc); return `<div class="ui-row sc-scene">
       <i class="sc-sw scene big" style="--c1:${c1};--c2:${c2}"></i>
       <span class="ui-row-main"><b>${esc(sc.name)}</b><small>${esc(showName(sc))} · ${esc(sc.show?.palette && sc.show.palette !== "auto" ? sc.show.palette : "automatic colours")} · ${Math.round((sc.brightness ?? 1) * 100)}%</small></span>
-      <span class="ui-row-act"><button class="btn sm primary" type="button" data-apply="${esc(sc.id)}"${dis}>Apply</button><button class="btn sm" type="button" data-ren="${esc(sc.id)}"${dis}>Rename</button>
+      <span class="ui-row-act"><button class="btn sm" type="button" data-apply="${esc(sc.id)}"${dis}>Apply</button><button class="btn sm" type="button" data-ren="${esc(sc.id)}"${dis}>Rename</button>
         <button class="ui-icbtn" type="button" data-del="${esc(sc.id)}" aria-label="Delete ${esc(sc.name)}"${dis}>${I.trash}</button></span></div>`; }).join("")}</div>`;
     $$("[data-apply]", box).forEach(b => b.onclick = () => act(() => api("POST", `/api/scenes/${b.dataset.apply}/apply`), `${sceneOf(b.dataset.apply)?.name || "Scene"} applied`).catch(() => {}));
     $$("[data-ren]", box).forEach(b => b.onclick = () => renameScene(sceneOf(b.dataset.ren)));

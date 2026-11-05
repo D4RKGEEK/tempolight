@@ -161,10 +161,14 @@ export const skeleton = (lines = 3) => `<div class="ui-skel" aria-hidden="true">
 // ---------------------------------------------------------------- the rail / tab bar and the top bar (used by app.js)
 export const NAV = [["stage", "Stage"], ["songs", "Songs"], ["looks", "Looks"], ["lights", "Lights"], ["more", "More"]];
 // which tab an older (v1) page belongs to; those pages still open at their routes, reached from the new screens or More
-const NAV_OF = { home: "stage", live: "stage", music: "songs", timeline: "songs", effects: "looks", scenes: "looks",
-  room: "lights", devices: "lights", map: "lights", sleep: "more", integrations: "more", settings: "more" };
+const NAV_OF = { home1: "stage", live1: "stage", music1: "songs", timeline: "songs", effects1: "looks", scenes1: "more",
+  room: "lights", devices1: "lights", map: "lights", sleep1: "more", integrations1: "more", settings1: "more",
+  settings2: "more", schedules: "more", sleep2: "more", integrations2: "more" };
+// v2 screens reached from More: drawn full width like the main screens, with a back link to More
+const SUB = new Set(["settings2", "schedules", "sleep2", "integrations2"]);
 export const navOf = name => NAV.some(n => n[0] === name) ? name : NAV_OF[name] || "stage";
-export const isV2 = name => NAV.some(n => n[0] === name);
+const isMain = name => NAV.some(n => n[0] === name);
+export const isV2 = name => isMain(name) || SUB.has(name);
 
 export function navHtml() {
   return NAV.map(([id, label]) => `<a href="#/${id}" data-page="${id}">${icon(id)}<span>${label}</span></a>`).join("");
@@ -173,7 +177,7 @@ export function navHtml() {
 export function shellRoute(name) {
   const tab = navOf(name), back = $("#back");
   $$("#nav a, #tabs a").forEach(a => a.toggleAttribute("aria-current", a.dataset.page === tab));
-  if (back) { back.hidden = isV2(name); if (!back.hidden) { back.href = `#/${tab}`; back.setAttribute("aria-label", `Back to ${NAV.find(n => n[0] === tab)[1]}`); } }
+  if (back) { back.hidden = isMain(name); if (!back.hidden) { back.href = `#/${tab}`; back.setAttribute("aria-label", `Back to ${NAV.find(n => n[0] === tab)[1]}`); } }
   document.body.dataset.screen = isV2(name) ? name : "v1";
   closeSheets();
 }

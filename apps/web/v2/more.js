@@ -4,10 +4,10 @@ import { app, esc, DEMO } from "/app.js";
 import { icon } from "/v2/shell.js";
 
 const CARDS = [
-  { href: "#/sleep", ic: "moon", t: "Home and sleep", d: "Everyday light through the day, a sunrise alarm and night mode." },
-  { href: "#/integrations", ic: "plug", t: "Integrations", d: "Stream Deck, OBS, games, Twitch, Discord, Home Assistant and Apple Home." },
-  { href: "#/scenes", ic: "clock", t: "Scenes and schedules", d: "Saved looks, and when they switch on by themselves." },
-  { href: "#/settings", ic: "gear", t: "Settings", d: "Lighting defaults, performance, safety, the PIN lock and backups." },
+  { href: "#/sleep2", ic: "moon", t: "Home and sleep", d: "Everyday light through the day, a sunrise alarm and night mode." },
+  { href: "#/integrations2", ic: "plug", t: "Integrations", d: "Stream Deck, OBS, games, Twitch, Discord, Home Assistant and Apple Home." },
+  { href: "#/schedules", ic: "clock", t: "Scenes and schedules", d: "Saved looks, and when they switch on by themselves." },
+  { href: "#/settings2", ic: "gear", t: "Settings", d: "Lighting defaults, performance, safety, the PIN lock and backups." },
   { id: "mo-claude", ic: "sparkle", t: "Set up with Claude", d: "A ready prompt that lets Claude install and set up Tempolight with you." },
   { href: "/docs/", ic: "help", t: "Help and docs", d: "Guides for every light, sound setup and the HTTP API.", ext: true },
 ];
@@ -22,10 +22,10 @@ export function render(el) {
     </div>
     <section class="mo-classic" aria-labelledby="mo-classic-h">
       <h2 class="ui-eyebrow" id="mo-classic-h">The classic pages</h2>
-      <div class="mo-links">${[["#/home", "Home"], ["#/music", "Music"], ["#/effects", "Effects"], ["#/live", "Live pads and MIDI"], ["#/room", "Room"], ["#/devices", "Devices"], ["#/map", "Camera mapping"]]
+      <div class="mo-links">${[["#/home1", "Home"], ["#/music1", "Music"], ["#/effects1", "Effects"], ["#/live1", "Live pads and MIDI"], ["#/scenes1", "Scenes"], ["#/room", "Room"], ["#/devices1", "Devices"], ["#/settings1", "Settings"], ["#/map", "Camera mapping"]]
         .map(([h, t]) => `<a href="${h}">${t}</a>`).join("")}</div>
     </section>
-    <footer class="mo-about"><span>Tempolight ${esc(v ? "v" + v : "")}${DEMO ? ", the online demo" : ""}. Open source, MIT licence.</span><a href="#/settings/about">${DEMO ? "About this version" : "Check for updates"}</a></footer>
+    <footer class="mo-about"><span>Tempolight ${esc(v ? "v" + v : "")}${DEMO ? ", the online demo" : ""}. Open source, MIT licence.</span><a href="#/settings2/about">${DEMO ? "About this version" : "Check for updates"}</a></footer>
   </div>`;
   el.querySelector("#mo-claude").onclick = () => import("/claude-setup.js").then(m => m.openClaudeSetup()).catch(() => {});
   return {};
