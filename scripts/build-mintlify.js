@@ -44,6 +44,7 @@ const META = {
   "getting-started": { icon: "flag", description: "The short version: what you need, WLED settings, the setup wizard, music sources and the first fixes." },
   install: { icon: "download", sidebarTitle: "Install" },
   "guides/first-run": { icon: "play", sidebarTitle: "Your first show" },
+  "setup-with-claude": { icon: "sparkles", sidebarTitle: "Set up with Claude" },
   "guides/overview": { icon: "map", sidebarTitle: "All guides" },
   "guides/connect-lights": { icon: "lightbulb" },
   "guides/room-and-zones": { icon: "layout-grid" },
@@ -88,7 +89,7 @@ const META = {
 // listed land in Guides → More, so a new page in docs/ always shows up.
 const NAV = [
   { tab: "Start", icon: "rocket", groups: [
-    { group: "Get started", pages: ["index", "overview", "install", "guides/first-run", "getting-started"] },
+    { group: "Get started", pages: ["index", "setup-with-claude", "overview", "install", "guides/first-run", "getting-started"] },
   ] },
   { tab: "Guides", icon: "book-open", groups: [
     { group: "Guides", pages: ["guides/overview"] },
@@ -478,7 +479,7 @@ function docsJson(pageSlugs, warnings) {
       const dir = p.slice(0, -1);
       return [...pageSlugs].filter(s => s.startsWith(dir) && !placed.has(s)).sort().map(s => (placed.add(s), s));
     }
-    if (!pageSlugs.has(p)) { if (p !== "index") warnings.push(`docs.json: page "${p}" is in the navigation but doesn't exist; left out`); return []; }
+    if (!pageSlugs.has(p)) { if (p !== "index" && p !== "setup-with-claude") warnings.push(`docs.json: page "${p}" is in the navigation but doesn't exist; left out`); return []; }
     if (placed.has(p)) return [];
     placed.add(p); return [p];
   };

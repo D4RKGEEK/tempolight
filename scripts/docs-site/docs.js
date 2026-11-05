@@ -11,6 +11,8 @@ $$("[data-mod]").forEach(el => { el.textContent = isMac ? "⌘" : "Ctrl"; });
 // ---------------------------------------------------------------- theme
 $$("[data-theme-toggle]").forEach(b => b.addEventListener("click", () => {
   const t = root.dataset.theme === "light" ? "dark" : "light"; root.dataset.theme = t; store.set("tl-docs-theme", t); drawMermaid();
+}));
+// a Mermaid diagram full size, in an overlay
 function zoom(pre) {
   const svg = pre.querySelector("svg"); if (!svg) return;
   const o = document.createElement("div"); o.className = "mzoom"; o.setAttribute("role", "dialog"); o.setAttribute("aria-label", "Diagram");
@@ -20,11 +22,11 @@ function zoom(pre) {
   o.addEventListener("click", e => { if (e.target === o || e.target.closest(".mzoom-close")) close(); }); document.addEventListener("keydown", esc, true);
   document.body.appendChild(o); document.body.style.overflow = "hidden";
 }
-}));
 
-// ---------------------------------------------------------------- phone menu
+// ---------------------------------------------------------------- phone menu (full screen)
 const menuBtn = $("[data-menu]"), scrim = $("[data-scrim]");
-function menu(open) { document.body.classList.toggle("menu-open", open); if (scrim) scrim.hidden = !open; menuBtn?.setAttribute("aria-expanded", String(open)); }
+function menu(open) { if (open && !document.body.classList.contains("menu-open")) { const sb = $(".sidebar"); if (sb) sb.scrollTop = 0; } document.body.classList.toggle("menu-open", open); if (scrim) scrim.hidden = true; menuBtn?.setAttribute("aria-expanded", String(open)); menuBtn?.setAttribute("aria-label", open ? "Close the menu" : "Open the menu"); }
+matchMedia("(min-width: 961px)").addEventListener?.("change", e => { if (e.matches) menu(false); });
 menuBtn?.addEventListener("click", () => menu(!document.body.classList.contains("menu-open")));
 scrim?.addEventListener("click", () => menu(false));
 $$(".sidebar a").forEach(a => a.addEventListener("click", () => menu(false)));
@@ -34,7 +36,7 @@ $$(".nav-group-title").forEach(b => b.addEventListener("click", () => {
   const open = b.getAttribute("aria-expanded") !== "true"; b.setAttribute("aria-expanded", String(open)); document.getElementById(b.getAttribute("aria-controls")).hidden = !open;
 }));
 const active = $(".sidebar .nav-item.active");
-if (active) { const sb = $(".sidebar"), r = active.getBoundingClientRect(), s = sb.getBoundingClientRect(); if (r.bottom > s.bottom - 40 || r.top < s.top) sb.scrollTop += r.top - s.top - s.height / 3; }
+if (active && matchMedia("(min-width: 961px)").matches) { const sb = $(".sidebar"), r = active.getBoundingClientRect(), s = sb.getBoundingClientRect(); if (r.bottom > s.bottom - 40 || r.top < s.top) sb.scrollTop += r.top - s.top - s.height / 3; }
 
 // ---------------------------------------------------------------- "On this page"
 const tocLinks = $$(".toc a[data-id]");
@@ -151,12 +153,13 @@ async function drawMermaid() {
   const blocks = $$("pre.mermaid"); if (!blocks.length || !mermaidCfg) return;
   try { mermaidLib ||= (await import(mermaidCfg.url)).default; } catch (e) { console.warn("Mermaid could not be loaded", e); return; }
   const dark = root.dataset.theme !== "light", css = getComputedStyle(root), v = n => css.getPropertyValue(n).trim();
-  mermaidLib.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif",
+  mermaidLib.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", fontFamily: v("--sans") || "system-ui, sans-serif",
     flowchart: { curve: "basis", padding: 12, nodeSpacing: 28, rankSpacing: 38, htmlLabels: true }, sequence: { useMaxWidth: true },
-    themeVariables: { darkMode: dark, fontSize: "14px", background: "transparent", primaryColor: dark ? "#1c2026" : "#fffaf0", primaryBorderColor: dark ? "#4a4136" : "#e8c48a", primaryTextColor: v("--text"),
-      secondaryColor: dark ? "#181b20" : "#f6f7f9", tertiaryColor: dark ? "#15181d" : "#fbfbfc", lineColor: dark ? "#6b7380" : "#9aa1ac", textColor: v("--text-2"),
-      clusterBkg: dark ? "rgba(245,165,36,0.05)" : "rgba(184,111,0,0.04)", clusterBorder: dark ? "#3a342c" : "#ecd3a8", edgeLabelBackground: dark ? "#15181d" : "#ffffff",
-      nodeTextColor: v("--text"), actorBkg: dark ? "#1c2026" : "#fffaf0", actorBorder: dark ? "#4a4136" : "#e8c48a", noteBkgColor: dark ? "#2a2418" : "#fff6e0", noteTextColor: v("--text") } });
+    // warm neutrals from design/tokens.md: nodes on the sunk ground with a hairline, the accent only on the lines' ends
+    themeVariables: { darkMode: dark, fontSize: "14px", background: "transparent", primaryColor: dark ? "#1e1a14" : "#f3eee7", primaryBorderColor: dark ? "#3a332a" : "#e2d8cb", primaryTextColor: v("--text"),
+      secondaryColor: dark ? "#17140f" : "#fffaf6", tertiaryColor: dark ? "#0b0a08" : "#ffffff", lineColor: dark ? "#6e6458" : "#b3a594", textColor: v("--text"),
+      clusterBkg: dark ? "#0b0a08" : "#fbf8f3", clusterBorder: dark ? "#2a251e" : "#ebe3d8", edgeLabelBackground: dark ? "#17140f" : "#ffffff",
+      nodeTextColor: v("--text"), actorBkg: dark ? "#1e1a14" : "#f3eee7", actorBorder: dark ? "#3a332a" : "#e2d8cb", noteBkgColor: dark ? "#2a2014" : "#fff1e4", noteTextColor: v("--text") } });
   const gen = ++drawn;
   for (const [k, pre] of blocks.entries()) {
     try { const { svg } = await mermaidLib.render(`mmd-${gen}-${k}`, pre.dataset.src); if (gen !== drawn) return; pre.innerHTML = svg; pre.dataset.done = "1";
