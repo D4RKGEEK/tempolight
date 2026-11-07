@@ -335,6 +335,10 @@ body.wz-open { overflow: hidden; }
 .hear-steps li small { font-size: 13px; color: var(--text-2); overflow-wrap: anywhere; }
 .hear-steps .mk { flex: none; width: 24px; height: 24px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 600; background: var(--sunk); color: var(--text-3); }
 .hear-steps li.ok .mk { background: var(--tint-ok); color: var(--ok); } .hear-steps li.no .mk { background: var(--tint-bad); color: var(--bad); } .hear-steps li.maybe .mk { background: var(--tint-warn); color: var(--warn); }
+/* the numbered how-to inside a checklist row (e.g. Make the Multi-Output Device) is a plain list, not checklist rows */
+.hear-steps li ol { display: block; list-style: decimal; margin: 8px 0 0; padding: 0 0 0 22px; background: none; box-shadow: none; border-radius: 0; }
+.hear-steps li ol li { display: list-item; padding: 3px 0; background: none; gap: 0; color: var(--text-2); }
+.hear-steps li ol li b { color: var(--text); }
 .hear-steps .sr, .hear .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
 .hear-midi summary { cursor: pointer; font-size: 14px; color: var(--label); font-weight: 500; }
 .hear-midi ol { margin: 8px 0 4px 18px; font-size: 13.5px; line-height: 1.6; color: var(--text-2); }
