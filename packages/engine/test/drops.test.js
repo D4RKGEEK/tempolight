@@ -4,6 +4,8 @@ import { LiveAnalyser, songView, preAnalyseCore, createDirector, createEffects, 
 import { DropPredictor } from "../src/drops.js";
 import { edm, majorPop, minorBallad } from "./synth.js";
 import { feelSong } from "./feel-song.js";
+import { HARD_NEGATIVES, hiphopBreakDrop } from "./hiphop-songs.js";
+import { styleOfGenres, genreHint, hintLabel } from "../src/genres.js";
 
 // listen to a song live, 60 times a second; every frame's [t, nextDrop, dropConf]
 function listen(song) {
@@ -70,4 +72,34 @@ test("director: the lights build toward a drop in every variety, and only for a 
   const D = createDirector(L, fx); D.settings.style = "party";
   for (let t = 8; t < 16; t += 1 / 60) D.frame(view(t, { dropConf: 0.3, dropSource: "predicted" }), t);
   assert.ok(!D.ramp, "no ramp for an unsure prediction");
+});
+
+test("drop countdown: no countdown on hip hop's look-alikes (hi-hat rolls, 808 slides, beat switches, ad-libs, dhol, filter sweeps); builds stay rare", () => {
+  for (const [name, fn] of Object.entries(HARD_NEGATIVES)) {
+    const s = fn(22050), an = new LiveAnalyser(s.sr), chunk = Math.round(s.sr / 60); let shown = 0, build = 0, n = 0;
+    for (let i = 0; i < s.x.length; i += chunk) { an.push(s.x.subarray(i, i + chunk)); const V = an.view(an.t); if (V.nextDrop != null && V.dropConf >= 0.5) shown++; if (V.state !== "silent") { n++; if (V.state === "build") build++; } }
+    assert.equal(shown, 0, `${name}: a countdown`); assert.ok(build / n <= 0.15, `${name}: build ${(100 * build / n).toFixed(0)}%`);
+  }
+});
+
+test("hip hop: the beat coming back after a break is the drop (no countdown before it)", () => {
+  const s = hiphopBreakDrop(22050), { an, out } = listen(s); assert.equal(sure(out).length, 0);
+  assert.ok(s.truth.drops.some(d => Math.abs(an.drops.beatInT - d) < 0.3), `beat in at ${an.drops.beatInT}`);
+  const an2 = new LiveAnalyser(s.sr), chunk = Math.round(s.sr / 60), entries = []; let prev = null;
+  for (let i = 0; i < s.x.length; i += chunk) { an2.push(s.x.subarray(i, i + chunk)); if (an2.state === "drop" && prev !== "drop") entries.push(an2.t); prev = an2.state; }
+  for (const d of s.truth.drops) assert.ok(entries.some(t => t >= d - 0.1 && t < d + 1.5), `a drop at ${d.toFixed(1)}: ${entries.map(t => t.toFixed(1))}`);
+});
+
+test("genre hints: Spotify's genres to a style; the hint is the live style from the start and turns the EDM countdown off", () => {
+  assert.equal(styleOfGenres(["desi hip hop", "indian hip hop"]).style, "hiphop"); assert.equal(styleOfGenres(["punjabi pop", "bhangra"]).style, "hiphop");
+  assert.equal(styleOfGenres(["filmi", "bollywood"]).style, "poprock"); assert.equal(styleOfGenres(["tech house", "house"]).style, "party");
+  assert.equal(styleOfGenres(["trap"]).style, "hiphop"); assert.equal(styleOfGenres(["melodic techno"]).style, "party"); assert.equal(styleOfGenres(["indie folk", "acoustic"]).style, "poprock");
+  assert.equal(styleOfGenres([]), null); assert.equal(styleOfGenres(["polka"]), null);
+  assert.equal(hintLabel(genreHint(["desi hip hop"], "spotify")), "Hip hop · from Spotify");
+  const s = feelSong(), an = new LiveAnalyser(s.sr), chunk = Math.round(s.sr / 60); an.setGenreHint(genreHint(["hip hop"], "spotify")); let shown = 0;
+  for (let i = 0; i < s.x.length; i += chunk) { an.push(s.x.subarray(i, i + chunk)); const V = an.view(an.t); if (i > 3 * s.sr && an.state !== "silent") assert.equal(V.style, "hiphop"); if (V.nextDrop != null && V.dropConf >= 0.5) shown++; }
+  const c = new LiveAnalyser(s.sr); c.setGenreHint(genreHint(["lo-fi"], "spotify")); let calm = 0;
+  for (let i = 0; i < s.x.length; i += chunk) { c.push(s.x.subarray(i, i + chunk)); const V = c.view(c.t); if (V.nextDrop != null && V.dropConf >= 0.5) calm++; }
+  assert.equal(calm, 0, "a chill song: no countdown, even over an EDM build-up"); assert.ok(shown < 0.8 * sure(listen(s).out).length, "hip hop: only the surest part of it");
+  const e = feelSong(), a2 = new LiveAnalyser(e.sr); a2.setGenreHint(genreHint(["edm"], "spotify")); a2.push(e.x.subarray(0, 14 * e.sr)); assert.ok(a2.drops.next != null && a2.drops.conf >= 0.5, "EDM: still predicted");
 });
