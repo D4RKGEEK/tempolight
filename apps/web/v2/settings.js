@@ -17,7 +17,6 @@ const IC = {
   performance: svg('<path d="M4 16a8 8 0 1 1 16 0"/><path d="M12 16l4-5"/><circle cx="12" cy="16" r="1.4"/>'),
   network: svg('<path d="M3 9.5a13 13 0 0 1 18 0M6 13a8.5 8.5 0 0 1 12 0M9 16.5a4 4 0 0 1 6 0"/><circle cx="12" cy="19.5" r=".9"/>'),
   backup: svg('<path d="M4 7h16v13H4zM3 4h18v3H3z"/><path d="M12 10v6M9.5 13.5L12 16l2.5-2.5"/>'),
-  designer: icon("sparkle"),
   about: icon("info"),
 };
 const SECTIONS = [
@@ -29,14 +28,13 @@ const SECTIONS = [
   ["performance", "Performance", "Frame rate and low power mode"],
   ["network", "Network and updates", "Wi-Fi, Home Assistant, Apple Home and other connections"],
   ["backup", "Backup", "Move to a new computer, or start over"],
-  ["designer", "Claude show designer", "Optional: Claude designs each song's show, with your own API key"],
   ["about", "About", "Version, updates, help and the licence"],
 ];
 // deep links: #/settings2/<anchor> → [section, element id]; the v1 anchors (#/settings/punch...) keep their names
 const ANCHORS = { punch: ["lighting", "st-punch"], drama: ["lighting", "st-dyn"], chords: ["lighting", "st-chordc"], stereo: ["lighting", "st-stereo"],
   countdown: ["lighting", "st-dropcd"], about: ["about", "st-a-upd"], update: ["about", "st-a-upd"], night: ["general", "st-n-on"], location: ["general", "st-lat"],
   ambient: ["general", "st-amb"], safe: ["safety", "st-safe"], pin: ["lock", "st-lockbox"], guests: ["lock", "st-g-effects"], fps: ["performance", "st-fps"],
-  memory: ["music", "st-mem"], wifi: ["network", "st-wifi"], mqtt: ["network", "st-m-on"], homekit: ["network", "st-hk"], claude: ["about", "st-claude"], designer: ["designer", "st-d-on"],
+  memory: ["music", "st-mem"], wifi: ["network", "st-wifi"], mqtt: ["network", "st-m-on"], homekit: ["network", "st-hk"], claude: ["about", "st-claude"],
   restore: ["backup", "st-b-file"], text: ["general", "st-x-src"] };
 const DOCS = "https://tempolight.pages.dev/docs/";
 const pct = v => `${Math.round(v * 100)}%`;
@@ -58,7 +56,7 @@ export function render(el) {
   ensureCss("/v2/settings.css");
   el.innerHTML = `<div class="st2 span-12" id="st2"></div>`;
   const root = $("#st2", el);
-  let gone = false, cur = null, hk = null, hkLoad = null, upd = null, dz = null, timers = [];
+  let gone = false, cur = null, hk = null, hkLoad = null, upd = null, timers = [];
   const sub = routeSub(), anchor = ANCHORS[sub], fromSub = SECTIONS.some(x => x[0] === sub) ? sub : anchor?.[0] || null;
   cur = fromSub || (wide() ? "general" : null);
 
@@ -159,20 +157,6 @@ export function render(el) {
         return group("Backup", row("Download a backup", "Lights, the room, zones, scenes, schedules and settings in one file. Use it to move to a new computer or Raspberry Pi.", `<button class="btn sm primary" id="st-b-down" type="button">Download the backup</button>`)
             + row("Restore from a file", "Replaces what is here now. Your current PIN stays.", `<label class="btn sm" for="st-b-file">Choose a backup file</label><input type="file" id="st-b-file" accept="application/json,.json" hidden>`), {
               more: row("Reset everything", "Removes all lights, the room, scenes, schedules and settings. Download a backup first.", `<button class="btn sm danger" id="st-reset" type="button">Reset everything</button>`) });
-      case "designer": {
-        if (DEMO) return `<p class="st-note">The Claude show designer runs in the Tempolight app on your computer or Raspberry Pi, with your own Anthropic API key. It isn't part of the online demo.</p>`;
-        const v = dz || {}, m = s.designer || {}, models = v.models || [], known = models.some(x => x.id === (v.model || m.model));
-        const usd = x => x == null ? "" : x < 0.01 ? "under 1 cent" : `about $${x.toFixed(2)}`;
-        return group("Claude show designer", tg("st-d-on", "Design songs with Claude", "When a remembered song plays and has no design, Tempolight sends Claude one request: the title and artist, a summary of the analysis (song parts, energy, drops, tempo, key, mood) and the effects and palettes. Never audio. The answer sets each part's energy, palettes and a few big moments.", v.enabled ?? m.enabled)
-            + row("Anthropic API key", `Your own key from <a href="https://platform.claude.com/settings/keys" target="_blank" rel="noopener">platform.claude.com</a>. It stays on this computer: never shown again, never in a backup.`, `<input id="st-d-key" type="password" autocomplete="off" spellcheck="false" placeholder="${(v.hasKey ?? m.hasKey) ? "Saved" : "sk-ant-..."}" aria-label="Anthropic API key">`, { id: "st-d-key", cls: "st-row-stack" })
-            + sel("st-d-model", "Model", "Sonnet is a good balance. Haiku costs the least.", models.map(x => opt(x.id, `${x.name} ($${x.price[0]} / $${x.price[1]} per million tokens)`, x.id === (v.model || m.model))).join("") + (known ? "" : opt(v.model || m.model || "", v.model || m.model || "", true)))
-            + row("Daily limit", "Requests a day at most, failures included. 0 stops it.", `<input type="number" id="st-d-cap" class="st-num" min="0" max="500" value="${esc(v.dailyCap ?? m.dailyCap ?? 30)}">`, { id: "st-d-cap", forId: "st-d-cap" })
-            + `<div class="st-actions"><span class="st-live" id="st-d-state">${v.today ? `Today: ${v.today.requests} of ${v.dailyCap}${v.estimate?.usd != null ? ` · ${usd(v.estimate.usd)} a song` : ""}` : "Checking"}</span><button class="btn sm" id="st-d-test" type="button">Test the key</button><button class="btn sm primary" id="st-d-save" type="button">Save</button></div>`, {
-            sub: (v.enabled ?? m.enabled) ? "On" : "Off",
-            more: row("Forget the key", "Removes the saved API key from this computer.", `<button class="btn sm danger" id="st-d-clear" type="button">Forget the key</button>`)
-              + row("How it works", "Each song is asked about once. A design that is wrong in any way is thrown away and the song keeps its automatic look. Redesign a song, or go back to the automatic look, from its Look card.", `<a class="btn sm" href="${DOCS}guides/claude-designer/" target="_blank" rel="noopener">Read the guide</a>`) })
-          + (v.error ? `<p class="st-note">Last problem: ${esc(v.error)}</p>` : "");
-      }
       case "about":
         return `<div class="st-hero ui-card"><span class="st-lamp" aria-hidden="true"></span><div><h3>Tempolight ${esc(st.version || "")}</h3><p>Music-reactive light for any room. Open source, MIT licence${DEMO ? ". This is the online demo." : "."}</p></div></div>`
           + group("Updates", updHtml("st-a"))
@@ -275,18 +259,6 @@ export function render(el) {
         if (!confirm("Replace your lights, room, scenes, schedules and settings with this backup?")) return;
         await act(() => api("POST", "/api/restore", j), "Backup restored").catch(() => {}); await refreshState(); await loadLayout(); paint(); };
       q("st-reset").onclick = async () => { if (!confirm("Reset all lights, the room, scenes, schedules and settings?")) return; await act(() => api("POST", "/api/reset"), "Reset").catch(() => {}); await refreshState(); await loadLayout(); route(); };
-    }
-    if (k === "designer" && !DEMO) {
-      const load = () => api("GET", "/api/designer").then(v => { if (gone) return; const first = !dz; dz = v; if (first && cur === "designer") paint(); }).catch(() => {});
-      if (!dz) { load(); return; }
-      const send = (b, msg) => act(() => api("PATCH", "/api/designer", b), msg).then(v => { dz = v; paint(); }).catch(() => {});
-      onTg("st-d-on", v => { const b = { enabled: v }; if (q("st-d-key").value.trim()) b.apiKey = q("st-d-key").value.trim(); if (v && !dz.hasKey && !b.apiKey) { toast("Paste your Anthropic API key first", true); return false; } send(b, v ? "Claude show designer on" : "Claude show designer off"); });
-      q("st-d-save").onclick = () => { const b = { model: q("st-d-model").value, dailyCap: Number(q("st-d-cap").value) }; if (q("st-d-key").value.trim()) b.apiKey = q("st-d-key").value.trim(); send(b, "Saved"); };
-      q("st-d-clear").onclick = () => { if (confirm("Forget the Anthropic API key on this computer?")) send({ clearKey: true, enabled: false }, "Key forgotten"); };
-      q("st-d-test").onclick = async () => { const el = q("st-d-state"), k = q("st-d-key").value.trim();
-        if (k) { const v = await act(() => api("PATCH", "/api/designer", { apiKey: k, model: q("st-d-model").value })).catch(() => null); if (!v) return; dz = v; q("st-d-key").value = ""; q("st-d-key").placeholder = "Saved"; }
-        el.textContent = "Testing"; const r = await act(() => api("POST", "/api/designer/test")).catch(() => null); if (!r) { el.textContent = ""; return; }
-        el.textContent = r.ok ? `The key works with ${r.model} (${r.ms} ms)` : `Problem: ${r.error}`; el.dataset.state = r.ok ? "connected" : "error"; };
     }
     if (k === "about") {
       wireUpd(d, "st-a"); q("st-wizard2").onclick = wiz;

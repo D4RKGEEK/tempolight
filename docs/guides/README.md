@@ -13,7 +13,6 @@ the clicks and ends with an *Advanced* part.
 | [Where the music comes from](music-sources.md) | songs, live listening, now playing, Spotify, DJ Link, Link, MIDI clock |
 | [Your own music](your-music.md) | a music folder analysed ahead: every song followed from its first play |
 | [Sync with Spotify](../spotify.md) | connecting Spotify, learning songs, shared beat maps |
-| [Claude show designer](claude-designer.md) | optional: Claude designs each song's show, with your own API key; what is sent, cost, privacy |
 | [Docker](docker.md) | Docker on Linux and Docker Desktop |
 | [Smart home](smart-home.md) | Home Assistant, Apple Home, voice, wake-up |
 | [Parties and DJs](party-and-dj.md) | live pads, MIDI pads, scenes, guests, phones, DJ gear, safe mode |

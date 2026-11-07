@@ -72,7 +72,6 @@ Changed with `PATCH /api/settings` (admin) unless noted; out-of-range numbers ar
 | `night` | `{enabled, from, to, maxBrightness, warm}` | `{enabled: false, from: "23:00", to: "07:00", maxBrightness: 0.3, warm: true}` | times `HH:MM`, `sunset`, `sunrise-30`; maxBrightness 0.02-1 |
 | `text` | `{source, custom}` | `{source: "song", custom: "TEMPOLIGHT"}` | Text Scroller: `song`, `bpm`, `clock` or `custom` (≤ 80 characters) |
 | `mqtt` | `{enabled, url, username, password, prefix, base}` | `{enabled: false, url: "", username: "", password: "", prefix: "homeassistant", base: "tempolight"}` | Home Assistant; `password` is never sent back (`hasPassword`), `clearPassword: true` removes it; `TEMPOLIGHT_MQTT_*` variables override at every start (`env-settings.js`) |
-| `designer` | `{enabled, apiKey, model, dailyCap, usage}` | `{enabled: false, apiKey: "", model: "claude-sonnet-5-5", dailyCap: 30}` | the [Claude show designer](/guides/claude-designer), changed with `PATCH /api/designer` (not `/api/settings`); `apiKey` is never sent back (`hasKey`), left out of backups (a restore keeps the key already here) and never logged; `dailyCap` 0-500 requests a day; `usage` `{day, n, input, output}` is today's count and tokens |
 | `homekit` | `{enabled}` | `{enabled: false}` | changed with `PATCH /api/homekit`; keys and pairings are in `homekit.json` |
 | `djlink` | `{enabled, port}` | `{enabled: false, port: 50001}` | Pioneer Pro DJ Link |
 | `link` | `{enabled, port}` | `{enabled: false, port: 20808}` | Ableton Link (listen only) |
@@ -87,14 +86,7 @@ Changed with `PATCH /api/settings` (admin) unless noted; out-of-range numbers ar
 | `stereo` | string | `"subtle"` | `off`, `subtle` or `strong`: with a stereo source, the side of the room a hit came from brightens (spatial.js) |
 | `spotify` | object | added by spotify.js: `{sync: true, learn: true, analysis: true, coverColours: false, pauseFade: true, muteDim: true, cloud: {url: "", use: false, share: false}}` | changed with `PATCH /api/spotify`; `analysisBlocked` (a client ID) remembers that Spotify refused its audio analysis |
 
-`GET /api/state` returns `settings` with `mqtt.password` blanked and `mqtt.hasPassword` added, and `designer.apiKey`
-blanked and `designer.hasKey` added.
-
-A remembered song (`songs[]`) can carry `design`, the Claude show designer's answer after validation: `{v, at, model,
-why, main, drop, sections: [{i, label, part, bar0, bar1, t0, t1, arc, drop, palette, reason}], moments: [{bar, type,
-beats?, reason?}], usage: {input, output}}`, and `designAsked` (ms), when it was last asked about (the song isn't asked
-again by itself). `v` is `DESIGN_VERSION` (engine/src/designer.js): a design from another version is shown but not
-played. See [song memory](/internals/song-memory#what-is-stored).
+`GET /api/state` returns `settings` with `mqtt.password` blanked and `mqtt.hasPassword` added.
 
 ## show
 

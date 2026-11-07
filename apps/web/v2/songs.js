@@ -330,8 +330,7 @@ export function render(el) {
         <div class="sg-map" id="sg-map"><canvas aria-label="The song's map: its parts and drops" role="img"></canvas><p class="sg-mapnote" id="sg-mapnote">${it.id ? "Loading the map" : "The map appears once the song has been played and remembered."}</p></div>
         <div class="sg-parts" id="sg-parts"></div>
         <div class="sg-lookcard"><p class="sg-h3">Look</p><b id="sg-lk">${esc(lookLabel(it.look) || (it.id ? "Picked when it plays" : "Picked when it plays"))}</b><small id="sg-lkwhy"></small>
-          <div class="sg-row"><button class="btn" id="sg-lknext" type="button">Try another look</button><button class="btn" id="sg-lkkeep" type="button" aria-pressed="${!!it.look?.locked}">${it.look?.locked ? "Kept" : "Keep this look"}</button></div>
-          <div class="sg-design" id="sg-design" hidden></div></div>
+          <div class="sg-row"><button class="btn" id="sg-lknext" type="button">Try another look</button><button class="btn" id="sg-lkkeep" type="button" aria-pressed="${!!it.look?.locked}">${it.look?.locked ? "Kept" : "Keep this look"}</button></div></div>
         <div class="sg-dacts"><button class="btn primary" id="sg-d-show" type="button">Edit the show</button><button class="btn" id="sg-d-play" type="button">${ico("play")}Play</button>${it.id && admin ? `<button class="btn danger sg-ghost" id="sg-d-forget" type="button">Forget this song</button>` : ""}</div>` });
     detail = { it, s };
     const B = s.body, lookOk = guestOk("effects") && !!it.id;
@@ -346,28 +345,6 @@ export function render(el) {
     nx.onclick = () => act(() => api("POST", "/api/song/look/next", { id: it.id })).then(r => { showLook(r); toast(`Look: ${r.label}`); refreshLater(); }).catch(() => {});
     kp.onclick = () => { const kept = kp.getAttribute("aria-pressed") === "true"; act(() => api("POST", "/api/song/look/keep", { id: it.id, keep: !kept }), kept ? "The look can change again" : "Look kept for this song").then(r => { showLook(r); refreshLater(); }).catch(() => {}); };
     if (it.id) loadMap(it, B);
-    if (it.id && it.kind === "mem" && !DEMO) loadDesign(it, B);
-  }
-  // the Claude show designer (server/src/designer.js): the song's design per section, Redesign, Use the automatic look.
-  // Everything Claude wrote (why, reasons) is shown as text only.
-  const ARC_NAME = { hold: "Hold back", build: "Build", full: "Full energy", breakdown: "Breakdown" }, MOMENT_NAME = { blackout: "Blackout", strobe: "Strobe hit", fade: "Slow fade" };
-  async function loadDesign(it, B, v) {
-    v ||= await api("GET", `/api/songs/${encodeURIComponent(it.id)}/design`).catch(() => null);
-    const box = B.querySelector("#sg-design"); if (!box || !B.isConnected) return;
-    if (!v || (!v.design && !v.enabled)) { box.hidden = true; return; }
-    const d = v.design, usd = v.estimate?.usd, cost = usd == null ? "" : usd < 0.01 ? " (under 1 cent)" : ` (about $${usd.toFixed(2)})`;
-    box.hidden = false;
-    box.innerHTML = (d ? `<p class="sg-h3">Designed by Claude${v.active ? "" : " · not playing"}</p><p class="sg-dwhy"></p>
-        <ol class="sg-dsecs">${d.sections.map(x => `<li><span class="sg-part ${esc(x.part)}"><b>${esc(x.label)}</b>${esc(ARC_NAME[x.arc] || x.arc)}<span class="mono">${fmtTime(x.t0)}</span></span>
-          <span class="sg-dfx">${esc(fxName(x.effect))} · ${esc(cap(x.palette))}${x.drop ? " · drop" : ""}</span><small data-reason="${x.i}"></small></li>`).join("")}</ol>
-        ${d.moments.length ? `<p class="sg-dmom">${d.moments.map(m => `${esc(MOMENT_NAME[m.type] || m.type)} at bar ${m.bar + 1}`).join(" · ")}</p>` : ""}
-        <small class="sg-dby">${esc(d.model || "")}${d.usage ? ` · ${d.usage.input + d.usage.output} tokens` : ""}</small>`
-      : `<p class="sg-h3">Claude show designer</p><small>${v.busy ? "Claude is designing this song" : v.asked ? "No design: the automatic look plays." : "Designed the next time it plays."}</small>`)
-      + (admin ? `<div class="sg-row"><button class="btn" id="sg-dre" type="button"${v.busy ? " disabled" : ""}>${d ? "Redesign with Claude" : "Design with Claude"}${esc(cost)}</button>${d ? `<button class="btn" id="sg-dauto" type="button">Use the automatic look</button>` : ""}</div>` : "");
-    if (d) { box.querySelector(".sg-dwhy").textContent = d.why; d.sections.forEach(x => { const el = box.querySelector(`[data-reason="${x.i}"]`); if (el) el.textContent = x.reason; }); }
-    const re = box.querySelector("#sg-dre"); if (re) re.onclick = async () => { re.disabled = true; re.textContent = "Claude is designing";
-      const r = await act(() => api("POST", `/api/songs/${encodeURIComponent(it.id)}/design`), "Designed by Claude").catch(() => null); loadDesign(it, B, r || undefined); };
-    const au = box.querySelector("#sg-dauto"); if (au) au.onclick = () => act(() => api("DELETE", `/api/songs/${encodeURIComponent(it.id)}/design`), "The automatic look plays").then(r => loadDesign(it, B, r)).catch(() => {});
   }
   let refreshT = 0; const refreshLater = () => { clearTimeout(refreshT); refreshT = setTimeout(async () => { await Promise.all([loadMem(), loadLib()]); paintList(); }, 300); };
   async function loadMap(it, B) {

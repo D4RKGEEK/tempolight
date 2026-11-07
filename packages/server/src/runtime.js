@@ -515,8 +515,6 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     D.settings.look = V ? currentLook() : null; // (null while listening live to a song it doesn't know: the director picks one)
     const pe = V ? currentPlan() : null; D.settings.plan = pe ? pe.show : null;
     D.settings.timeline = pe && (pe.colors?.length || pe.cues?.length || pe.bright?.length) ? { colors: pe.colors || [], cues: pe.cues || [], bright: pe.bright || [] } : null;
-    const dz = V && rt.designFor ? rt.designFor(playingEntry(), pe) : null; // a song designed by Claude (designer.js): its blocks, colours, moments and energy arc
-    if (dz) { D.settings.plan = dz.show; D.settings.timeline = dz.timeline; } D.settings.arc = dz ? dz.arc : null;
     if (rt.spotify && V) D.settings.timeline = rt.spotify.timeline(D.settings.timeline); // the album cover's colours, if on
     if (rt.forced && !V) t = (now + lead) / 1000, V = metronomeView(t, s.metronome.bpm || 124); // "build & drop" pad works even with no music
     V = applyForced(V, t, now);
@@ -759,7 +757,6 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       beat: V && V.g.has ? V.g.beatInBar : null, drop: dropInfo(V, rt.t), level: an ? Math.round(Math.min(1, an.eFast / an.eMax) * 100) / 100 : V ? Math.round((V.loud || 0) * 100) / 100 : 0,
       bands: an ? Array.from(an.bands, v => Math.round(v * 100) / 100) : null, key: V && V.key ? { key: V.key, mode: V.mode, name: `${V.key} ${V.mode}`, confidence: V.keyConf ?? 0 } : null, mood: V && V.mood ? { ...V.mood, name: moodName(V.mood) } : null, hears: V ? hearsLabel(V.key, V.mode, V.mood) : null, vocal: an ? Math.round(an.vocal * 100) / 100 : null, mapping: rt.mapping ? { device: rt.mapping.dev, led: rt.mapping.led } : null, djlink: djFresh(performance.now()) ? { name: rt.dj.name, bpm: rt.dj.bpm, beatInBar: rt.dj.beatInBar } : null, recognised: rt.mem.lock && liveFresh() ? { id: rt.mem.lock.id, name: rt.mem.lock.name, pos: Math.round(lockPos(rt.mem.lock, rt.live.an.t) * 10) / 10, dur: rt.mem.lock.pre.dur } : null, power: data().show.power, brightness: data().settings.brightness, night: !!rt.night, home: rt.home ? rt.home.status() : null, mqtt: rt.mqtt || null, phones: phones.size, screen: rt.screen ? rt.screen.label || "A shared screen" : null,
       look: lookInfo(D.look, { song: playingEntry()?.id || null }),
-      design: rt.designStatus ? rt.designStatus(playingEntry()) : null, // the Claude show designer for the song playing (designer.js)
       song: rt.song ? { memId: rt.song.memId || null, name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
       nowPlaying: rt.nowPlaying ? rt.nowPlaying.info() : null, spotify: rt.spotify ? rt.spotify.info() : null,
       capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null, hearing: hear, offsetMs: syncOffset(), timing: timingInfo(), sync: syncInfo(hear),
@@ -797,7 +794,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   return {
     get layout() { return L; }, get effects() { return fx; }, get director() { return D; }, perf, rt, log, listeners, previewClients, phones, health,
     rebuild, rebuildEffects, syncDirector, startLoop, syncOffset, setOutput, hearingInfo, updateNight, pushPcm, stopLive, startCaptureSource, stopCaptureSource, setSong, songClock, clearSong,
-    fixtures, beats, identify, syncSegments, setPower, action, status, songMapNow, setScreen, clearScreen, remember, forget, songs, songById, saveSong, prepareSong, djBeat, djOnAir, planFor, freshShow, lookNext, lookKeep, lookOf, playingEntry, setDraft, mapLight, endMap, layoutInfo, checkDevice, note,
+    fixtures, beats, identify, syncSegments, setPower, action, status, songMapNow, setScreen, clearScreen, remember, forget, songs, songById, saveSong, prepareSong, djBeat, djOnAir, planFor, freshShow, lookNext, lookKeep, lookOf, setDraft, mapLight, endMap, layoutInfo, checkDevice, note,
     close() { for (const [id, o] of outs) if (data().devices.find(d => d.id === id)?.kind === "dmx") try { o.sender.send(new Uint8Array(512)); } catch {} // DMX: leave everything at zero
       loopGen++; clearTimeout(timer); clearTimeout(flushTimer); clearInterval(healthTimer); clearInterval(nightTimer); stopCaptureSource(); for (const o of outs.values()) o.sender.close(); syncSender.s && syncSender.s.close(); },
   };

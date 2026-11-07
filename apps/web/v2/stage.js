@@ -65,8 +65,6 @@ export function render(el) {
         <div class="st-look-main"><b id="st-look-name">–</b><span id="st-look-sub"></span></div>
         <div class="ui-swatches" id="st-sw" aria-label="The colours in the room now">${"<i hidden></i>".repeat(5)}</div>
         <p class="st-why" id="st-why"></p>
-        <div class="st-design" id="st-design" hidden><p><b>Designed by Claude:</b> <span id="st-design-why"></span></p>
-          <div class="st-look-a"><button class="btn sm" id="st-redesign" type="button">Redesign</button><button class="btn sm" id="st-design-off" type="button">Use the automatic look</button></div></div>
         <div class="st-look-a" id="st-look-a">
           <button class="btn" id="st-next-look" type="button">Try another look</button>
           <button class="btn" id="st-keep" type="button" aria-pressed="false">Keep this look</button>
@@ -110,10 +108,6 @@ export function render(el) {
   $("#st-keep").onclick = () => { const kept = $("#st-keep").getAttribute("aria-pressed") === "true";
     act(() => api("POST", "/api/song/look/keep", { keep: !kept }), kept ? "The look can change again" : "Look kept for this song").catch(() => {}); };
   $("#st-auto").onclick = () => show({ mode: "auto" });
-  // the Claude show designer (server/src/designer.js): status.design is the song playing now
-  let designSong = null;
-  $("#st-redesign").onclick = () => { if (!designSong) return; $("#st-redesign").disabled = true; act(() => api("POST", `/api/songs/${encodeURIComponent(designSong)}/design`), "Designed by Claude").catch(() => {}).finally(() => { $("#st-redesign").disabled = false; }); };
-  $("#st-design-off").onclick = () => designSong && act(() => api("DELETE", `/api/songs/${encodeURIComponent(designSong)}/design`), "The automatic look plays").catch(() => {});
   const VAR = bindSegmented(el, "variety", v => show({ variety: v }));
   if (!lookOk) $$("#st-look-a button, [data-seg=variety] button").forEach(b => b.disabled = true);
 
@@ -199,9 +193,6 @@ export function render(el) {
     const k = $("#st-keep"); k.setAttribute("aria-pressed", String(!!lk?.locked)); k.innerHTML = lk?.locked ? `${icon("check")}Kept` : "Keep this look";
     $("#st-next-look").hidden = k.hidden = manual; $("#st-auto").hidden = !manual;
     $("#st-next-look").disabled = k.disabled = !lk || !lookOk;
-    const dz = m.design, dbox = $("#st-design"), dOn = !!(dz && !manual && (dz.active || dz.busy));
-    dbox.hidden = !dOn; designSong = dz?.song || null;
-    if (dOn) { $("#st-design-why").textContent = dz.busy && !dz.has ? "designing this song…" : dz.why || ""; $("#st-redesign").hidden = $("#st-design-off").hidden = !setOk || !dz.has; if (dz.active) $("#st-why").textContent = ""; }
     VAR.set(variety);
     // pads
     const o = m.overlay || {};

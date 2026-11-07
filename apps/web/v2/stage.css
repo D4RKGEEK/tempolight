@@ -108,8 +108,3 @@
   .st-foot.sm-foot { grid-template-columns: auto 1fr auto; } .st-foot.sm-foot #sm-next { grid-column: auto; grid-row: auto; }
   .st-np.idle { flex-direction: column; align-items: stretch; gap: 16px; } .st-np.idle .st-np-row { flex: none; }
 }
-
-/* the Claude show designer (stage.js): "Designed by Claude: <why>" in the Look card */
-.st-design { display: flex; flex-direction: column; gap: 8px; margin-top: -4px; font-size: 14px; color: var(--text-2); }
-.st-design[hidden] { display: none; }
-.st-design p { margin: 0; overflow-wrap: anywhere; }

@@ -26,7 +26,6 @@ A compact copy of a whole-song analysis, about 10-30 kB of JSON (18 kB for 2 min
 | `phrase` | `{len: 8 or 16, first}`: the phrase grid, bar indices |
 | `show`, `showEdited`, `colors`, `cues`, `bright` | the song's show timeline (see [director and effects](director-and-effects.md#shows-and-timelines)); `showV` and `showKey` say what it was planned with (planner version, variety and look) |
 | `look` | the song's look `{main, drop, build, calm, palette, params, why, v, rejected, locked}` (see [looks](director-and-effects.md#looks-one-effect-per-song)): picked when it is remembered, again when the picker changes unless `locked`; `rejected` are the effects turned down for it |
-| `design`, `designAsked` | the [Claude show designer](../guides/claude-designer.md)'s validated design for the song and when it was asked (see [data model](data-model.md#settings)); a design plays instead of the automatic look while the designer is on and the show isn't edited by hand |
 | `spotifyId`, `isrc`, `src`, `cov`, `gridSec` | added by Sync with Spotify: the track ID, where the map came from (`learned`, `shared`, `spotify-analysis`), and for partly learned songs the covered stretches `[[t0, t1], ...]` |
 
 `memoryAnalysis(e)` turns an entry back into an analysis that `songView()` can use (the envelope expanded to 20 ms

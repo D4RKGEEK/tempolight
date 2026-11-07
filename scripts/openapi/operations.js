@@ -27,7 +27,6 @@ export const tags = [
   ["Now playing", "The track music apps on this computer play, and the Spotify sign-in."],
   ["Music library", "Your own music folders, analysed ahead so every song is followed from its first play. Node server only, admin only."],
   ["Spotify", "Lights that follow the Spotify track with its beat map."],
-  ["Claude show designer", "Optional: with your own Anthropic API key, Claude designs each song's show (energy arc, drop sections, palettes, moments). Node server only, admin only to change."],
   ["Requests", "Guest song requests from `/request`. Open to everyone, even when locked."],
   ["Settings", "Every setting, in one call."],
   ["Backup & updates", "Backup, restore, reset to defaults, updates and quitting."],
@@ -229,22 +228,6 @@ export const operations = {
   "POST /api/spotify/colors": { tag: "Spotify", summary: "Send cover colours", body: obj({ art: str("The cover's https address."), colors: arr(str(), "2 to 4 colours.", { minItems: 2, maxItems: 4 }) }, { required: ["art", "colors"] }),
     bodyExample: { art: "https://i.scdn.co/image/ab67616d0000b273", colors: ["#1db954", "#191414", "#ffffff"] }, res: OK, errors: { 400: "{art, colors: ['#rrggbb', '#rrggbb', ...]}" },
     description: "The album cover's colours, which the browser works out, for the palette." },
-
-  // ============================================================ Claude show designer
-  "GET /api/designer": { tag: "Claude show designer", summary: "Get the designer", res: "Designer", description: "On or off, whether a key is saved (never the key), the model, the daily limit, today's requests and tokens, and the estimated tokens and cost of a request for the song playing." },
-  "PATCH /api/designer": { tag: "Claude show designer", summary: "Change the designer", res: "Designer",
-    body: obj({ enabled: bool(), apiKey: str("Your Anthropic API key (`sk-ant-…`). Kept on this computer, never sent back."), clearKey: bool("Forget the saved key."), model: str("A model id, like `claude-sonnet-5-5`."), dailyCap: int("Requests a day at most, 0 to 500.", { minimum: 0, maximum: 500 }) }),
-    bodyExample: { enabled: true, apiKey: "sk-ant-api03-…", model: "claude-sonnet-5-5", dailyCap: 30 }, errors: { 400: "That doesn't look like an Anthropic API key (it starts with sk-ant-)" },
-    description: "Any of: on or off, the API key, the model and the daily limit." },
-  "POST /api/designer/test": { tag: "Claude show designer", summary: "Test the key", res: obj({ ok: bool(), model: str(), ms: num(), error: str() }), example: { ok: true, model: "claude-sonnet-5-5", ms: 640 },
-    errors: { 400: "Paste your Anthropic API key first" }, description: "Sends a tiny request (16 tokens at most) with the saved key and model. It doesn't count against the daily limit. `ok: false` with `error` when Anthropic turns it down." },
-  "GET /api/songs/{id}/design": { tag: "Claude show designer", summary: "Get a song's design", res: "SongDesign", params: { id: "A remembered song's id (`m…`)." }, errors: { 404: "That song isn't remembered" },
-    description: "The song's design per section (arc, effect, palette, Claude's reason), its moments, whether it plays now, and the estimated cost of asking again. `design` is `null` when it has none." },
-  "POST /api/songs/{id}/design": { tag: "Claude show designer", summary: "Redesign with Claude", res: "SongDesign", params: { id: "A remembered song's id (`m…`)." },
-    errors: { 400: "Turn on the Claude show designer in Settings first", 404: "That song isn't remembered", 409: "Claude is designing this song already", 429: "The daily limit of 30 designs is reached. Raise it in Settings → Claude, or try tomorrow.", 502: "Claude couldn't design this song: unknown effect \"x\". It keeps its automatic look." },
-    description: "Asks Claude for a new design now (one request, counted against the daily limit). Answers within about 10 seconds; a wrong or late answer is thrown away (502) and the song keeps what it had." },
-  "DELETE /api/songs/{id}/design": { tag: "Claude show designer", summary: "Use the automatic look", res: "SongDesign", params: { id: "A remembered song's id (`m…`)." }, errors: { 404: "That song isn't remembered" },
-    description: "Drops the song's design: it plays its automatic look, and isn't asked about again by itself." },
 
   // ============================================================ Requests
   "GET /api/requests": { tag: "Requests", summary: "List requests", res: obj({ enabled: bool(), requests: arr(R("SongRequest")) }),
