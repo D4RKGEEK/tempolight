@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import { mkdtempSync, rmSync, readFileSync } from "node:fs";
 import { createApp } from "../src/app.js";
-import { parseAvfDevices, parseDshowDevices, parseMacAudio, macOutput, parsePactlSinks, parsePactlInfo, linuxOutput, parseWinEndpoints, winOutput, isLoopback, computerSource } from "../src/hearing.js";
+import { parseAvfDevices, parseDshowDevices, parseMacAudio, macOutput, parsePactlSinks, parsePactlInfo, linuxOutput, parseWinEndpoints, winOutput, isLoopback, computerSource, macMicApp } from "../src/hearing.js";
 import { sourceFor } from "../src/capture.js";
 
 const fx = f => readFileSync(new URL(`./fixtures/hearing/${f}`, import.meta.url), "utf8");
@@ -113,6 +113,22 @@ test("hearing on a Mac: silence from BlackHole while music plays says so; a name
     assert.equal(step(v, "hears").state, "no"); assert.equal(step(v, "output").state, "no", "the output isn't the Multi-Output Device"); assert.equal(s.st().hearing.sound, false);
     await s.call("PATCH", "/api/settings", { capture: { source: "avf:Missing Device" } });
     assert.match(s.st().capture.error, /“Missing Device” can't be used/); assert.equal(s.st().hearing.sound, false, "the microphone (the first source) wasn't used instead");
+  } finally { await s.done(); }
+});
+
+test("hearing on a Mac: ffmpeg refused the input, or only zeros arrive: macOS is blocking the microphone, for the terminal's app", async () => {
+  assert.equal(macMicApp({ TERM_PROGRAM: "Apple_Terminal" }), "Terminal"); assert.equal(macMicApp({ TERM_PROGRAM: "vscode" }), "VS Code"); assert.equal(macMicApp({ TERM_PROGRAM: "WarpTerminal" }), "Warp"); assert.equal(macMicApp({}), "Tempolight");
+  const refuse = [process.execPath, "-e", "console.error('[avfoundation @ 0x7f] Failed to create AV capture input device: Cannot use BlackHole 2ch'); process.exit(1)"];
+  const s = await setup({ platform: "darwin", runner: fakeMac({ avf: "blackhole", profile: "multi-bt" }), interval: 0, listSources: () => [], env: { TERM_PROGRAM: "iTerm.app" }, commandFor: id => /BlackHole/.test(id) ? refuse : false });
+  try {
+    await s.call("POST", "/api/hearing/use", { choice: "computer" });
+    assert.ok(await until(() => s.st().capture?.error), "the capture stopped");
+    const v = (await s.call("GET", "/api/hearing")).body, msg = "macOS is blocking the sound: allow the microphone for iTerm in System Settings → Privacy & Security → Microphone, then restart Tempolight";
+    assert.equal(v.problem, msg); assert.equal(step(v, "hears").state, "no"); assert.equal(step(v, "hears").detail, msg);
+    // zeros from a running capture (a microphone, not BlackHole), for 8 s: the same
+    const c = s.app.runtime.rt.capture; c.error = null; c.proc = { stop() {} }; c.samples = 22050 * 9; c.nonZero = false; c.sourceId = "avf:MacBook Pro Microphone"; c.startedAt = performance.now() - 9000;
+    assert.equal((await s.call("GET", "/api/hearing")).body.problem, msg);
+    c.nonZero = true; assert.notEqual((await s.call("GET", "/api/hearing")).body.problem, msg);
   } finally { await s.done(); }
 });
 

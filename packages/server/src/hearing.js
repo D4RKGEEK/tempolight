@@ -180,19 +180,36 @@ export function computerSource(d) {
   return { why: d.pactl ? "parec isn't installed (sudo apt install pulseaudio-utils), so Tempolight can't record what this computer plays." : "No PulseAudio or PipeWire here (a Raspberry Pi without a desktop?): use Raspberry Pi / Linux: automatic, with a USB sound card or microphone." };
 }
 
+// macOS: ffmpeg's avfoundation input without the microphone permission ("Cannot use <device>", "Failed to create AV
+// capture input device"), and which app needs it (the terminal Tempolight runs in, from TERM_PROGRAM)
+export const MAC_BLOCKED = /Cannot use |Failed to create AV capture input device/i;
+const TERM_APPS = { Apple_Terminal: "Terminal", "iTerm.app": "iTerm", vscode: "VS Code", WarpTerminal: "Warp" };
+export function macMicApp(env = process.env) { return TERM_APPS[env.TERM_PROGRAM] || (env.TERM_PROGRAM ? env.TERM_PROGRAM : "Tempolight"); }
+export function macMicMessage(env = process.env) {
+  return `macOS is blocking the sound: allow the microphone for ${macMicApp(env)} in System Settings → Privacy & Security → Microphone, then restart Tempolight`;
+}
+
 // ---------------------------------------------------------------- the service: /api/hearing and the output watch
 /**
  * @param {{core:object, store:object, runtime:object, interval?:number, platform?:string, runner?:object, listSources?:()=>object[]}} o
  *   interval: how often the output is read (ms; 0: never, in tests). platform, runner, listSources: pretend computers (tests).
  */
-export function startHearing({ core, store, runtime, interval = 15000, platform = process.platform, runner, listSources = realListSources }) {
+export function startHearing({ core, store, runtime, interval = 15000, platform = process.platform, runner, listSources = realListSources, env = process.env }) {
   const H = createHearing({ platform, runner, listSources }), rt = runtime.rt, set = () => store.data.settings;
   const playing = () => !!(rt.spotify?.info()?.track?.playing || rt.nowPlaying?.info()?.playing);
   const capH = () => rt.heardBy.capture;
   // where the capture runs from the input that "This computer's sound" picks
   const capturing = () => { const s = set(), c = rt.capture; return !!(s.capture.enabled && c && c.proc && !c.error); };
+  // macOS blocks the sound for an app without the microphone permission: ffmpeg can't open the input, or gets only
+  // zeros (8 s of them; from BlackHole only while music plays, as BlackHole gives zeros when nothing plays)
+  function macBlocked() {
+    const s = set(), c = rt.capture, now = performance.now();
+    return platform === "darwin" && !!s.capture.enabled && !!c && (MAC_BLOCKED.test(c.error || "")
+      || (capturing() && c.samples > 0 && !c.nonZero && now - (c.startedAt || now) > 8000 && (playing() || !/blackhole/i.test(c.sourceId || s.capture.source || ""))));
+  }
   function problem() {
     const s = set(), c = rt.capture, h = capH(), now = performance.now();
+    if (macBlocked()) return macMicMessage(env);
     if (s.capture.enabled && c && c.error) return `Listening on the server stopped: ${c.error}`;
     if (capturing() && playing() && h && now - h.at < 1500 && now - Math.max(h.soundAt, c.startedAt || 0) > 8000 && rt.live?.kind !== "browser")
       return platform === "darwin" && /blackhole/i.test(s.capture.source) ? "BlackHole is silent while music plays: make the Multi-Output Device (your speakers + BlackHole) the Mac's sound output, and allow Terminal (or Tempolight) to use the microphone in System Settings → Privacy & Security → Microphone."
@@ -217,8 +234,8 @@ export function startHearing({ core, store, runtime, interval = 15000, platform 
         { id: "output", label: "Multi-Output Device with your speakers + BlackHole is the Mac's output", state: outState,
           detail: heardLately ? `Sound arrives through BlackHole${o ? ` (output: ${o.name})` : ""}.` : o?.blackhole ? "The Mac's output is BlackHole itself, so the speakers are silent. Make a Multi-Output Device (below) and pick that instead."
             : o?.multi ? `The output is ${o.name}. Play something in Spotify: when Tempolight hears it, this is confirmed.` : o ? `The output is ${o.name}, so BlackHole gets nothing. Pick the Multi-Output Device as the output.` : "Couldn't read the output; play something and Tempolight checks by listening." },
-        { id: "hears", label: "Tempolight hears it", state: heard ? "ok" : running ? (playing() ? "no" : "todo") : "todo", level: running ? cap?.level || 0 : 0,
-          detail: heard ? "" : running ? (playing() ? "Silence from BlackHole while music plays." : "Listening. Play something in Spotify.") : "Turn on listening below." },
+        { id: "hears", label: "Tempolight hears it", state: heard ? "ok" : macBlocked() ? "no" : running ? (playing() ? "no" : "todo") : "todo", level: running ? cap?.level || 0 : 0,
+          detail: heard ? "" : macBlocked() ? macMicMessage(env) : running ? (playing() ? "Silence from BlackHole while music plays." : "Listening. Play something in Spotify.") : "Turn on listening below." },
       ];
     } else if (platform === "win32") {
       steps = [

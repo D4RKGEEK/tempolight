@@ -148,7 +148,8 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
     if (!src) { rt.capture = { error: "No audio capture tool found on this computer (install ffmpeg, or use a browser as the audio source)." }; note(rt.capture.error, "warn"); return rt.capture; }
     const cap = { sourceId: src.id, label: src.label, error: null, startedAt: performance.now() };
     const chans = src.channels === 2 ? 2 : 1;
-    cap.proc = startCapture(src.cmd, a => pushPcm(a, "capture", src.label, "capture", RATE, 0, chans), why => {
+    cap.samples = 0; cap.nonZero = false; // (all zeros for seconds on a Mac: macOS blocks the microphone; hearing.js says so)
+    cap.proc = startCapture(src.cmd, a => { cap.samples += a.length; if (!cap.nonZero) { for (let i = 0; i < a.length; i++) if (a[i]) { cap.nonZero = true; break; } } pushPcm(a, "capture", src.label, "capture", RATE, 0, chans); }, why => {
       if (rt.capture !== cap) return;
       cap.error = why === "ended" ? null : why; cap.proc = null; if (why !== "ended") note(`Audio capture: ${why}`, "warn");
       if (data().settings.capture.enabled && why !== "ended") cap.retry = setTimeout(() => { if (rt.capture === cap) startCaptureSource(); }, 5000);

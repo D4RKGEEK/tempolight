@@ -18,7 +18,7 @@
 //   node scripts/feel-eval.js --baseline check    # compare with packages/engine/test/baselines/feel.json (exit 1 if worse)
 //   node scripts/feel-eval.js --baseline write    # save the baseline (after an intentional improvement)
 //   node scripts/feel-eval.js --effects           # also list which effect showed when
-import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
+import { readFileSync, writeFileSync, mkdirSync, readdirSync, existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { preAnalyseCore, buildLayout, exampleRoom, createEffects, createDirector, songView, LiveAnalyser, toRGB8, pickLook } from "../packages/engine/src/index.js";
@@ -169,6 +169,29 @@ export async function runFeel({ effects = false } = {}) {
   return out;
 }
 
+// ---------------------------------------------------------------- real music (local only)
+// TEMPOLIGHT_REAL_AUDIO: a folder of your own songs as 16-bit mono .wav files (or one file). Never committed, never in
+// the baseline: a report only, skipped when the variable is unset. Per song: the share of time in each song part, how
+// often the style changed after it was first chosen, and when a countdown (dropConf 0.5 or more, the drop within 8 s)
+// first showed. Aims: "build" at most 15% of a song, at most 1 style change, no countdowns on hip hop or acoustic songs.
+export function realMusic(dir = process.env.TEMPOLIGHT_REAL_AUDIO) {
+  if (!dir || !existsSync(dir)) return null;
+  const files = statSync(dir).isDirectory() ? readdirSync(dir).filter(f => /\.wav$/i.test(f)).sort().map(f => path.join(dir, f)) : [dir];
+  return files.map(file => {
+    const buf = readFileSync(file), sr = buf.readUInt32LE(24), n = (buf.length - 44) >> 1, x = new Float32Array(n);
+    for (let i = 0; i < n; i++) x[i] = buf.readInt16LE(44 + 2 * i) / 32768;
+    const an = new LiveAnalyser(sr), parts = {}, cds = []; let on = false, last = null, changes = 0, k = 0;
+    for (let i = 0; i < n; i += 512) {
+      an.push(x.subarray(i, i + 512)); const t = i / sr; if (t < 3) continue; const V = an.view(an.sampleT);
+      if (++k % 43 === 0) { parts[V.state] = (parts[V.state] || 0) + 1; if (V.styleSure) { if (last && V.style !== last) changes++; last = V.style; } }
+      const lead = V.nextDrop != null ? V.nextDrop - an.sampleT : null, show = lead != null && V.dropConf >= 0.5 && lead <= 8 && lead > 0;
+      if (show && !on) cds.push(Math.round(t)); on = show;
+    }
+    const tot = Object.values(parts).reduce((a, b) => a + b, 0) || 1, pc = p => Math.round(100 * (parts[p] || 0) / tot);
+    return { song: path.basename(file, ".wav"), seconds: Math.round(n / sr), style: last, styleChanges: changes, build: pc("build"), drop: pc("drop"), calm: pc("calm"), countdowns: cds };
+  });
+}
+
 // ---------------------------------------------------------------- targets (roadmap) and baseline
 /** The roadmap's aims. main doesn't meet them all yet: they are a progress report, not a test. */
 export const TARGETS = [
@@ -292,6 +315,9 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     const vr = varietyReport(r); console.log(`\nlooks (varieties one, parts): ${vr.filter(x => x.pass).length}/${vr.length} met`);
     for (const x of vr) console.log(`  ${x.pass ? "PASS" : "FAIL"}  ${(x.variety + ": " + x.name).padEnd(44)} ${v(x.value).padEnd(8)} aim ${x.aim}`);
     if (chk) { console.log(`\nbaseline check: ${chk.every(c => c.ok) ? "OK" : "WORSE"}`); for (const c of chk) console.log(`  ${c.ok ? "ok  " : "FAIL"}  ${c.name.padEnd(36)} ${v(c.now).padEnd(8)} baseline ${v(c.base)}`); }
+    const rm = realMusic();
+    if (rm) { console.log(`\nreal music (TEMPOLIGHT_REAL_AUDIO): build <= 15%, style changes <= 1, countdowns only for EDM`);
+      for (const m of rm) console.log(`  ${m.song.padEnd(22)} ${String(m.seconds).padStart(4)} s  ${String(m.style).padEnd(9)} changes ${m.styleChanges}  build ${String(m.build).padStart(2)}%  drop ${String(m.drop).padStart(2)}%  calm ${String(m.calm).padStart(3)}%  countdowns ${m.countdowns.join(", ") || "none"}${m.build > 15 || m.styleChanges > 1 ? "  (over the aim)" : ""}`); }
     if (mode === "write") console.log(`\nbaseline written: ${path.relative(root, BASELINE)}`);
     console.log(`(${((performance.now() - t0) / 1000).toFixed(1)} s)`);
   }

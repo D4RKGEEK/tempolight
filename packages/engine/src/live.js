@@ -7,6 +7,7 @@ import { ChromaTap, keyOf, moodOf, chordOf, chordFit } from "./tonal.js";
 import { StereoTap } from "./stereo.js";
 import { BeatTracker } from "./beat.js";
 import { DropPredictor } from "./drops.js";
+import { GENRE_STYLES } from "./genres.js";
 
 const NF = 1024, HOP = 256;
 const EDGES = (() => { const e = []; for (let i = 0; i <= 24; i++) e.push(40 * Math.pow(10000 / 40, i / 24)); return e; })();
@@ -53,9 +54,9 @@ export class LiveAnalyser {
     this.eFast = 0; this.eSlow = 0; this.eMax = 1e-4; this.rms = 0;
     this.bass = 0; this.bassMax = 1e-4; this.mid = 0; this.high = 0; this.highMax = 1e-4;
     this.bands = new Float32Array(24); this.bandMax = new Float32Array(24).fill(1e-4); this.vocal = 0; this.vocalRaw = 0; this.pitchHist = []; this.ampHist = []; this.fade = 0;
-    this.state = "silent"; this.cand2 = "silent"; this.candT = 0; this.stateT = 0; this.buildStart = 0; this.dropT = -9;
+    this.state = "silent"; this.cand2 = "silent"; this.candT = 0; this.stateT = 0; this.buildStart = 0; this.dropT = -9; this.riseT = null;
     this.domS = null; this.domHist = []; this.domHistT = -9; this.domBase = null; // domBase: pct(domHist, 0.3), kept until domHist changes
-    this.styleStats = { env: [], envT: -9, drops: [] }; this.style = null; this.styleCand = null; this.styleN = 0; this.lastStyleT = -9; this.styleLock = null;
+    this.styleStats = { env: [], envT: -9, drops: [] }; this.style = null; this.styleCand = null; this.styleN = 0; this.lastStyleT = -9; this.styleLock = null; this.styleChanges = 0; this.styleFrom = null; if (this.genreHint === undefined) this.genreHint = null;
     if (this.drops) this.drops.reset(); else this.drops = new DropPredictor(); // the drop countdown (drops.js)
   }
 
@@ -236,12 +237,24 @@ export class LiveAnalyser {
     // a build-up, then a kick on beat 1 with the bass coming up: the drop, at once (EDM drops land on a bar line)
     const fast = this.state === "build" && sure && t - lk < 0.3 && this.onBeat(lk) && ((((Math.round((lk - B.off) / B.P) - B.barOff) % 4) + 4) % 4) === 0
       && this.kickS > 0.8 && loud > 0.35 && dom - (this.domHist.length ? this.domBase : dom) > 0.3;
-    // a drop goes on while kicks keep coming on the beat (the slower cues take a moment to agree after a fast start)
-    const going = this.state === "drop" && kickRecent && kickOk && loud > 0.35;
+    // A drop is the low end coming back: after a build-up, or after a break (the kick and the bass out for 2 bars or
+    // more, then back: drops.js beatInT; the drop of a hip hop song). A steady groove with a strong bass is not one:
+    // it is the verse (calm). It goes on while kicks keep coming on the beat, for 32 bars at most in an EDM song (a
+    // drop section) and 8 in any other (the beat came back; then it is the verse again).
+    const Dp = this.drops, P = sure ? B.P : 0.5, back = t - Dp.beatInT < 1.5 || this.state === "build";
+    const going = this.state === "drop" && kickRecent && kickOk && loud > 0.35 && t - this.stateT < (this.style === "party" ? 32 : 8) * 4 * P;
+    // A build-up must be real: a riser (rising brightness and highs, the snares speeding up: drops.js rise) held for a
+    // second and a half with the loudness rising, not in a song's first 8 s (a song fading in rises too). A hi-hat roll,
+    // a fill or a busy snare alone is not one. For hip hop, calm and emotional songs the riser must be the drop
+    // predictor's (held over 0.6 for 2 s). It lasts while the riser does, 16 bars at most.
+    const rise = Dp.rise || 0; if (rise > 0.45) { if (this.riseT == null) this.riseT = t; } else if (rise < 0.25) this.riseT = null;
+    const rising = this.eFast > this.eSlow * 1.04, early = Dp.musicT != null && t - Dp.musicT < 8, strict = this.style && this.style !== "party" && this.style !== "poprock";
+    const buildCue = this.state === "build" ? (rise > 0.25 || Dp.riserOn) && t - this.buildStart < 16 * 4 * P
+      : !early && t - Dp.beatInT > 4 * 4 * P && (!bass || kicks2 < 2 || Dp.lowOut) && (Dp.riserOn || (!strict && this.riseT != null && t - this.riseT >= 1.5 && rising));
     let c;
     if (loud < 0.06 || this.eFast < 0.0015) c = "silent";
-    else if (fast || going || (bass && kickRecent && loud > 0.45 && kicks2 >= 2 && kickOk)) c = "drop";
-    else if ((!bass || kicks2 < 2) && ((snareRate >= 2.5 && loud > 0.4) || (this.eFast > this.eSlow * 1.12 && this.high / this.highMax > 0.45))) c = "build";
+    else if (fast || going || (back && bass && kickRecent && loud > 0.45 && (kicks2 >= 2 || t - Dp.beatInT < 1.5) && kickOk)) c = "drop";
+    else if (buildCue) c = "build";
     else c = "calm";
     // vote over the recent past so a flickering cue can't freeze the state: drops and silence switch fast, the rest slower
     const vh = this.votes; vh.push(c); if (vh.length > 60) vh.shift();
@@ -264,6 +277,8 @@ export class LiveAnalyser {
     const st = this.styleStats; st.env.push(this.eFast); if (st.env.length > 15) st.env.shift(); // last 30 s, every 2 s
     st.drops = st.drops.filter(x => t - x < 180);
     if (this.styleLock) { this.style = this.styleLock; return; }
+    const hint = this.genreHint && GENRE_STYLES.includes(this.genreHint.style) ? this.genreHint.style : null;
+    if (hint && !this.style && this.state !== "silent") { this.style = hint; this.styleFrom = "hint"; }
     const span = Math.min(30, t);
     if (span < 8) return;
     const lv = st.env.filter(v => v > 0.0015), dyn = lv.length > 3 ? pct(lv, 0.9) / (pct(lv, 0.25) || 1e-6) : 1;
@@ -271,17 +286,38 @@ export class LiveAnalyser {
     let onBeat = 0, nBeats = 0;
     if (this.beat.has) { const P = this.beat.P, off = this.beat.off; for (let bt = off + Math.ceil((t - span - off) / P) * P; bt < t; bt += P) { nBeats++; if (this.kicks.some(k => Math.abs(k - bt) < 0.08)) onBeat++; } }
     const kickFrac = nBeats ? onBeat / nBeats : 0, percussive = hatRate > 2 || snareRate > 3.2;
+    // (a tempo heard at double time: a hip hop beat at 155 with kicks on few of its beats is one at 78)
+    const bpmS = bpm >= 140 && kickFrac < 0.4 ? bpm / 2 : bpm;
     let s;
     if (!percussive) s = dyn > 2.5 ? "emotional" : "chill";
     else if (st.drops.length >= 1 && kickFrac > 0.25 && bpm >= 110) s = "party";
-    else if (bpm < 102) s = "hiphop";
+    else if (bpmS < 102) s = "hiphop";
     else s = "poprock";
-    // chosen once per song: the first style must come out twice in a row; a change after that 5 times (10 s) in a row.
+    // A genre hint (a music service's genre for the song: genres.js, setGenreHint) is the style from the start; what is
+    // heard can only overrule it for a song with no drums at all (an interlude, an acoustic version), 20 s in a row.
+    // Without one, it is chosen once per song, with strong hysteresis: the first style must come out 3 times in a row
+    // (6 s); after that it may change once per song, and only 10 times in a row (20 s) (3 for party once a drop was
+    // heard: the drop decides).
     // A new song (after 6 s of silence) chooses afresh.
-    if (this.state === "silent" && t - this.stateT > 6) { this.style = null; this.styleN = 0; this.styleCand = null; return; }
+    if (this.state === "silent" && t - this.stateT > 6) { this.style = null; this.styleN = 0; this.styleCand = null; this.styleChanges = 0; this.styleFrom = null; return; }
     if (s === this.styleCand) this.styleN++; else { this.styleCand = s; this.styleN = 1; }
-    if (s !== this.style && this.styleN >= (this.style ? 5 : 2)) this.style = s;
+    if (hint && this.styleFrom !== "heard") {
+      if (this.style !== hint && this.styleFrom !== "hint") { this.style = hint; this.styleFrom = "hint"; }
+      if (!percussive && s !== hint && (hint !== "chill" && hint !== "emotional") && this.styleN >= 10) { this.style = s; this.styleFrom = "heard"; this.styleChanges = 1; }
+    } else if (!this.style) { if (this.styleN >= 3) { this.style = s; this.styleFrom = "heard"; this.styleChanges = 0; } }
+    else if (s !== this.style && !this.styleChanges && this.styleN >= (s === "party" && st.drops.length ? 3 : 10)) { this.style = s; this.styleChanges = 1; }
     this.features = { hatRate, snareRate, kickFrac, dyn, bpm };
+  }
+
+  /**
+   * What a music service says the song is (genres.js genreHint(): {style, label, genre, genres, source}), or null: the
+   * style's prior for this song (Spotify's artist genres, a music app's genre). The drop countdown follows it too.
+   */
+  setGenreHint(h) {
+    const same = (h && h.style) === (this.genreHint && this.genreHint.style); this.genreHint = h && GENRE_STYLES.includes(h.style) ? h : null;
+    if (same) return;
+    if (this.genreHint) { if (this.styleFrom !== "heard" || !this.styleChanges) { this.style = this.genreHint.style; this.styleFrom = "hint"; } }
+    else if (this.styleFrom === "hint") { this.style = null; this.styleFrom = null; this.styleN = 0; this.styleCand = null; }
   }
 
   // Key and mood, re-estimated every 2 s and slow to change: the key from chroma gathered over the last ~40 s (a new
