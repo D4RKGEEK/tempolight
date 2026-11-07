@@ -220,6 +220,57 @@ export function baselineOf(result) {
   return { about: "Beat-tracking baseline (scripts/beat-eval.js). Rewrite with: npm run eval:beat -- --baseline write", mean: m, songs };
 }
 
+// ---------------------------------------------------------------- real music (no true beats): tempo stability
+// TEMPOLIGHT_REAL_AUDIO=/folder/of/wavs: every WAV there is fed to the analyser and its tempo and conf are sampled every
+// 0.25 s from 5 s on. Skipped when the variable is unset. The audio stays local: nothing is written.
+const foldBpm = b => { if (!(b > 0)) return 0; while (b >= 140) b /= 2; while (b < 70) b *= 2; return b; };
+const nearR = (a, b, tol = 0.03) => a > 0 && b > 0 && Math.abs(a / b - 1) <= tol;
+/** Tempo stability of a trace [{t, bpm, conf}] sampled every `step` s. */
+export function tempoReport(trace, { from = FROM, step = 0.25 } = {}) {
+  const T = trace.filter(s => s.t >= from), F = T.map(s => foldBpm(s.bpm));
+  // dominant: the octave-folded tempo (70-140) with the most samples within ±3%, then their mean
+  let dom = 0, domN = -1; for (const c of F) { if (!c) continue; let n = 0; for (const v of F) if (nearR(v, c)) n++; if (n > domN) { domN = n; dom = c; } }
+  { let s = 0, n = 0; for (const v of F) if (nearR(v, dom)) { s += v; n++; } if (n) dom = s / n; }
+  const ok = F.map(v => nearR(v, dom)), within = ok.filter(Boolean).length / Math.max(1, F.length);
+  // switches: the shown tempo (not folded: x2 counts) leaves the held one by more than 4% for at least 1 s
+  let held = 0, away = 0, cand = 0, switches = 0;
+  for (const s of T) {
+    if (!(s.bpm > 0)) continue; if (!held) { held = s.bpm; continue; }
+    if (nearR(s.bpm, held, 0.04)) { away = 0; held += (s.bpm - held) * 0.1; continue; }
+    if (!away || !nearR(s.bpm, cand, 0.04)) { cand = s.bpm; away = 0; } away += step;
+    if (away >= 1) { switches++; held = s.bpm; away = 0; }
+  }
+  // stable: folded within ±3% of the dominant for the last 8 s; lock: the start of the first such 8 s
+  const win = Math.round(8 / step), stable = ok.map((_, i) => { if (i < win - 1) return false; for (let k = i - win + 1; k <= i; k++) if (!ok[k]) return false; return true; });
+  const first = stable.findIndex(Boolean), lockS = first < 0 ? null : Math.max(0, T[first].t - 8);
+  // calibration (a reliability diagram without true beats): per conf bin, the share of time and how much of it was stable
+  const bins = [[0, 0.3], [0.3, 0.5], [0.5, 0.7], [0.7, 1.01]].map(([a, b]) => {
+    let n = 0, st = 0; T.forEach((s, i) => { const c = s.conf || 0; if (c >= a && c < b) { n++; if (stable[i]) st++; } });
+    return { bin: `${a}-${Math.min(1, b)}`, share: r3(n / Math.max(1, T.length)), stable: n ? r3(st / n) : null };
+  });
+  return { dominant: r1(dom), within: r3(within), switches, lockS: r2(lockS), confHiShare: bins[3].share, confHiStable: bins[3].stable, bins };
+}
+function realReport(dir) {
+  const files = existsSync(dir) ? readdirSync(dir).filter(f => /\.wav$/i.test(f)).sort() : [];
+  if (!files.length) { console.log(`\nTEMPOLIGHT_REAL_AUDIO=${dir}: no WAV files`); return []; }
+  const rows = files.map(f => {
+    const w = readWav(path.join(dir, f)), A = new LiveAnalyser(w.sr), chunk = Math.max(64, Math.round(CHUNK * w.sr / 22050)), trace = [];
+    for (let i = 0; i < w.x.length; i += chunk) {
+      A.push(w.x.subarray(i, Math.min(w.x.length, i + chunk))); const t = Math.min(w.x.length, i + chunk) / w.sr;
+      if (!trace.length || t - trace.at(-1).t >= 0.25) trace.push({ t, bpm: A.bpm, conf: A.conf });
+    }
+    return { name: f, ...tempoReport(trace) };
+  });
+  console.log("\nreal music (TEMPOLIGHT_REAL_AUDIO): octave-folded tempo stability; stable = within ±3% of the dominant for the last 8 s");
+  console.log(["song".padEnd(28), "dominant", "within", "switches", "lock s", "conf>=0.7: time / stable", "  conf bins (time/stable)"].join(" "));
+  for (const r of rows) console.log([r.name.slice(0, 28).padEnd(28), String(r.dominant).padEnd(8), `${Math.round(100 * r.within)}%`.padEnd(6), String(r.switches).padEnd(8), (r.lockS == null ? "never" : fx(r.lockS, 1)).padEnd(6),
+    `${Math.round(100 * r.confHiShare)}% / ${r.confHiStable == null ? "-" : Math.round(100 * r.confHiStable) + "%"}`.padEnd(24), r.bins.map(b => `${b.bin} ${Math.round(100 * b.share)}/${b.stable == null ? "-" : Math.round(100 * b.stable)}`).join("  ")].join(" "));
+  // pooled reliability: over all songs, how often each conf bin was stable
+  const pool = [0, 1, 2, 3].map(k => { let n = 0, s = 0; for (const r of rows) { const b = r.bins[k]; n += b.share; s += b.share * (b.stable ?? 0); } return `${rows[0].bins[k].bin}: ${n ? Math.round(100 * s / n) : "-"}% stable`; });
+  console.log(`pooled: ${pool.join(", ")}`);
+  return rows;
+}
+
 // ---------------------------------------------------------------- main
 const fmt = v => v == null ? "-" : typeof v === "number" ? String(v) : v;
 const fx = (v, d = 2) => v == null ? "-" : v.toFixed(d);
@@ -255,6 +306,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       console.log(chk.meanF == null ? "\nbaseline check: none of these songs is in the baseline" : `\nbaseline check: mean F ${chk.meanF} (baseline ${chk.baseMeanF}) ${chk.ok ? "OK" : "WORSE"}`);
       for (const p of chk.problems) console.log(`  FAIL ${p}`); for (const n of chk.notes) console.log(`  note ${n}`);
     }
+    if (process.env.TEMPOLIGHT_REAL_AUDIO) realReport(path.resolve(process.env.TEMPOLIGHT_REAL_AUDIO));
   }
   if (chk && !chk.ok) process.exit(1);
 }
