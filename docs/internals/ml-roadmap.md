@@ -1,0 +1,114 @@
+# ML roadmap: a brain that listens like a human
+
+This page is a research note. It says which small neural models could help the live analyser hear beats, downbeats
+and the parts of a song. It also records what a first prototype measured. Nothing here is used by the director yet.
+
+## What was built
+
+- [`packages/engine/src/ml/beatnet.js`](../../packages/engine/src/ml/beatnet.js): BeatNet's network in plain
+  JavaScript. It runs causally, one 20 ms frame at a time. The front end (64 ms frames, 136 log bands and their
+  positive difference) is ported too.
+- A causal tracker in the same file. It is the forward pass of a bar-pointer HMM (4/4, 55-215 BPM, about 5,600
+  states). It has a mild tempo prior around 120 BPM.
+- [`packages/engine/src/ml/weights.js`](../../packages/engine/src/ml/weights.js) reads the `.tlw` weight file.
+  `weights/beatnet-1.tlw` holds BeatNet model 1 in half floats (402,000 parameters, 812 KB).
+- [`packages/engine/src/ml/live-ml.js`](../../packages/engine/src/ml/live-ml.js) is the live analyser with the ML
+  beat grid swapped in. Use it with `LIVE=packages/engine/src/ml/live-ml.js npm run eval:beat`.
+- [`scripts/ml/convert-beatnet.py`](../../scripts/ml/convert-beatnet.py) converts the PyTorch checkpoint with numpy
+  only. [`scripts/ml/check-beatnet.js`](../../scripts/ml/check-beatnet.js) checks the port against numpy.
+- [`scripts/ml/real-songs.js`](../../scripts/ml/real-songs.js) measures tempo stability on unannotated songs.
+
+The JavaScript port matches the numpy reference. The largest activation error is 0.0003 (from half-float weights).
+
+## Findings
+
+| Model | Task | Size | Licence | Causal | Weights reachable here | Verdict |
+|---|---|---|---|---|---|---|
+| BeatNet CRNN | beat + downbeat | 0.4 M params, 0.8 MB f16 | CC BY 4.0 | yes | yes, in the GitHub repo | prototyped |
+| Beat This! small | beat + downbeat | 8 MB | MIT | no (offline transformer) | no (JKU cloud blocked) | offline only |
+| madmom RNN / TCN models | beat, downbeat, tempo | small | CC BY-NC-SA | yes (online RNN) | yes | not allowed (non-commercial) |
+| Open-Unmix UMX-HQ / UMX-L | 4-stem separation | about 9 M params a stem | code MIT; UMX-L weights CC BY-NC-SA | no, needs long frames | no (Zenodo blocked) | too big for a Pi; licence risk |
+| Essentia MusiCNN / EffNet-Discogs | genre, mood tags | 0.8-18 MB | CC BY-NC-SA | windowed | no | not allowed |
+| Causal HPSS + band rules | drums, bass, harmonic, voice-ish | no weights | ours (MIT) | yes | n/a | next step, not prototyped yet |
+
+Only GitHub clones worked from the sandbox. PyPI, npm, Hugging Face, Zenodo and the JKU cloud were blocked.
+
+## Prototype numbers
+
+### Synthetic songs (`npm run eval:beat`, 17 songs)
+
+| | F | CMLt | AMLt | tempo right | tempo octave off | downbeat | never locked |
+|---|---|---|---|---|---|---|---|
+| DSP tracker (today) | 0.91 | 0.85 | 0.97 | 0.88 | 0.12 | 0.86 | 1 |
+| BeatNet + causal HMM | 0.84 | 0.66 | 0.87 | 0.63 | 0.33 | 0.76 | 4 |
+
+BeatNet is worse on the synthetic songs. It hears half time on four of them (house124, halftime140, dnb174 and the
+half-time drop). These songs are very bare, and the network was trained on real recordings. The DSP tracker was
+tuned on exactly these songs. So this table is a regression guard, not a verdict.
+
+Where BeatNet locks, its timing is closer: the mean error is 4 ms against 21 ms for the DSP tracker.
+
+### Real songs (no annotations)
+
+Stable means the share of time within 3% of the most common tempo, folded into 80-160 BPM. Agree means the share of
+time the two trackers' folded tempos are within 3%.
+
+| Song | DSP tempo | DSP stable | ML tempo | ML stable | agree |
+|---|---|---|---|---|---|
+| 52-bars | 111 | 0.76 | 83 | 0.75 | 0.07 |
+| amplifier | 82 | 0.64 | 83 | 0.99 | 0.63 |
+| peggy-gou-i-go (house) | 120 | 0.93 | 120 | 1.00 | 0.93 |
+| roadtrip-techno | 125 | 0.87 | 125 | 0.55 | 0.68 |
+| still-rollin | 96 | 0.60 | 94 | 0.99 | 0.59 |
+| terrible | 156 | 0.68 | 155 | 0.58 | 0.76 |
+| tu-hai-kahaan (acoustic) | 80 | 0.49 | 82 | 0.50 | 0.46 |
+| **mean** | | **0.71** | | **0.77** | **0.59** |
+
+BeatNet is much steadier on two desi hip hop songs (amplifier, still-rollin) and on the house track. It is less
+steady on the techno track and on terrible. Both trackers struggle on the acoustic song. On 52-bars they disagree
+(111 against 83 BPM folded): one of them is on a 4:3 relation, and only an annotation can say which.
+
+### CPU
+
+- The network alone: about 47 ms per audio second on one core of a 2.1 GHz Xeon (14 ms front end, 30 ms network,
+  3 ms tracker). Whole-song runs measured 50-130 ms per second on a busy two-core sandbox.
+- The DSP analyser is about 9 ms per second on the same machine.
+- Raspberry Pi 4 estimate: 3-5 times slower in JavaScript, so 150-250 ms per second. That is 15-25% of one core.
+  It fits, but it is the biggest part of the budget.
+
+## Recommended path
+
+1. **Fuse, don't replace.** Feed BeatNet's beat and downbeat activations into the existing tracker as one more
+   onset signal, or use the ML grid only when its confidence is high (`ML_MODE=dsp-fallback` in `live-ml.js`). Keep
+   the DSP tracker as the fallback and keep `eval:beat` green.
+2. **Annotate the real songs.** Tap the beats of the seven songs once (local only, never committed). Then F-measure
+   replaces the stability proxy, and the 52-bars disagreement gets an answer.
+3. **Make it cheap.** Use the real-FFT trick for the 1,411-point DFT, fuse the LSTM gates, and try int8 weights.
+   A small WASM-SIMD kernel embedded as base64 should give 3-5 times more speed. Run it in a worker in the browser.
+4. **Causal HPSS stems.** A median filter across time (harmonic) and across frequency (percussive) on the live
+   spectrogram, with band rules: kick and bass below 150 Hz, voice from harmonic energy at 300-3,000 Hz with pitch
+   continuity. Test it against the separate parts in `packages/engine/test/synth.js`.
+5. **Our own tiny TCN (if needed).** About 50,000-100,000 parameters, 8 dilated causal layers, trained on
+   permissively licensed audio: GTZAN beat annotations on our own recordings or CC-licensed tracks (for example
+   from the Free Music Archive with CC BY licences) and synthetic stems from our synth. Train with PyTorch off-device
+   and export with the same `.tlw` converter. This also removes the training-data risk below.
+
+## Risks
+
+- **Licence.** BeatNet's weights are CC BY 4.0. We may ship them, but we must credit the authors (the `.tlw` file
+  carries the attribution; the app's credits page needs it too). The training data includes datasets with their own
+  terms. That is a grey area for weights, so a model trained on our own data is the safer long-term choice.
+- **Half and double tempo.** BeatNet still picks half time on some bare beats. A tempo prior helps a little.
+- **Browser size.** 812 KB of weights is fine for the app, but it should load lazily.
+- **48 kHz input.** The prototype accepts 22,050 or 44,100 Hz only. Other rates need a resampler.
+- **CPU on a Pi.** Up to a quarter of a core before the speed work in step 3.
+
+## Sources
+
+- BeatNet code and weights: https://github.com/mjhydri/BeatNet (licence: CC BY 4.0).
+- BeatNet paper (ISMIR 2021): https://arxiv.org/abs/2108.03576
+- Beat This! (MIT, 8 MB small model, offline): https://pypi.org/project/beat-this/ and https://arxiv.org/abs/2407.21658
+- madmom licence (models are CC BY-NC-SA): https://github.com/CPJKU/madmom
+- Open-Unmix (code MIT, UMX-L weights CC BY-NC-SA): https://sigsep.github.io/open-unmix
+- Essentia models (CC BY-NC-SA): https://essentia.upf.edu/models.html
+- Bar-pointer model: Krebs, Böck and Widmer, "An efficient state-space model for joint tempo and meter tracking", ISMIR 2015.
