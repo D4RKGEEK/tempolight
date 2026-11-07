@@ -38,7 +38,7 @@ export function render(el) {
             <button class="st-tbtn" id="st-play" type="button" aria-label="Pause">${icon("pause")}</button>
             <button class="st-tbtn sm" id="st-next" type="button" aria-label="Next song">${icon("chevron")}</button></div>
           <div class="sm-meter st-sync" id="sm-meter" data-state="none">
-            <div class="sm-state"><i class="sm-dot" aria-hidden="true"></i><b id="sm-label">Not hearing</b></div>
+            <div class="sm-state"><i class="sm-dot" aria-hidden="true"></i><b id="sm-label">Not hearing</b></div><span class="ui-pill accent" id="st-la" hidden title="Lookahead mode: Tempolight plays the music a few seconds late and already knows what comes"><i></i></span>
             <span class="st-bpm"><b id="sm-bpm">–</b> BPM</span>
             <div class="sm-beat" id="sm-beat" aria-hidden="true"><i>1</i><i></i><i></i><i></i></div>
             <div class="st-hide"><div class="sm-score" id="sm-score"><i id="sm-fill"></i></div><span id="sm-num"></span><p id="sm-hint"></p></div>
@@ -199,6 +199,7 @@ export function render(el) {
     $('[data-pad="blackout"]').setAttribute("aria-pressed", String(!!o.blackout)); $('[data-pad="freeze"]').setAttribute("aria-pressed", String(!!o.freeze));
     $('[data-pad="build"]').classList.toggle("hot", o.forced === "build"); $('[data-pad="drop"]').classList.toggle("hot", o.forced === "drop");
     $("#st-stage").dataset.sync = syncView(m).state;
+    const la = m.lookahead, lap = $("#st-la"); if (lap) { lap.hidden = !la?.playing; if (la?.playing) lap.innerHTML = `<i></i>Lookahead ${Math.round(la.delayMs / 1000)} s`; }
     swatches();
   }
   function settings() { const s2 = app.state.settings; PUNCH.set(s2.punch ?? 0.7); DRAMA.set(s2.dynamics ?? 0.8); CHORDS.set(s2.chordColours !== false); STEREO.set((s2.stereo || "subtle") !== "off"); CDT.set(s2.dropCountdown !== false);

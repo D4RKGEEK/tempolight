@@ -20,6 +20,7 @@ import { startProLink } from "./prolink.js";
 import { startNowPlaying } from "./nowplaying.js";
 import { startLibrary } from "./library.js";
 import { startHearing } from "./hearing.js";
+import { startLookahead } from "./lookahead-mode.js";
 import { startSpotify } from "./spotify.js";
 import { startLink } from "./ableton-link.js";
 import { applyEnvSettings } from "./env-settings.js";
@@ -102,6 +103,7 @@ export async function createApp(opts) {
   const library = startLibrary({ core, store, runtime, dataDir: opts.dataDir, ...opts.library }); // your own music folders, analysed ahead (opts.library: test tools, pool size)
   const np = startNowPlaying({ core, store, runtime, dataDir: opts.dataDir, port: () => server.address()?.port || 8080, ...opts.nowPlaying }); // opts.nowPlaying: test runner/platform
   const hearing = startHearing({ core, store, runtime, ...(opts.hearing || {}) }); // how Tempolight hears music, and the sound output (opts.hearing: pretend computer)
+  const lookahead = startLookahead({ core, store, runtime, ...(opts.lookahead || {}) }); // lookahead mode: Tempolight plays the music a few seconds late itself (opts.lookahead: pretend capture and speaker)
   const spotify = startSpotify({ core, store, runtime, nowPlaying: np, dataDir: opts.dataDir, fetch: opts.nowPlaying?.fetch, ...opts.spotify }); // Sync with Spotify (opts.spotify: test clock)
 
   // ---------------------------------------------------------------- static files
@@ -160,9 +162,9 @@ export async function createApp(opts) {
 
   closeApp = () => api.close();
   const api = {
-    server, runtime, store, core, discovery: core.discovery, nowPlaying: np, library, hearing, homekit: hk, spotify, integrations: integ,
+    server, runtime, store, core, discovery: core.discovery, nowPlaying: np, library, hearing, lookahead, homekit: hk, spotify, integrations: integ,
     listen(port, host) { return new Promise((res, rej) => { server.once("error", rej); server.listen(port, host, () => res(server.address().port)); }); },
-    async close() { ha.close(); spotify.close(); np.close(); library.close(); hearing.close(); await hk.close(); integ.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
+    async close() { ha.close(); spotify.close(); np.close(); library.close(); hearing.close(); lookahead.close(); await hk.close(); integ.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
   };
   return api;
 }

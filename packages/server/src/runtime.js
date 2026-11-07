@@ -417,22 +417,25 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       return { V: lr(songView(rt.song.pre, t)), t, extra: liveFresh() ? rt.live.an.extras() : {} };
     }
     const np = rt.nowPlaying && rt.nowPlaying.follow(now); // a music app here plays a remembered song: its beat map, at the app's position
-    if (np) { const t = np.pos + ld + off; rt.source = "nowplaying"; rt.sourceLabel = `${np.app}: ${np.name} (remembered)`; return { V: lr(songView(np.pre, t)), t, extra: liveFresh() ? rt.live.an.extras() : {} }; }
+    if (np) { const t = np.pos + ld + off - (laOn() ? rt.lookahead.aheadS(now) : 0); /* lookahead mode: the app plays it before the speaker does */ rt.source = "nowplaying"; rt.sourceLabel = `${np.app}: ${np.name} (remembered)`; return { V: lr(songView(np.pre, t)), t, extra: liveFresh() ? rt.live.an.extras() : {} }; }
     if (rt.spotify && rt.spotify.paused()) { rt.source = "idle"; rt.sourceLabel = "Spotify paused"; return { V: null, t: wt }; } // fade to the ambient look
     if (liveFresh()) {
       // the analyser's clock now: its newest sample when it says (else its last frame's centre), plus the time since
       // that audio came in; then ahead by the lead and the trim when beats are predicted
-      const an = rt.live.an, tl = (newestSampleClock(an) ?? an.t) + Math.min(0.12, (now - rt.live.lastPush) / 1000), t = tl + (s.predict ? off + ld : 0);
+      // lookahead mode (lookahead-mode.js): the analyser is seconds ahead of the speaker, so the clock is the sample the speaker plays now
+      const an = rt.live.an, la = laOn() ? rt.lookahead : null, th = la ? la.heardT(now) : null;
+      if (la && th == null) { rt.source = "idle"; rt.sourceLabel = `${rt.live.label} (starting)`; return { V: null, t: wt }; }
+      const tl = la ? th : (newestSampleClock(an) ?? an.t) + Math.min(0.12, (now - rt.live.lastPush) / 1000), t = tl + (s.predict || la ? off + ld : 0);
       songMemoryTick();
       if (rt.mem.lock) { const L = rt.mem.lock, pos = lockPos(L, t); // a song we know: use its beat map
         rt.source = rt.live.kind; rt.sourceLabel = `${rt.live.label}: ${L.name} (recognised)`;
         return { V: { ...lr(songView(L.pre, pos)), live: true, vocal: an.vocal, ...(L.pre.mood ? {} : { key: an.keyEst?.key || null, mode: an.keyEst?.mode || null, mood: an.mood }) }, t: pos, extra: an.extras() }; } // (remembered before key and mood were)
-      const V = an.view(t, { predict: s.predict });
+      const V = (la && la.view(t, { predict: s.predict })) || an.view(t, { predict: s.predict });
       rt.source = rt.live.kind; rt.sourceLabel = rt.live.label;
       const G = djFresh(now) ? { ...djGrid(now, tl), bpm: rt.dj.bpm, label: `DJ Link (${rt.dj.name})` } : beats.grid(now, tl); // DJ Link, else MIDI clock, else Ableton Link (on the analyser's clock now)
       if (G) { rt.extBeat = G.kind || "djlink"; V.g = gridAt(G, t); V.bpm = G.bpm; if (V.g.has && t - V.kick > 0.6) { V.kick = V.g.beatT; V.pulses = [V.g.beatT]; V.pulseN = V.g.idx; } rt.sourceLabel += ` + ${G.label}`; }
       if (V.state === "silent" && V.quietFor > (s.idleAfterSec ?? 8)) { rt.source = "idle"; rt.sourceLabel = `${rt.live.label} (quiet)`; return { V: null, t: wt }; }
-      return { V, t, extra: an.extras() };
+      return { V, t, extra: la ? { ...an.extras(), ...la.extras(t) } : an.extras() };
     }
     if (djFresh(now)) { const t = wt, V = metronomeView(t, rt.dj.bpm, djGrid(now, now / 1000)); // decks but no audio: a steady show on their beat
       rt.source = "djlink"; rt.sourceLabel = `DJ Link: ${rt.dj.name} ${rt.dj.bpm.toFixed(1)} BPM`; return { V, t }; }
@@ -461,14 +464,17 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   // beat prediction) nothing can be drawn ahead: nothing is held back, each light shows what was heard as soon as it can.
   const TM = { mode: "ahead", L: 0, common: 0, wantL: 0, wantC: 0, at: -1e9, src: null, slowest: null, lights: new Map(), procMs: 1, iv: [], last: 0, started: false };
   const SCREEN_MS = 40; // about how late the preview and phones show a frame (WebSocket, the screen)
-  const ahead = () => !((rt.source === "browser" || rt.source === "capture") && !data().settings.predict);
+  const ahead = () => laOn() || !((rt.source === "browser" || rt.source === "capture") && !data().settings.predict);
+  // lookahead mode: the live clock is the sample the speaker plays (exact), so no audio-in or analysis delay is added
+  const laOn = () => !!(rt.lookahead && rt.lookahead.active() && liveFresh());
+  const audioNow = () => laOn() ? { audioMs: 0, analysisMs: 0 } : audioDelay({ source: rt.source, live: liveFresh() ? rt.live : null });
   function updateTiming(now) {
     const changed = TM.src !== rt.source;
     if (changed || now - TM.at >= 250) { // the plan, 4 times a second (and at once when the source changes)
       TM.at = now; TM.src = rt.source; const fps = loopFps(), on = ahead(), list = []; TM.lights = new Map();
       for (const d of data().devices) { const l = lightLatency(d, health.get(d.id) || {}, fps); TM.lights.set(d.id, l);
         if (outs.has(d.id) && d.enabled && !d.virtual && health.get(d.id)?.online !== false) list.push({ id: d.id, ms: l.ms }); }
-      const p = timingPlan({ devices: list, ahead: on }), a = audioDelay({ source: rt.source, live: liveFresh() ? rt.live : null });
+      const p = timingPlan({ devices: list, ahead: on }), a = audioNow();
       const was = TM.mode; TM.mode = on ? "ahead" : "reactive"; TM.slowest = p.slowest; TM.wantL = p.lookaheadMs; TM.wantC = on ? a.audioMs + a.analysisMs : 0;
       if (changed || was !== TM.mode || !TM.started) { TM.L = TM.wantL; TM.common = TM.wantC; TM.started = true; } // a new source starts on a new clock anyway
     }
@@ -504,6 +510,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   function timingInfo() {
     const iv = TM.iv, n = iv.length, mean = n ? iv.reduce((a, b) => a + b, 0) / n : 0, sd = n ? Math.sqrt(iv.reduce((a, b) => a + (b - mean) ** 2, 0) / n) : 0, r2 = v => Math.round(v * 100) / 100;
     return { mode: TM.mode, lookaheadMs: Math.round(TM.L), audioMs: Math.round(TM.common), leadMs: Math.round(leadMs()), capMs: LOOKAHEAD_CAP_MS, slowest: TM.slowest,
+      passthroughMs: laOn() ? Math.round(rt.lookahead.aheadS(performance.now()) * 1000) : 0, // lookahead mode: how far the analyser hears ahead of the speaker
       frame: { intervalMs: r2(mean), jitterMs: r2(sd), worstMs: n ? r2(Math.max(...iv.map(v => Math.abs(v - 1000 / loopFps())))) : 0 } };
   }
 
@@ -742,12 +749,12 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   }
 
   /** The next drop for the status: {next: seconds until it, at: when (the music's clock), conf 0..1, source: "memory"
-   *  (known ahead: an analysed or remembered song, a show's cue, the Build & drop pad) | "predicted" (heard coming, live) |
+   *  (known ahead: an analysed or remembered song, a show's cue, the Build & drop pad) | "predicted" (heard coming, live) | "lookahead" (already heard: lookahead mode) |
    *  null, building: the lights are building toward it}. */
   function dropInfo(V, t) {
     const at = V && V.nextDrop != null && Number.isFinite(V.nextDrop) && Number.isFinite(t) && V.nextDrop >= t - 0.05 ? V.nextDrop : null, r = D.ramp, r2 = v => Math.round(v * 100) / 100;
     if (at == null) return { next: null, at: null, conf: 0, source: null, building: false };
-    return { next: r2(Math.max(0, at - t)), at: r2(at), conf: r2(Math.max(0, Math.min(1, V.dropConf ?? 1))), source: V.dropSource === "predicted" ? "predicted" : "memory", building: !!(r && r.building && Math.abs(r.at - at) < 0.5) };
+    return { next: r2(Math.max(0, at - t)), at: r2(at), conf: r2(Math.max(0, Math.min(1, V.dropConf ?? 1))), source: V.dropSource === "predicted" ? "predicted" : V.dropSource === "lookahead" ? "lookahead" : "memory", building: !!(r && r.building && Math.abs(r.at - at) < 0.5) };
   }
   function status() {
     const V = rt.view, an = liveFresh() ? rt.live.an : null, hear = hearingInfo();
@@ -759,7 +766,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
       look: lookInfo(D.look, { song: playingEntry()?.id || null }),
       song: rt.song ? { memId: rt.song.memId || null, name: rt.song.name, playing: rt.song.playing, pos: rt.song.pos + (rt.song.playing ? (performance.now() - rt.song.at) / 1000 * rt.song.rate : 0), dur: rt.song.pre.dur, bpm: rt.song.pre.bpm, style: rt.song.pre.style, drops: rt.song.pre.drops } : null,
       nowPlaying: rt.nowPlaying ? rt.nowPlaying.info() : null, spotify: rt.spotify ? rt.spotify.info() : null,
-      capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null, hearing: hear, offsetMs: syncOffset(), timing: timingInfo(), sync: syncInfo(hear),
+      capture: rt.capture ? { label: rt.capture.label, running: !!rt.capture.proc, error: rt.capture.error } : null, hearing: hear, lookahead: rt.lookahead ? rt.lookahead.info() : null, offsetMs: syncOffset(), timing: timingInfo(), sync: syncInfo(hear),
       overlay: overlayState(), devices: data().devices.map(d => { const o = outs.get(d.id), { rtts, ...h } = health.get(d.id) || {}; void rtts;
         return { id: d.id, ...h, sent: o?.sender.sent || 0, used: o?.used || 0, amps: Math.round((o?.amps || 0) * 100) / 100, limited: !!o?.limited, ...latencyOf(d, h, o) }; }),
       uptime: Math.round((Date.now() - rt.startedAt) / 1000), perf: { ...perf.status(), fps: perf.fps || Math.round(rt.fps) },
@@ -772,7 +779,7 @@ export function createRuntime(store, { io, logger = console, now = () => new Dat
   // (held back), shownMs (what is left of the delay: about 0 when it is lined up and the trim is 0), level}
   function latencyOf(d, h, o) {
     const s = data().settings, since = Math.max(rt.startedAt, rt.powerOnAt || 0, o?.createdAt || 0);
-    const r = deviceLatency({ dev: d, health: h, out: o || {}, fps: rt.fps || s.fps, offsetMs: syncOffset(), audio: audioDelay({ source: rt.source, live: liveFresh() ? rt.live : null }),
+    const r = deviceLatency({ dev: d, health: h, out: o || {}, fps: rt.fps || s.fps, offsetMs: syncOffset(), audio: audioNow(),
       streaming: !!(data().show.power && d.enabled && o), streamingFor: ((h.lastSeen || 0) - since) / 1000 }); // how long we had been sending when it was last checked
     const l = r.latency, made = TM.mode === "ahead" ? Math.round(TM.common + Math.min(l.lightMs, TM.L)) : 0, shownMs = r.latencyMs == null ? null : r.latencyMs - made;
     return { ...r, timing: { mode: TM.mode, lightMs: l.lightMs, auto: l.lightAuto, holdMs: Math.round(holdFor(d)), shownMs, level: level(shownMs) } };

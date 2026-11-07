@@ -245,7 +245,7 @@ export function startHearing({ core, store, runtime, interval = 15000, platform 
     };
   }
 
-  async function watchOutput() { try { const o = await H.output(); if (runtime.setOutput(o)) core.broadcast({ type: "changed", what: "output" }); } catch {} }
+  async function watchOutput() { try { const o = rt.lookahead?.output || await H.output(); if (runtime.setOutput(o)) core.broadcast({ type: "changed", what: "output" }); } catch {} }
   const timer = interval > 0 ? setInterval(watchOutput, interval) : null; if (timer?.unref) timer.unref();
   if (interval >= 0) watchOutput();
 
