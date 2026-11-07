@@ -5,6 +5,9 @@ versions follow [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Claude show designer** (optional, off by default): with your own Anthropic API key, each remembered song gets one request to Claude (title, artist and a compact summary of the analysis; never audio) that designs its energy arc, drop sections, palettes and moments (blackout, strobe hit, slow fade). Strictly validated; any problem or a 10 s timeout keeps the automatic look. Settings → Claude show designer (key, model, daily limit, Test the key), "Designed by Claude" on the Look card with Redesign / Use the automatic look, the design per section on Songs. API: `/api/designer`, `/api/songs/:id/design`. Guide: [Claude show designer](docs/guides/claude-designer.md).
+
 ## [0.4.0] - 2026-11-05
 
 ### A redesigned app

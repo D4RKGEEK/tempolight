@@ -8,6 +8,7 @@ import { moodPalette } from "./tonal.js";
 import { pickLook, characterOf, phraseStep, rating } from "./looks.js";
 import { createChordColours, sectionKey } from "./colour.js";
 import { createSpatial } from "./spatial.js";
+import { designContour } from "./designer.js";
 
 const G = (x, w) => Math.exp(-(x / w) * (x / w));
 
@@ -53,6 +54,8 @@ export function createDirector(layout, fx) {
     // chordColours: with the automatic palette, colours step with the chords (colour.js); stereo: "off" | "subtle" |
     // "strong", the side of the room the hit came from brightens on hits (spatial.js; stereo sources only)
     chordColours: true, stereo: "subtle",
+    // arc: [{t0, t1, arc}] the energy arc of a song designed by Claude (designer.js): the contour follows it instead of the song part
+    arc: null,
   };
   const cueFirer = createCueFirer();
   const ZBUF = new Float32Array(N * 3);
@@ -351,7 +354,7 @@ export function createDirector(layout, fx) {
       // energy contour and evening out (automatic mode): each effect is brought toward the song part's brightness
       const e = auto ? clamp01(settings.dynamics, 0.8) * (ST.dyn ?? 1) : 0, fading = st.prev && t - st.xfadeT < ST.xfade; let gain = 1;
       if (e > 0) {
-        const want = V.state === "silent" ? (st.tgt ?? contour(V)) : contour(V), justDropped = V.state === "drop" && t - V.dropT >= 0 && t - V.dropT < 0.1;
+        const want = V.state === "silent" ? (st.tgt ?? contour(V)) : designContour(settings.arc, t) ?? contour(V), justDropped = V.state === "drop" && t - V.dropT >= 0 && t - V.dropT < 0.1;
         st.tgt = st.tgt == null || justDropped ? want : st.tgt + (want - st.tgt) * (1 - Math.exp(-dt / (want > st.tgt ? 0.6 : 0.4)));
         const p = paramsOf(st.cur), raw = seen(COL) / ((p && p.intensity) || 1);
         if (!fading && V.state !== "silent" && dt > 0) { const L0 = st.fxLum[st.cur] ?? (fx.lum && fx.lum[st.cur]) ?? raw; st.fxLum[st.cur] = L0 + (raw - L0) * (1 - Math.exp(-dt / 6)); }
