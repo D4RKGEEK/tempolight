@@ -224,11 +224,11 @@ export function createDirector(layout, fx) {
   // energy contour: the brightness each song part aims for (calm low, a build-up rising, a drop full)
   function contour(V) {
     if (V.state === "drop") return 0.34;
-    if (V.state === "build") return 0.12 + 0.2 * Math.max(0, Math.min(1, V.buildP || 0));
+    if (V.state === "build") return 0.12 + 0.22 * Math.max(0, Math.min(1, V.buildP || 0)); // (up to the drop's brightness)
     // calm = not building or dropping: a loud steady groove (a techno track, a hip hop verse) isn't dimmed like a
     // breakdown, but drop styles stay below the start of a build-up so builds and drops keep their lift
     const lv = st.lvl || V.level;
-    if (style(V).mode !== "levels") return lv === "peak" ? 0.1 : lv === "mid" ? 0.09 : 0.08;
+    if (style(V).mode !== "levels") return lv === "peak" ? 0.095 : lv === "mid" ? 0.088 : 0.08;
     return lv === "peak" ? 0.2 : lv === "mid" ? 0.13 : 0.085; // loud parts of a song without drops
   }
   /** The brightness an effect should land on: its usual brightness (learnt, starting from fx.lum) brought toward the
