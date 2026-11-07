@@ -35,7 +35,7 @@ export function createCore({ store, runtime, env }) {
   const effectIds = () => new Set(runtime.effects.list.map(e => e.id));
   const pub = () => {
     const d = data(); // (settings.library is left out: the music folders are for an admin only, through GET /api/library)
-    return { version: env.version, canQuit: !!env.quit, settings: { ...d.settings, mqtt: { ...d.settings.mqtt, password: "", hasPassword: !!d.settings.mqtt?.password }, library: undefined }, show: d.show, devices: d.devices.map(x => safeDev(x)), room: d.room, scenes: d.scenes,
+    return { version: env.version, canQuit: !!env.quit, settings: { ...d.settings, mqtt: { ...d.settings.mqtt, password: "", hasPassword: !!d.settings.mqtt?.password }, designer: d.settings.designer ? { ...d.settings.designer, apiKey: "", hasKey: !!d.settings.designer.apiKey } : undefined, library: undefined }, show: d.show, devices: d.devices.map(x => safeDev(x)), room: d.room, scenes: d.scenes,
       schedules: d.schedules.map(s => ({ ...s, next: nextRun(s, new Date(), d.settings.location)?.toISOString() || null })), locked: locked(),
       effects: runtime.effects.list, styles: Object.fromEntries(Object.entries(runtime.effects.styles).map(([k, v]) => [k, v.name])),
       palettes: Object.keys(runtime.effects.palettes), presets: Object.values(ROOM_PRESETS), captureSources: env.listSources().map(({ id, label }) => ({ id, label })), firstRun: store.firstRun && !d.devices.length };
@@ -434,10 +434,10 @@ export function createCore({ store, runtime, env }) {
   route("POST", "/api/unlock", null, async (ctx) => { const b = ctx.body; await new Promise(r => setTimeout(r, 300)); // slow down guessing
     if (!env.checkPin(data().lock, b.pin)) throw new HttpError(403, "Wrong PIN"); const tok = env.randomToken(); tokens.set(tok, Date.now() + 12 * 3600_000); return { token: tok }; });
   route("DELETE", "/api/lock", "admin", () => { data().lock = null; tokens.clear(); runtime.note("PIN lock removed"); changed("lock"); return { locked: false }; });
-  route("GET", "/api/backup", "admin", () => { const d = JSON.parse(JSON.stringify(data())); delete d.lock; return { tempolight: env.version, savedAt: new Date().toISOString(), data: d }; });
+  route("GET", "/api/backup", "admin", () => { const d = JSON.parse(JSON.stringify(data())); delete d.lock; if (d.settings?.designer) d.settings.designer.apiKey = ""; /* (the Anthropic API key stays on this computer) */ return { tempolight: env.version, savedAt: new Date().toISOString(), data: d }; });
   route("POST", "/api/restore", "admin", (ctx) => {
     const d = ctx.body.data || ctx.body; if (!d || !Array.isArray(d.devices) || !d.room || !Array.isArray(d.room.shapes)) throw new HttpError(400, "That doesn't look like a Tempolight backup");
-    const lock = data().lock, fresh = merge(DEFAULTS(), d); fresh.lock = lock; fresh.customEffects = cleanCustoms(fresh.customEffects); // keep the current PIN
+    const lock = data().lock, key = data().settings?.designer?.apiKey || "", fresh = merge(DEFAULTS(), d); fresh.lock = lock; if (key && fresh.settings.designer && !fresh.settings.designer.apiKey) fresh.settings.designer.apiKey = key; /* (and the Anthropic API key) */ fresh.customEffects = cleanCustoms(fresh.customEffects); // keep the current PIN
     for (const k of Object.keys(data())) delete data()[k]; Object.assign(data(), fresh);
     runtime.rebuild(); runtime.note(`Restored a backup: ${d.devices.length} devices, ${d.room.shapes.length} shapes, ${(d.scenes || []).length} scenes`); changed("all"); return { ok: true };
   });

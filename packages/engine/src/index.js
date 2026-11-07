@@ -13,6 +13,7 @@ export { planShow, showAt, chooseStep, SHOW_VERSION } from "./show.js";
 export { pickLook, songCharacter, characterOf, lookEffect, lookLabel, LOOK_VERSION, VARIETIES, RATINGS, AUTO, rating } from "./looks.js";
 export { cleanTimeline, rangeAt, brightAt, cuesAt, cueLen, createCueFirer, blockPalette, CUE_TYPES, CUE_BEATS } from "./timeline.js";
 export { ROOM_PRESETS, buildPreset } from "./presets.js";
+export { songSummary, effectCatalog, paletteCatalog, designRequest, parseDesign, validateDesign, extractJson, compileDesign, designContour, designSections, tokensOf, DESIGN_SCHEMA, DESIGN_VERSION, SYSTEM_PROMPT as DESIGN_PROMPT, ARCS, MOMENTS } from "./designer.js";
 
 /** Convert linear effect output (0..~2) to 8-bit RGB with a soft roll-off and a brightness factor. */
 export function toRGB8(col, out, brightness = 1) {

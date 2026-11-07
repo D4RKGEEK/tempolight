@@ -31,6 +31,7 @@ export const DEFAULTS = () => ({
     moodColours: true, // with the "auto" palette, colours follow the music's mood (key, brightness, energy)
     chordColours: true, // with the "auto" palette, colours step with the song's chords (on bar lines)
     stereo: "subtle", // off | subtle | strong: with a stereo source, the side of the room a hit came from brightens
+    designer: { enabled: false, apiKey: "", model: "claude-sonnet-5-5", dailyCap: 30 }, // the Claude show designer, with your own Anthropic API key (server only, see designer.js)
     library: { folders: [], watch: true, paused: false }, // the music library: folders whose songs are analysed ahead (server only, see library.js)
   },
   // variety (automatic mode): "one" = one look per song (looks.js), "parts" = one for calm parts, build-ups and drops, "show" = effects change with the song

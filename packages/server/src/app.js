@@ -21,6 +21,7 @@ import { startNowPlaying } from "./nowplaying.js";
 import { startLibrary } from "./library.js";
 import { startHearing } from "./hearing.js";
 import { startSpotify } from "./spotify.js";
+import { startDesigner } from "./designer.js";
 import { startLink } from "./ableton-link.js";
 import { applyEnvSettings } from "./env-settings.js";
 import { wifiClient } from "./wifi.js";
@@ -103,6 +104,7 @@ export async function createApp(opts) {
   const np = startNowPlaying({ core, store, runtime, dataDir: opts.dataDir, port: () => server.address()?.port || 8080, ...opts.nowPlaying }); // opts.nowPlaying: test runner/platform
   const hearing = startHearing({ core, store, runtime, ...(opts.hearing || {}) }); // how Tempolight hears music, and the sound output (opts.hearing: pretend computer)
   const spotify = startSpotify({ core, store, runtime, nowPlaying: np, dataDir: opts.dataDir, fetch: opts.nowPlaying?.fetch, ...opts.spotify }); // Sync with Spotify (opts.spotify: test clock)
+  const designer = startDesigner({ core, store, runtime, ...opts.designer }); // the Claude show designer (opts.designer: a pretend Anthropic API in tests)
 
   // ---------------------------------------------------------------- static files
   // /packages/ serves the engine and the server core to the browser too (the web app and the demo import them)
@@ -160,9 +162,9 @@ export async function createApp(opts) {
 
   closeApp = () => api.close();
   const api = {
-    server, runtime, store, core, discovery: core.discovery, nowPlaying: np, library, hearing, homekit: hk, spotify, integrations: integ,
+    server, runtime, store, core, discovery: core.discovery, nowPlaying: np, library, hearing, homekit: hk, spotify, designer, integrations: integ,
     listen(port, host) { return new Promise((res, rej) => { server.once("error", rej); server.listen(port, host, () => res(server.address().port)); }); },
-    async close() { ha.close(); spotify.close(); np.close(); library.close(); hearing.close(); await hk.close(); integ.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
+    async close() { ha.close(); spotify.close(); designer.close(); np.close(); library.close(); hearing.close(); await hk.close(); integ.close(); core.close(); runtime.close(); for (const c of wsClients) c.close(); store.flush(); const done = new Promise(r => server.close(r)); server.closeAllConnections?.(); await done; },
   };
   return api;
 }
