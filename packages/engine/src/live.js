@@ -7,6 +7,7 @@ import { ChromaTap, keyOf, moodOf, chordOf, chordFit } from "./tonal.js";
 import { StereoTap } from "./stereo.js";
 import { BeatTracker } from "./beat.js";
 import { DropPredictor } from "./drops.js";
+import { ReactiveTap } from "./reactive.js";
 
 const NF = 1024, HOP = 256;
 const EDGES = (() => { const e = []; for (let i = 0; i <= 24; i++) e.push(40 * Math.pow(10000 / 40, i / 24)); return e; })();
@@ -29,6 +30,7 @@ export class LiveAnalyser {
     for (let b = 0; b < NB; b++) { this.bandLo[b] = Math.max(1, Math.floor(EDGES[b] / this.binHz)); this.bandHi[b] = Math.min(NF / 2 - 1, Math.ceil(EDGES[b + 1] / this.binHz)); }
     this.lb = [new Float32Array(NB), new Float32Array(NB), new Float32Array(NB)]; // log band levels, this hop and the 2 before
     this.beat = new BeatTracker(this.sr / HOP, NB);
+    this.react = new ReactiveTap(this.sr, NF); // the reactive front end (reactive.js): mel bands, onsets, immediate hits
     this.win = new Float32Array(NF); for (let i = 0; i < NF; i++) this.win[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / NF);
     this.re = new Float32Array(NF); this.im = new Float32Array(NF); this.mag = new Float32Array(NF / 2); this.prev = new Float32Array(NF / 2);
     this.rev = new Uint16Array(NF); for (let i = 0, j = 0; i < NF; i++) { this.rev[i] = j; let b = NF >> 1; while (j & b) { j ^= b; b >>= 1; } j |= b; }
@@ -57,6 +59,7 @@ export class LiveAnalyser {
     this.domS = null; this.domHist = []; this.domHistT = -9; this.domBase = null; // domBase: pct(domHist, 0.3), kept until domHist changes
     this.styleStats = { env: [], envT: -9, drops: [] }; this.style = null; this.styleCand = null; this.styleN = 0; this.lastStyleT = -9; this.styleLock = null;
     if (this.drops) this.drops.reset(); else this.drops = new DropPredictor(); // the drop countdown (drops.js)
+    if (this.react) this.react.reset(); this.relRaw = 0; this.rel = 0; this.relT = -9; this.bpmH = []; this.relHits = [];
   }
 
   /**
@@ -118,6 +121,9 @@ export class LiveAnalyser {
     for (let b = 0; b < NB; b++) { let s = 0; const lo = this.bandLo[b], hi = this.bandHi[b]; for (let i = lo; i <= hi; i++) s += mag[i]; bv[b] = s / (hi - lo + 1); cur[b] = Math.log1p(3000 * bv[b]); }
     if (!this.hasPrev) { this.prev.set(mag); this.hasPrev = true; this.lb[1].set(cur); this.lb[2].set(cur); return; }
     const loudEnough = rms > 0.0015;
+    const R = this.react, rk = R.lastHit[0], rs = R.lastHit[1]; R.hop(mag, t, dt, loudEnough);
+    if (R.lastHit[0] !== rk || R.lastHit[1] !== rs) { this.relHits.push(t); if (this.relHits.length > 64) this.relHits.shift(); }
+    this.reliability(t, dt);
     // onset strength, SuperFlux style: each band's rise against the max of it and its neighbours two hops ago
     // (a vibrato or a slide doesn't count), summed per band group
     let fl = 0, fm = 0, fh = 0, fs = 0;
@@ -184,6 +190,28 @@ export class LiveAnalyser {
     if (t - this.lastStyleT > 2) { this.lastStyleT = t; this.estimateStyle(t); }
     if (t - this.lastMoodT > 2) { this.lastMoodT = t; this.estimateMood(t); }
     if (this.ctap.count !== this.chordCount) { this.chordCount = this.ctap.count; this.liveChord(); }
+  }
+
+  // How far the beat grid can be trusted, 0-1 (the view's rel). The tracker's conf alone is not enough: on real music
+  // it can stay high while the tempo wanders. So, over the last 8 s: the tempo must hold (within 2%, gone by 8%), and
+  // the grid must agree with the onsets heard (most beats have a low or mid hit within 60 ms of them, and most of
+  // those hits fall on a beat or half-beat). It rises over ~1.5 s and falls within ~0.3 s.
+  reliability(t, dt) {
+    if (t - this.relT >= 0.25) {
+      this.relT = t; const B = this.beat, H = this.bpmH; if (B.has && this.state !== "silent") H.push(B.bpm); else H.length = 0; if (H.length > 32) H.shift();
+      let raw = 0;
+      if (B.has && this.state !== "silent") {
+        let lo = 1e9, hi = 0; for (const b of H) { lo = Math.min(lo, b); hi = Math.max(hi, b); }
+        const stab = H.length ? Math.max(0, Math.min(1, 1 - (hi / lo - 1.02) / 0.06)) * Math.min(1, H.length / 16) : 0;
+        const g = this.grid(t), P = g.P, hs = this.relHits.filter(x => t - x < 8);
+        const from = Math.max(t - 8, (hs[0] ?? t) - 0.07); let beats = 0, hit = 0; for (let bt = g.beatT; bt > from && beats < 40; bt -= P) { beats++; if (hs.some(x => Math.abs(x - bt) < 0.06)) hit++; }
+        let on = 0; for (const x of hs) { const q = (x - g.beatT) / (P / 2); if (Math.abs(q - Math.round(q)) * P / 2 < 0.06) on++; }
+        const fb = beats ? hit / beats : 0, fo = hs.length ? on / hs.length : 0, agree = Math.max(0, Math.min(1, (Math.sqrt(fb * fo) - 0.45) / 0.35));
+        raw = Math.min(stab, agree, Math.max(0, Math.min(1, B.conf / 0.5)));
+      }
+      this.relRaw = raw;
+    }
+    this.rel += (this.relRaw - this.rel) * (1 - Math.exp(-dt / (this.relRaw > this.rel ? 1.5 : 0.3)));
   }
 
   // the loudness level for the view: from the loudness smoothed over ~1 s (it swings with every beat), with hysteresis
@@ -366,7 +394,10 @@ export class LiveAnalyser {
       styleSure: !!this.style, features: this.features || null, chord: this.chord }; // (features: what the style was chosen from: kickFrac, dyn, ...; for the director's live look)
     // a stereo source: the balance of the hit or the level now, and the two levels (only while stereo keeps coming)
     const sv = this.stereoView(); if (sv) { V.pan = sv.pan; V.lr = sv.lr; }
-    if (o.predict && g.has && t - kick < 2 && this.conf > 0.3) { V.kick = g.beatT; V.pulses = [g.beatT, g.beatT - g.P]; V.pulseN = g.idx; }
+    // the reactive front end, every frame: mel bands, their onsets, the energy and the immediate hits; rel: how far
+    // the grid can be trusted (the director leans on the hits heard when it is low)
+    const rv = this.react.view(); V.mel = rv.mel; V.melOnset = rv.melOnset; V.energy = rv.energy; V.react = rv.react; V.rel = this.rel;
+    if (o.predict && g.has && t - kick < 2 && this.conf > 0.3 && this.rel > 0.5) { V.kick = g.beatT; V.pulses = [g.beatT, g.beatT - g.P]; V.pulseN = g.idx; }
     return V;
   }
 

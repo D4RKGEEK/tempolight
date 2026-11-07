@@ -1,5 +1,6 @@
 // Builds the signals object (S) every effect reads, from a whole-song analysis or from a simple metronome.
 import { lastLE } from "./analysis.js";
+import { songReact } from "./reactive.js";
 
 const PUNCH = { party: 1, poprock: 0.85, hiphop: 1, chill: 0.35, emotional: 0.1 };
 
@@ -46,7 +47,8 @@ export function songView(pre, t) {
   const di = lastLE(pre.drops, t + 1e-3);
   // the section (repeat label) this bar belongs to, when the analysis has sections: looks step their colour on these
   let section = null; const secs = pre.sections; if (secs && bi >= 0) for (let k = secs.length - 1; k >= 0; k--) if (secs[k].bar0 <= bi) { if (bi < secs[k].bar1) section = secs[k]; break; }
-  return { section, barI: bi, chord: bar && typeof bar.chord === "number" ? bar.chord : null, g, bpm: pre.bpm, style: pre.style, loud, level: lvl < 0.35 ? "low" : lvl < 0.72 ? "mid" : "peak",
+  const rv = songReact(pre, t); // the reactive fields (mel bands, onsets, energy, hits) made up from the analysis
+  return { mel: rv.mel, melOnset: rv.melOnset, energy: rv.energy, react: rv.react, rel: 1, section, barI: bi, chord: bar && typeof bar.chord === "number" ? bar.chord : null, g, bpm: pre.bpm, style: pre.style, loud, level: lvl < 0.35 ? "low" : lvl < 0.72 ? "mid" : "peak",
     state: quietFor(pre.env, t) ? "silent" : state, buildP,
     dropT: di >= 0 ? pre.drops[di] : -9, nextDrop: di + 1 < pre.drops.length ? pre.drops[di + 1] : null,
     dropConf: di + 1 < pre.drops.length ? 1 : 0, dropSource: di + 1 < pre.drops.length ? "memory" : null, // (known: the whole song was analysed)
@@ -74,17 +76,37 @@ export function kickHit(V) {
  * @param {ReturnType<typeof songView>} V
  * @param {{pal:number[][], fixed?:boolean, bands?:Float32Array, wave?:Float32Array|null, bassL?:number}} opts
  */
+/** The beat clock heard from the hits (no grid): each reactive beat (reactive.js) starts a beat of length react.P;
+ *  past it the clock runs on at that length. Before any hit, a free-running 0.5 s clock. */
+export function reactiveGrid(R, t) {
+  const P = Math.max(0.3, Math.min(1, R.P || 0.5)), b0 = R.beat > -9 && R.beat <= t ? R.beat : Math.floor(t / P) * P, n = Math.floor((t - b0) / P);
+  const beatT = b0 + n * P, idx = (R.beatN || 0) + n, ph = Math.min(0.999, (t - beatT) / P), bib = ((idx % 4) + 4) % 4;
+  return { has: true, P, phase: ph, idx, beatInBar: bib, env: Math.exp(-(t - beatT) / 0.18), barPhase: (bib + ph) / 4, beatT, reactive: true };
+}
+
 export function buildSignals(V, t, opts) {
-  const g = V.g, punch = PUNCH[V.style] ?? 1, kickRecent = t - V.kick < 1.6;
-  const pulseT = kickRecent ? V.kick : g.beatT, pulses = kickRecent ? V.pulses : [0, 1, 2].map(k => pulseT - k * g.P);
+  // how far the beat grid can be trusted (V.rel; whole-song analysis: 1). Below 0.5 effects follow the hits heard now
+  // (reactive.js: a low-band onset is a kick at once) and a beat clock made from them, never a grid that isn't there
+  const R = V.react, rel = R ? Math.max(0, Math.min(1, V.rel ?? 1)) : 1, heard = R && rel < 0.5;
+  let g = V.g, kick = V.kick, snare = V.snare, hat = V.hat, kS = null;
+  if (heard) {
+    if (!g || !g.has || rel < 0.5) g = reactiveGrid(R, t);
+    if (R.kick > kick) { kick = R.kick; kS = R.kickS; }
+    if (R.snare > snare) snare = R.snare; if (R.hat > hat) hat = R.hat;
+  }
+  if (kS != null) V = { ...V, kickS: Math.max(0.4, kS) };
+  const punch = PUNCH[V.style] ?? 1, kickRecent = t - kick < 1.6;
+  const pulseT = kickRecent ? kick : g.beatT, pulses = kickRecent ? (kick === V.kick ? V.pulses : [kick, ...V.pulses.filter(x => x < kick - 0.1)]) : [0, 1, 2].map(k => pulseT - k * g.P);
   // decays follow the tempo, so fast songs don't smear one kick into the next (as tuned at 128 BPM, never longer);
   // a kick hits as hard as it was played when the analysis knows (kickS / live kickStrength, 0..1)
   const tk = g.has && g.P > 0 ? Math.max(0.55, Math.min(1, g.P / 0.469)) : 1, hit = kickHit(V);
   return {
     t, g, pal: opts.pal, fixed: !!opts.fixed, punch, loud: V.loud, wave: opts.wave || null,
-    hat: V.hat, snare: V.snare, snares: V.snares, pulseT, pulses, pulseN: kickRecent ? V.pulseN : g.idx,
-    pulse: Math.exp(-(t - pulseT) / (0.2 * tk)) * punch * (kickRecent ? hit : 1), kickE: Math.exp(-(t - V.kick) / (0.25 * tk)) * punch * hit,
-    snareE: Math.exp(-(t - V.snare) / (0.15 * tk)) * punch, hatE: Math.exp(-(t - V.hat) / 0.12) * punch,
+    hat, snare, snares: snare === V.snare ? V.snares : [snare, ...V.snares], pulseT, pulses, pulseN: kickRecent ? (heard ? R.kickN : V.pulseN) : g.idx,
+    pulse: Math.exp(-(t - pulseT) / (0.2 * tk)) * punch * (kickRecent ? hit : 1), kickE: Math.exp(-(t - kick) / (0.25 * tk)) * punch * hit,
+    snareE: Math.exp(-(t - snare) / (0.15 * tk)) * punch, hatE: Math.exp(-(t - hat) / 0.12) * punch,
+    // the reactive front end (null without one): mel bands 0-1, their onsets, the energy, the hits; rel as above
+    mel: V.mel || null, melOnset: V.melOnset || null, energy: V.energy ?? V.loud, react: R || null, rel, heard: !!heard,
     bassL: opts.bassL ?? (V.state === "drop" ? 0.9 : 0.3), bands: opts.bands || new Float32Array(24), vocal: V.vocal ?? null, // null: no live estimate (Vocal Glow uses the mid bands)
     buildP: V.state === "build" ? V.buildP : ((((g.idx - g.beatInBar) / 4) % 4 + 4) % 4 + g.barPhase) / 4,
     // seconds until the next drop (known, or predicted live with dropConf 0.5 or more) and since the last one; 99 = none

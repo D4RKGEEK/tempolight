@@ -247,6 +247,29 @@ export function createDirector(layout, fx) {
     return d;
   }
 
+  // ---- the reactive floor (what LedFx does): every frame the room follows what is heard now, from the first second of
+  // any music and with no beat grid: the onsets of the mel bands, their levels, and LedFx's own brightness (the bands'
+  // power under one gain, so the kick leads). On top of any effect: dimmer between hits, brighter on them, and a flare
+  // of the palette's colours on the hits (a dark effect flares too). Both keep the room as bright on average (the
+  // signal against its own mean over ~1-1.5 s), so calm parts stay calm and a build-up still rises. A little deeper
+  // while the beat grid can't be trusted (rel low); the drop's pump and the build toward a drop take its place there.
+  function reactiveFloor(S, V, t, dt, ST, pump, rp) {
+    const R = S.react; if (!R) return;
+    if (V.dropT > -9 && t - V.dropT >= 0 && t - V.dropT < 0.7) return; // (the drop's flash shows as it is)
+    const gv = clamp01(R.onset, 0) + 0.5 * (R.low + R.mid + R.high) / 3 + clamp01(R.level ?? 0, 0);
+    st.rg = st.rg == null ? gv : st.rg + (gv - st.rg) * (1 - Math.exp(-dt / (gv > st.rg ? 1 : 1.5)));
+    let d = (settings.mode === "auto" ? 1.3 : 1) * (0.8 + 0.2 * Math.min(1, S.punch)) * (0.85 + 0.15 * (1 - S.rel));
+    d = Math.max(0, d - pump) * (V.state === "build" ? 0.4 : 1) * Math.max(0, 1 - 2 * (rp || 0));
+    if (settings.night) d *= 0.4; if (settings.safe) d = Math.min(d, 0.1);
+    st.rDepth = d; if (d < 0.005) return;
+    const r = Math.min(3, gv / Math.max(0.3, st.rg)), p0 = S.pal[0], p1 = S.pal[1], cm = (p0[0] + p0[1] + p0[2] + p1[0] + p1[1] + p1[2]) / 6;
+    const fr = 2 * d * Math.max(0, r - 1) * cm; st.rfl = st.rfl == null ? fr : st.rfl + (fr - st.rfl) * (1 - Math.exp(-dt / 1.5)); // (the flare's share, taken back off the level)
+    let m = 0; if (fr > 0.002) { for (let i = 0; i < COL.length; i += STRIDE * 3) m += COL[i] + COL[i + 1] + COL[i + 2]; m /= 3 * Math.max(1, Math.ceil(COL.length / (STRIDE * 3))); }
+    const k = Math.max(0.3, 1 - d + d * r) / (1 + st.rfl); for (let i = 0; i < COL.length; i++) COL[i] *= k; // (never quite dark between hits)
+    if (fr > 0.002) { const x = 2 * d * Math.max(0, r - 1) * Math.max(0.02, m) / (1 + st.rfl);
+      for (let i = 0; i < N; i++) { const u = LS[i], v = 1 - u; COL[i * 3] += x * (p0[0] * v + p1[0] * u); COL[i * 3 + 1] += x * (p0[1] * v + p1[1] * u); COL[i * 3 + 2] += x * (p0[2] * v + p1[2] * u); } }
+  }
+
   // ---- the build toward a drop: in the last 8 bars before a drop that is known (whole-song analysis, a remembered
   // song, a show's cue: dropConf 1) or predicted live (drops.js, from dropConf 0.5), the room gets brighter and its
   // effect faster, the last bar pulses tighter (effects with the energy for it), then the dip and the drop flash.
@@ -403,6 +426,7 @@ export function createDirector(layout, fx) {
         const f = (1 - depth * (1 - Math.exp(-ph * L / 0.06))) / (1 - depth * avg); for (let i = 0; i < COL.length; i++) COL[i] *= f; }
       if (dIn > 0 && dIn <= P && V.state !== "silent") { const k = Math.min(1, (P - dIn) / 0.05) * (0.75 + 0.15 * rp) * mo * drama; // (deeper after a ramp)
         if (k > 0) for (let i = 0; i < COL.length; i++) COL[i] *= 1 - k; }
+      reactiveFloor(S, V, t, dt, ST, depth, rp);
       spatial.apply(COL, V, t, settings.stereo); st.spatial = spatial.state;
       // (after a build ramp the flash peaks as much higher as the room got brighter, so it still stands out; the extra
       // part is short, gone by the next kick)

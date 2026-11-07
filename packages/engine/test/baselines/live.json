@@ -1,0 +1,535 @@
+{
+ "about": "Live reactivity baseline (scripts/live-eval.js). Rewrite with: node scripts/live-eval.js --baseline write",
+ "songs": [
+  {
+   "name": "feel song (EDM) 128",
+   "set": "corpus",
+   "tl": {
+    "corr": 0.499,
+    "corr5": 0.853,
+    "kick": 0.898,
+    "kick5": null,
+    "hit": 1,
+    "flat": 0.126,
+    "flat5": 0.327,
+    "lum": 0.174
+   },
+   "low": {
+    "corr": 0.435,
+    "corr5": 0.857,
+    "kick": 0.953,
+    "kick5": null,
+    "hit": 1,
+    "flat": 0.186,
+    "flat5": 0.343,
+    "lum": 0.201
+   },
+   "ledfx": {
+    "corr": 0.432,
+    "corr5": 0.904,
+    "kick": 0.821,
+    "kick5": null,
+    "hit": 1,
+    "flat": 0.31,
+    "flat5": 0.09,
+    "lum": 0.108
+   }
+  },
+  {
+   "name": "edm 128",
+   "set": "corpus",
+   "tl": {
+    "corr": 0.504,
+    "corr5": 0.846,
+    "kick": 0.887,
+    "kick5": null,
+    "hit": 1,
+    "flat": 0.125,
+    "flat5": 0.333,
+    "lum": 0.184
+   },
+   "low": {
+    "corr": 0.434,
+    "corr5": 0.848,
+    "kick": 0.948,
+    "kick5": null,
+    "hit": 1,
+    "flat": 0.193,
+    "flat5": 0.357,
+    "lum": 0.208
+   },
+   "ledfx": {
+    "corr": 0.404,
+    "corr5": 0.907,
+    "kick": 0.813,
+    "kick5": null,
+    "hit": 1,
+    "flat": 0.304,
+    "flat5": 0.093,
+    "lum": 0.107
+   }
+  },
+  {
+   "name": "pop 116",
+   "set": "corpus",
+   "tl": {
+    "corr": 0.827,
+    "corr5": 0.812,
+    "kick": 0.929,
+    "kick5": 0.967,
+    "hit": 1,
+    "flat": 0.105,
+    "flat5": 0.378,
+    "lum": 0.136
+   },
+   "low": {
+    "corr": 0.825,
+    "corr5": 0.811,
+    "kick": 0.955,
+    "kick5": 0.967,
+    "hit": 1,
+    "flat": 0.254,
+    "flat5": 0.381,
+    "lum": 0.132
+   },
+   "ledfx": {
+    "corr": 0.852,
+    "corr5": 0.871,
+    "kick": 0.885,
+    "kick5": 0.888,
+    "hit": 0.99,
+    "flat": 0.456,
+    "flat5": 0.445,
+    "lum": 0.041
+   }
+  },
+  {
+   "name": "hiphop88",
+   "set": "corpus",
+   "tl": {
+    "corr": 0.735,
+    "corr5": 0.675,
+    "kick": 0.931,
+    "kick5": 0.967,
+    "hit": 0.979,
+    "flat": 0.411,
+    "flat5": 0.492,
+    "lum": 0.13
+   },
+   "low": {
+    "corr": 0.716,
+    "corr5": 0.674,
+    "kick": 0.965,
+    "kick5": 0.967,
+    "hit": 1,
+    "flat": 0.498,
+    "flat5": 0.505,
+    "lum": 0.145
+   },
+   "ledfx": {
+    "corr": 0.789,
+    "corr5": 0.783,
+    "kick": 0.883,
+    "kick5": 0.882,
+    "hit": 0.979,
+    "flat": 0.635,
+    "flat5": 0.615,
+    "lum": 0.029
+   }
+  },
+  {
+   "name": "dembow95 syncopated",
+   "set": "corpus",
+   "tl": {
+    "corr": 0.778,
+    "corr5": 0.716,
+    "kick": 0.931,
+    "kick5": 0.961,
+    "hit": 1,
+    "flat": 0.23,
+    "flat5": 0.358,
+    "lum": 0.108
+   },
+   "low": {
+    "corr": 0.778,
+    "corr5": 0.716,
+    "kick": 0.938,
+    "kick5": 0.961,
+    "hit": 1,
+    "flat": 0.277,
+    "flat5": 0.358,
+    "lum": 0.109
+   },
+   "ledfx": {
+    "corr": 0.809,
+    "corr5": 0.809,
+    "kick": 0.828,
+    "kick5": 0.815,
+    "hit": 0.988,
+    "flat": 0.477,
+    "flat5": 0.488,
+    "lum": 0.036
+   }
+  },
+  {
+   "name": "halftime140 (dubstep)",
+   "set": "corpus",
+   "tl": {
+    "corr": 0.395,
+    "corr5": 0.312,
+    "kick": 0.849,
+    "kick5": 0.942,
+    "hit": 1,
+    "flat": 0.031,
+    "flat5": 0.154,
+    "lum": 0.253
+   },
+   "low": {
+    "corr": 0.467,
+    "corr5": 0.313,
+    "kick": 0.92,
+    "kick5": 0.944,
+    "hit": 1,
+    "flat": 0.04,
+    "flat5": 0.154,
+    "lum": 0.251
+   },
+   "ledfx": {
+    "corr": 0.837,
+    "corr5": 0.834,
+    "kick": 0.829,
+    "kick5": 0.828,
+    "hit": 0.979,
+    "flat": 0.591,
+    "flat5": 0.585,
+    "lum": 0.03
+   }
+  },
+  {
+   "name": "broken-kick110",
+   "set": "corpus",
+   "tl": {
+    "corr": 0.732,
+    "corr5": 0.687,
+    "kick": 0.679,
+    "kick5": 0.788,
+    "hit": 1,
+    "flat": 0.068,
+    "flat5": 0.197,
+    "lum": 0.254
+   },
+   "low": {
+    "corr": 0.737,
+    "corr5": 0.687,
+    "kick": 0.714,
+    "kick5": 0.788,
+    "hit": 1,
+    "flat": 0.036,
+    "flat5": 0.194,
+    "lum": 0.254
+   },
+   "ledfx": {
+    "corr": 0.798,
+    "corr5": 0.803,
+    "kick": 0.862,
+    "kick5": 0.868,
+    "hit": 0.988,
+    "flat": 0.436,
+    "flat5": 0.421,
+    "lum": 0.038
+   }
+  },
+  {
+   "name": "hiphop808 (syncopated, 808 slides) 92",
+   "set": "messy",
+   "tl": {
+    "corr": 0.704,
+    "corr5": 0.483,
+    "kick": 0.881,
+    "kick5": null,
+    "hit": 1,
+    "flat": 0.046,
+    "flat5": 0.181,
+    "lum": 0.149
+   },
+   "low": {
+    "corr": 0.685,
+    "corr5": 0.487,
+    "kick": 0.887,
+    "kick5": null,
+    "hit": 1,
+    "flat": 0.093,
+    "flat5": 0.181,
+    "lum": 0.142
+   },
+   "ledfx": {
+    "corr": 0.594,
+    "corr5": 0.903,
+    "kick": 0.791,
+    "kick5": null,
+    "hit": 1,
+    "flat": 0.439,
+    "flat5": 0.057,
+    "lum": 0.064
+   }
+  },
+  {
+   "name": "bhangra dhol chaal (12/8 feel) 100",
+   "set": "messy",
+   "tl": {
+    "corr": 0.747,
+    "corr5": 0.704,
+    "kick": 0.691,
+    "kick5": 0.91,
+    "hit": 1,
+    "flat": 0.102,
+    "flat5": 0.475,
+    "lum": 0.235
+   },
+   "low": {
+    "corr": 0.75,
+    "corr5": 0.704,
+    "kick": 0.723,
+    "kick5": 0.911,
+    "hit": 1,
+    "flat": 0.099,
+    "flat5": 0.475,
+    "lum": 0.228
+   },
+   "ledfx": {
+    "corr": 0.756,
+    "corr5": 0.762,
+    "kick": 0.843,
+    "kick5": 0.854,
+    "hit": 0.981,
+    "flat": 0.567,
+    "flat5": 0.652,
+    "lum": 0.036
+   }
+  },
+  {
+   "name": "tabla teentaal (16 beats, ge glides) 84",
+   "set": "messy",
+   "tl": {
+    "corr": 0.786,
+    "corr5": 0.916,
+    "kick": 0.918,
+    "kick5": 0.948,
+    "hit": 1,
+    "flat": 0.355,
+    "flat5": 0.3,
+    "lum": 0.109
+   },
+   "low": {
+    "corr": 0.785,
+    "corr5": 0.912,
+    "kick": 0.926,
+    "kick5": 0.949,
+    "hit": 1,
+    "flat": 0.377,
+    "flat5": 0.327,
+    "lum": 0.109
+   },
+   "ledfx": {
+    "corr": 0.78,
+    "corr5": 0.858,
+    "kick": 0.875,
+    "kick5": 0.875,
+    "hit": 0.977,
+    "flat": 0.468,
+    "flat5": 0.43,
+    "lum": 0.053
+   }
+  },
+  {
+   "name": "vocal with sparse drums 76",
+   "set": "messy",
+   "tl": {
+    "corr": 0.526,
+    "corr5": 0.545,
+    "kick": 0.571,
+    "kick5": 0.644,
+    "hit": 1,
+    "flat": 0.156,
+    "flat5": 0,
+    "lum": 0.132
+   },
+   "low": {
+    "corr": 0.534,
+    "corr5": 0.546,
+    "kick": 0.61,
+    "kick5": 0.648,
+    "hit": 1,
+    "flat": 0.134,
+    "flat5": 0,
+    "lum": 0.133
+   },
+   "ledfx": {
+    "corr": 0.178,
+    "corr5": 0.177,
+    "kick": 0.211,
+    "kick5": 0.093,
+    "hit": 0.5,
+    "flat": 0.545,
+    "flat5": 0.64,
+    "lum": 0.082
+   }
+  },
+  {
+   "name": "live band rubato 90-110",
+   "set": "messy",
+   "tl": {
+    "corr": 0.67,
+    "corr5": 0.706,
+    "kick": 0.956,
+    "kick5": 0.942,
+    "hit": 1,
+    "flat": 0.35,
+    "flat5": 0.317,
+    "lum": 0.118
+   },
+   "low": {
+    "corr": 0.682,
+    "corr5": 0.705,
+    "kick": 0.957,
+    "kick5": 0.947,
+    "hit": 1,
+    "flat": 0.312,
+    "flat5": 0.323,
+    "lum": 0.116
+   },
+   "ledfx": {
+    "corr": 0.697,
+    "corr5": 0.55,
+    "kick": 0.858,
+    "kick5": 0.801,
+    "hit": 0.969,
+    "flat": 0.578,
+    "flat5": 0.56,
+    "lum": 0.035
+   }
+  },
+  {
+   "name": "DJ mix 122 -> 128 crossfade",
+   "set": "messy",
+   "tl": {
+    "corr": 0.805,
+    "corr5": 0.758,
+    "kick": 0.954,
+    "kick5": 0.967,
+    "hit": 1,
+    "flat": 0.241,
+    "flat5": 0.405,
+    "lum": 0.144
+   },
+   "low": {
+    "corr": 0.804,
+    "corr5": 0.758,
+    "kick": 0.963,
+    "kick5": 0.967,
+    "hit": 1,
+    "flat": 0.332,
+    "flat5": 0.418,
+    "lum": 0.15
+   },
+   "ledfx": {
+    "corr": 0.83,
+    "corr5": 0.872,
+    "kick": 0.879,
+    "kick5": 0.88,
+    "hit": 0.988,
+    "flat": 0.403,
+    "flat5": 0.428,
+    "lum": 0.042
+   }
+  }
+ ],
+ "summary": {
+  "corpus.tl.corr": 0.639,
+  "corpus.tl.corr5": 0.7,
+  "corpus.tl.kick": 0.872,
+  "corpus.tl.kick5": 0.925,
+  "corpus.tl.hit": 0.997,
+  "corpus.tl.flat": 0.157,
+  "corpus.tl.flat5": 0.32,
+  "corpus.low.corr": 0.627,
+  "corpus.low.corr5": 0.701,
+  "corpus.low.kick": 0.913,
+  "corpus.low.kick5": 0.925,
+  "corpus.low.hit": 1,
+  "corpus.low.flat": 0.212,
+  "corpus.low.flat5": 0.327,
+  "corpus.ledfx.corr": 0.703,
+  "corpus.ledfx.corr5": 0.844,
+  "corpus.ledfx.kick": 0.846,
+  "corpus.ledfx.kick5": 0.856,
+  "corpus.ledfx.hit": 0.989,
+  "corpus.ledfx.flat": 0.458,
+  "corpus.ledfx.flat5": 0.391,
+  "messy.tl.corr": 0.706,
+  "messy.tl.corr5": 0.685,
+  "messy.tl.kick": 0.828,
+  "messy.tl.kick5": 0.882,
+  "messy.tl.hit": 1,
+  "messy.tl.flat": 0.208,
+  "messy.tl.flat5": 0.28,
+  "messy.low.corr": 0.707,
+  "messy.low.corr5": 0.685,
+  "messy.low.kick": 0.844,
+  "messy.low.kick5": 0.884,
+  "messy.low.hit": 1,
+  "messy.low.flat": 0.225,
+  "messy.low.flat5": 0.287,
+  "messy.ledfx.corr": 0.639,
+  "messy.ledfx.corr5": 0.687,
+  "messy.ledfx.kick": 0.743,
+  "messy.ledfx.kick5": 0.701,
+  "messy.ledfx.hit": 0.902,
+  "messy.ledfx.flat": 0.5,
+  "messy.ledfx.flat5": 0.461,
+  "real.tl.corr": null,
+  "real.tl.corr5": null,
+  "real.tl.kick": null,
+  "real.tl.kick5": null,
+  "real.tl.hit": null,
+  "real.tl.flat": null,
+  "real.tl.flat5": null,
+  "real.low.corr": null,
+  "real.low.corr5": null,
+  "real.low.kick": null,
+  "real.low.kick5": null,
+  "real.low.hit": null,
+  "real.low.flat": null,
+  "real.low.flat5": null,
+  "real.ledfx.corr": null,
+  "real.ledfx.corr5": null,
+  "real.ledfx.kick": null,
+  "real.ledfx.kick5": null,
+  "real.ledfx.hit": null,
+  "real.ledfx.flat": null,
+  "real.ledfx.flat5": null,
+  "all.tl.corr": 0.67,
+  "all.tl.corr5": 0.693,
+  "all.tl.kick": 0.852,
+  "all.tl.kick5": 0.904,
+  "all.tl.hit": 0.998,
+  "all.tl.flat": 0.18,
+  "all.tl.flat5": 0.301,
+  "all.low.corr": 0.664,
+  "all.low.corr5": 0.694,
+  "all.low.kick": 0.881,
+  "all.low.kick5": 0.905,
+  "all.low.hit": 1,
+  "all.low.flat": 0.218,
+  "all.low.flat5": 0.309,
+  "all.ledfx.corr": 0.674,
+  "all.ledfx.corr5": 0.772,
+  "all.ledfx.kick": 0.798,
+  "all.ledfx.kick5": 0.778,
+  "all.ledfx.hit": 0.949,
+  "all.ledfx.flat": 0.478,
+  "all.ledfx.flat5": 0.423
+ },
+ "analyserCpuMsPerS": 9.659,
+ "analyserCpuColdMsPerS": 12.926
+}
