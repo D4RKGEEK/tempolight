@@ -45,7 +45,7 @@ export function mountHearing(el, { bare = false, onFixTiming = null } = {}) {
   t.innerHTML = bare ? `<div class="hear stack" id="hear">${inner}</div>` : `<section class="panel span-12 hear" id="hear"><header><h2>How should Tempolight hear your music?</h2><span class="sub" id="hr-sub"></span></header><div class="pb stack">${inner}</div></section>`;
   const root = t.content.firstElementChild; if (bare) { el.innerHTML = ""; el.appendChild(root); } else el.replaceWith(root);
   const q = s => root.querySelector(s), admin = unlocked();
-  let view = null, sel = null, alive = true, timer = null, lastM = null;
+  let view = null, sel = null, alive = true, timer = null, lastM = null, LA = null;
 
   const method = () => savedMethod() === "mic" ? "mic" : view?.method || app.state?.settings.hearing?.method || "";
   async function load(force) {
@@ -85,7 +85,8 @@ export function mountHearing(el, { bare = false, onFixTiming = null } = {}) {
             <button class="btn" id="hr-check" type="button">Check again</button></div>
           ${v.why && !on ? `<p class="callout warn">${esc(v.why)}</p>` : ""}
           ${on ? `<p class="faint" style="font-size:13px">Remembered: it starts by itself when Tempolight starts. Now just play Spotify.</p>` : `<p class="faint" style="font-size:13px">${view.platform === "darwin" ? "macOS asks once whether Terminal (or Tempolight) may use the microphone: allow it, that's how Tempolight reads BlackHole. " : ""}Once it's on, just play your music: no browser tab and no microphone needed.</p>`}
-          ${view.platform === "win32" && !v.source ? `<button class="btn" id="hr-tomic" type="button">Use the microphone instead</button>` : ""}`; }
+          ${view.platform === "win32" && !v.source ? `<button class="btn" id="hr-tomic" type="button">Use the microphone instead</button>` : ""}
+          <div id="hr-la"></div>`; }
     } else if (c === "mic") {
       const on = method() === "mic", mode = app.audio?.state.mode;
       h = `<p class="muted">Tempolight listens with this browser's microphone, so <b>keep this tab open</b> (it can be in the background). Put the computer or phone near the speakers.</p>
@@ -99,6 +100,8 @@ export function mountHearing(el, { bare = false, onFixTiming = null } = {}) {
         <div class="row">${view.pi.on ? `<span class="badge live"><i></i>On</span><button class="btn sm" id="hr-off" type="button">Stop</button>` : `<button class="btn primary" id="hr-pi" type="button" ${admin ? "" : "disabled"}>Use it</button>`}</div>`;
     }
     box.innerHTML = h;
+    LA?.destroy(); LA = null; const lab = box.querySelector("#hr-la"); // lookahead mode (lookahead.js)
+    if (lab) import("/lookahead.js").then(m => { if (alive && lab.isConnected) LA = m.mountLookahead(lab); }).catch(() => {});
     const on = (id, f) => { const b = box.querySelector("#" + id); if (b) b.onclick = f; };
     on("hr-use", () => use("computer")); on("hr-pi", () => use("pi")); on("hr-check", () => load(true)); on("hr-tomic", () => choose("mic"));
     on("hr-off", () => use(""));
@@ -136,5 +139,5 @@ export function mountHearing(el, { bare = false, onFixTiming = null } = {}) {
   q("#hr-btfix").onclick = () => { if (onFixTiming) return onFixTiming(); const b = $("#m-cal"); if (b) { b.scrollIntoView({ block: "center", behavior: "smooth" }); b.click(); } };
   load(); timer = setInterval(() => { if (document.visibilityState !== "hidden") load(); }, 2500);
   if (app.status) status(app.status);
-  return { status, load, choose, destroy() { alive = false; clearInterval(timer); } };
+  return { status, load, choose, destroy() { alive = false; clearInterval(timer); LA?.destroy(); } };
 }
