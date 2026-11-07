@@ -7,6 +7,7 @@ import { ChromaTap, keyOf, moodOf, chordOf, chordFit } from "./tonal.js";
 import { StereoTap } from "./stereo.js";
 import { BeatTracker } from "./beat.js";
 import { DropPredictor } from "./drops.js";
+import { RepeatLearner } from "./repeat.js";
 
 const NF = 1024, HOP = 256;
 const EDGES = (() => { const e = []; for (let i = 0; i <= 24; i++) e.push(40 * Math.pow(10000 / 40, i / 24)); return e; })();
@@ -179,6 +180,7 @@ export class LiveAnalyser {
     }
     if (!this._lite || (++this.hopN & 1)) this.vocalHop(loudEnough, this._lite ? dt * 2 : dt); // (lite: every 2nd hop, covering two)
     this.sections(t, dt);
+    (this.repeat ||= new RepeatLearner()).hop(this, t); // learning the song while it plays (repeat.js): V.repeat, and a drop cue
     this.drops.hop(this, t);
     this.levels(t);
     if (t - this.lastStyleT > 2) { this.lastStyleT = t; this.estimateStyle(t); }
@@ -366,6 +368,8 @@ export class LiveAnalyser {
       styleSure: !!this.style, features: this.features || null, chord: this.chord }; // (features: what the style was chosen from: kickFrac, dyn, ...; for the director's live look)
     // a stereo source: the balance of the hit or the level now, and the two levels (only while stereo keeps coming)
     const sv = this.stereoView(); if (sv) { V.pan = sv.pan; V.lr = sv.lr; }
+    // what the song did the last time it was here (repeat.js), and a drop time it gave the countdown
+    V.repeat = this.repeat && this.t >= this.repeat.lastT - 0.5 ? this.repeat.view(t) : null; if (nd != null && this.drops.source === "repeat") V.dropSource = "repeat";
     if (o.predict && g.has && t - kick < 2 && this.conf > 0.3) { V.kick = g.beatT; V.pulses = [g.beatT, g.beatT - g.P]; V.pulseN = g.idx; }
     return V;
   }

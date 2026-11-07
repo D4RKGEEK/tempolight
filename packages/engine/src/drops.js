@@ -47,7 +47,7 @@ export class DropPredictor {
     for (let k = 0; k < bv.length; k++) { const n = hi[k] - lo[k] + 1, f = (lo[k] + hi[k]) / 2 * hz, s = bv[k] * n, e = bv[k] * bv[k] * n;
       if (f >= 200) { cs += s * f; cw += s; } if (f >= 3000) he += e; ae += e; }
     if (cw > 0) { b.c += Math.log2(cs / cw); b.cw++; } b.hi += Math.log10(he + 1e-12); b.all += Math.log10(ae + 1e-12); b.rms += a.rms; b.n++;
-    if (t - b.t0 >= BLOCK - 1e-6) { this.block(a, t); b.n = 0; b.c = 0; b.cw = 0; b.hi = 0; b.all = 0; b.rms = 0; b.t0 = t; }
+    if (t - b.t0 >= BLOCK - 1e-6) { this.block(a, t); if (a.repeat) a.repeat.cue(this, a, t); b.n = 0; b.c = 0; b.cw = 0; b.hi = 0; b.all = 0; b.rms = 0; b.t0 = t; }
   }
 
   block(a, t) {
